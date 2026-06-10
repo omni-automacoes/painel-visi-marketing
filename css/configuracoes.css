@@ -1,0 +1,1006 @@
+/* ============================================================
+   VISI MARKETING CRM — CONFIGURAÇÕES
+   Layout da página de configurações com navegação lateral
+   ============================================================ */
+
+/* ── PAGE LAYOUT ──────────────────────────────────────────── */
+
+.config-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* ── CONFIG NAV (Sidebar da página) ───────────────────────── */
+
+.config-nav {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow);
+  padding: 16px 12px;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.config-nav-group:last-child {
+  margin-bottom: 0;
+}
+
+.config-nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 8px 8px;
+  display: block;
+}
+
+.config-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  width: 100%;
+  text-align: left;
+}
+
+.config-nav-item svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.config-nav-item:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--black);
+}
+
+.config-nav-item.active {
+  background: var(--black);
+  color: var(--white);
+  font-weight: 600;
+}
+
+.config-nav-item--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.config-nav-empty {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.config-nav-empty svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+/* ── CONFIG CONTENT ───────────────────────────────────────── */
+
+.config-content {
+  min-width: 0;
+}
+
+/* ── CONFIG SECTION ───────────────────────────────────────── */
+
+.config-section {
+  display: none;
+  animation: pageFadeIn 0.22s ease;
+}
+
+.config-section.active {
+  display: block;
+}
+
+/* ── SECTION HEADER ───────────────────────────────────────── */
+
+.config-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.config-section-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.config-section-icon--admin {
+  background: linear-gradient(135deg, #1ACEEE22, #1ACEEE44);
+  border: 1px solid rgba(26, 206, 238, 0.25);
+}
+
+.config-section-icon--admin svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--cyan);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.config-section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--black);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.config-section-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.config-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: linear-gradient(135deg, #0D0D0D, #1A1A1A);
+  color: var(--white);
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.config-admin-badge svg {
+  width: 12px;
+  height: 12px;
+  stroke: var(--cyan);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── CONFIG CARD ──────────────────────────────────────────── */
+
+.config-card {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow);
+  padding: 32px;
+  transition: var(--transition);
+}
+
+/* ── CONFIG FORM ──────────────────────────────────────────── */
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.config-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Labels */
+.config-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--black);
+  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-required {
+  color: #FF4757;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.config-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Input Wrapper */
+.config-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.config-input-icon {
+  position: absolute;
+  left: 13px;
+  width: 15px;
+  height: 15px;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+/* Input */
+.config-input {
+  width: 100%;
+  padding: 11px 14px 11px 40px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-light);
+  background: var(--bg);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--black);
+  transition: var(--transition);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.config-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.config-input:focus {
+  border-color: var(--cyan);
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(26, 206, 238, 0.12);
+}
+
+.config-input:focus + .config-select-arrow,
+.config-input:focus ~ .config-select-arrow {
+  stroke: var(--cyan);
+}
+
+/* Select */
+.config-select-wrap {
+  position: relative;
+}
+
+.config-select {
+  cursor: pointer;
+  padding-right: 36px;
+}
+
+.config-select-arrow {
+  position: absolute;
+  right: 12px;
+  width: 14px;
+  height: 14px;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: var(--transition);
+  z-index: 1;
+}
+
+/* Password toggle */
+.config-password-wrap .config-input {
+  padding-right: 44px;
+}
+
+.config-toggle-password {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: var(--transition);
+  z-index: 1;
+}
+
+.config-toggle-password:hover {
+  color: var(--black);
+}
+
+.config-toggle-password .icon-eye {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Form Divider */
+.config-form-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.config-form-divider::before,
+.config-form-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
+}
+
+/* Feedback */
+.config-form-feedback {
+  min-height: 0;
+  transition: var(--transition);
+}
+
+.config-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  animation: pageFadeIn 0.2s ease;
+}
+
+.config-feedback svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.config-feedback--success {
+  background: rgba(46, 213, 115, 0.12);
+  color: #1e9e55;
+  border: 1px solid rgba(46, 213, 115, 0.25);
+}
+
+.config-feedback--error {
+  background: rgba(255, 71, 87, 0.10);
+  color: #c0392b;
+  border: 1px solid rgba(255, 71, 87, 0.22);
+}
+
+.config-feedback--info {
+  background: rgba(26, 206, 238, 0.10);
+  color: #0a8fa3;
+  border: 1px solid rgba(26, 206, 238, 0.22);
+}
+
+/* Form Actions */
+.config-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* ── ACESSO NEGADO ────────────────────────────────────────── */
+
+.config-acesso-negado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 32px;
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow);
+  gap: 16px;
+  animation: pageFadeIn 0.25s ease;
+}
+
+.config-lock-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #f5f5f5, #eee);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.config-lock-icon svg {
+  width: 32px;
+  height: 32px;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.config-acesso-negado h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--black);
+}
+
+.config-acesso-negado p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+.config-acesso-negado strong {
+  color: var(--black);
+  font-weight: 700;
+}
+
+/* ── FILE UPLOAD ──────────────────────────────────────────── */
+
+.config-file-input {
+  display: none;
+}
+
+.config-file-label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--border-light);
+  background: var(--bg);
+  cursor: pointer;
+  transition: var(--transition);
+  user-select: none;
+}
+
+.config-file-label:hover,
+.config-file-label.config-file-drag {
+  border-color: var(--cyan);
+  background: rgba(26, 206, 238, 0.05);
+}
+
+.config-file-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.config-file-preview svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.config-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.config-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--black);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.config-file-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── POPUP DE SUCESSO ─────────────────────────────────────── */
+
+.nu-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.nu-popup-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.nu-popup {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  padding: 40px 36px 32px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: popupIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popupIn {
+  from { opacity: 0; transform: scale(0.88) translateY(16px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+.nu-popup-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(26,206,238,0.15), rgba(26,206,238,0.3));
+  border: 2px solid rgba(26,206,238,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.nu-popup-icon svg {
+  width: 32px;
+  height: 32px;
+  stroke: var(--cyan);
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nu-popup-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--black);
+  letter-spacing: -0.3px;
+}
+
+.nu-popup-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+.nu-popup-close {
+  margin-top: 8px;
+  min-width: 140px;
+  justify-content: center;
+}
+
+/* ── SPINNER ──────────────────────────────────────────────── */
+
+.config-spinner {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 36;
+  stroke-dashoffset: 12;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .config-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .config-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .config-nav-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 0;
+  }
+
+  .config-nav-label {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .config-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .config-card {
+    padding: 20px;
+  }
+
+  .config-section-header {
+    flex-direction: column;
+  }
+
+  .config-admin-badge {
+    margin-left: 0;
+    align-self: flex-start;
+  }
+
+  .config-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .config-form-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ============================================================
+   DARK MODE OVERRIDES
+   ============================================================ */
+[data-theme="dark"] .config-admin-badge {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .config-lock-icon {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: transparent;
+}
+
+[data-theme="dark"] .config-feedback--success {
+  color: #2ed573;
+}
+
+[data-theme="dark"] .config-feedback--error {
+  color: #ff4757;
+}
+
+[data-theme="dark"] .config-feedback--info {
+  color: var(--cyan);
+}
+
+[data-theme="dark"] .config-file-preview {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: transparent;
+}
+
+[data-theme="dark"] .config-nav-item.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--cyan);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FUNIL MANAGER — Gerenciar Pipelines e Etapas
+   ══════════════════════════════════════════════════════════════ */
+
+/* Loading */
+.funil-loading {
+  display: flex; align-items: center; gap: 10px;
+  padding: 32px; color: var(--text-secondary); font-size: 14px;
+}
+.funil-spinner {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--border-light); border-top-color: var(--black);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Lista de pipelines */
+.funil-list {
+  flex-direction: column; gap: 12px; margin-bottom: 16px;
+}
+.funil-empty {
+  padding: 32px; text-align: center; color: var(--text-secondary); font-size: 14px;
+}
+
+/* Card do pipeline */
+.funil-card {
+  border: 1.5px solid var(--border-light);
+  border-radius: 14px; overflow: hidden;
+  background: var(--white);
+  transition: box-shadow 0.18s ease;
+}
+.funil-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
+
+.funil-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; gap: 12px;
+  background: var(--white); cursor: default;
+}
+.funil-card-left {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+}
+.funil-card-toggle {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  border: 1.5px solid var(--border-light); background: var(--bg);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.funil-card-toggle:hover { background: var(--black); border-color: var(--black); }
+.funil-card-toggle:hover svg { stroke: #fff; }
+.funil-card-toggle svg {
+  width: 13px; height: 13px; stroke: var(--text-secondary); fill: none;
+  stroke-width: 2.5; stroke-linecap: round; transition: transform 0.2s ease;
+}
+.funil-card-info { min-width: 0; }
+.funil-card-nome {
+  font-size: 14px; font-weight: 700; color: var(--black);
+  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.funil-card-meta {
+  display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap;
+}
+.funil-etapas-count {
+  font-size: 11px; color: var(--text-secondary);
+}
+
+/* Badges */
+.funil-vis-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+.vis--comercial  { background: #EFF6FF; color: #2563EB; }
+.vis--operacoes  { background: #F0FDF4; color: #16A34A; }
+.vis--ambos      { background: #FEF9EC; color: #CA8A04; }
+[data-theme="dark"] .vis--comercial { background: rgba(37,99,235,0.15); color: #93C5FD; }
+[data-theme="dark"] .vis--operacoes { background: rgba(22,163,74,0.15);  color: #86EFAC; }
+[data-theme="dark"] .vis--ambos     { background: rgba(202,138,4,0.15);  color: #FDE68A; }
+
+.funil-status-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+}
+.funil-status--ativo   { background: #DCFCE7; color: #15803D; }
+.funil-status--inativo { background: #F1F5F9; color: #64748B; }
+[data-theme="dark"] .funil-status--ativo   { background: rgba(22,163,74,0.18); color: #4ADE80; }
+[data-theme="dark"] .funil-status--inativo { background: rgba(255,255,255,0.07); color: #64748B; }
+
+/* Ações do header do card */
+.funil-card-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.funil-action-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--border-light);
+  background: var(--bg); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease; color: var(--text-secondary);
+}
+.funil-action-btn svg {
+  width: 13px; height: 13px; stroke: currentColor; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.funil-action-btn:hover { background: var(--black); border-color: var(--black); color: #fff; }
+.funil-action-btn--del:hover  { background: #EF4444; border-color: #EF4444; color: #fff; }
+.funil-action-btn--status:hover { background: #F59E0B; border-color: #F59E0B; color: #fff; }
+
+/* Corpo do card (etapas) — fechado por padrão */
+.funil-card-body {
+  display: none; flex-direction: column;
+  border-top: 1.5px solid var(--border-light);
+  padding: 0;
+}
+.funil-card-body--open { display: flex; }
+
+/* Lista de etapas */
+.funil-etapas-list { display: flex; flex-direction: column; }
+.funil-etapa {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--bg);
+  transition: background 0.12s ease;
+}
+.funil-etapa:hover { background: var(--bg); }
+.funil-etapa-ordem {
+  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+  background: var(--border-light); color: var(--text-secondary);
+  font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.funil-etapa-nome { flex: 1; font-size: 13px; font-weight: 600; color: var(--black); }
+.funil-etapa-empty {
+  padding: 16px; text-align: center; font-size: 13px; color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Ações das etapas */
+.funil-etapa-actions { display: flex; align-items: center; gap: 3px; }
+.funil-etapa-btn {
+  width: 26px; height: 26px; border-radius: 7px; border: 1.5px solid transparent;
+  background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.13s ease; color: var(--text-secondary);
+}
+.funil-etapa-btn svg {
+  width: 12px; height: 12px; stroke: currentColor; fill: none;
+  stroke-width: 2.5; stroke-linecap: round;
+}
+.funil-etapa-btn:hover:not(:disabled) {
+  background: var(--bg); border-color: var(--border-light); color: var(--black);
+}
+.funil-etapa-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+.funil-etapa-btn--del:hover  { background: #FEE2E2; border-color: #FECACA; color: #DC2626; }
+.funil-etapa-btn--edit:hover { background: #EFF6FF; border-color: #BFDBFE; color: #2563EB; }
+
+/* Formulário de adicionar etapa */
+.funil-etapa-add-form {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg); border-top: 1.5px solid var(--border-light);
+}
+.funil-etapa-input { flex: 1; font-size: 13px; }
+.funil-etapa-add-btn { white-space: nowrap; font-size: 12px; padding: 8px 14px; }
+
+/* Form novo funil */
+.funil-add-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px; border-radius: 10px;
+  border: 1.5px dashed var(--border-light);
+  background: transparent; color: var(--text-secondary);
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease; margin-top: 4px;
+}
+.funil-add-btn:hover {
+  border-color: var(--black); color: var(--black); background: var(--bg);
+}
+.funil-add-wrap { margin-top: 8px; }
+.funil-new-form { background: var(--white); border: 1.5px solid var(--border-light); border-radius: 14px; padding: 16px; }
+.funil-new-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.funil-new-fields .config-input { flex: 1; min-width: 180px; }
+
+/* Dark mode */
+[data-theme="dark"] .funil-card { background: var(--white); border-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .funil-card-header { background: var(--white); }
+[data-theme="dark"] .funil-card-toggle { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .funil-action-btn { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .funil-etapa:hover { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .funil-etapa-add-form { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .funil-add-btn { border-color: rgba(255,255,255,0.15); }
+[data-theme="dark"] .funil-add-btn:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
+[data-theme="dark"] .funil-new-form { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); }
+
+/* ══════════════════════════════════════════════════════════════
+   MOTIVOS DE PERDA
+   ══════════════════════════════════════════════════════════════ */
+
+.mp-list { display: flex; flex-direction: column; }
+
+.mp-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; gap: 12px;
+  border-bottom: 1px solid var(--bg);
+  transition: background 0.12s ease;
+}
+.mp-item:last-child { border-bottom: none; }
+.mp-item:hover { background: var(--bg); }
+.mp-item--inativo { opacity: 0.55; }
+
+.mp-item-left {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+}
+.mp-item-desc {
+  font-size: 13px; font-weight: 600; color: var(--black);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mp-badge-inativo {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  background: #F1F5F9; color: #64748B; flex-shrink: 0;
+}
+.mp-item-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+.mp-empty {
+  padding: 24px 16px; text-align: center;
+  font-size: 13px; color: var(--text-secondary); font-style: italic;
+}
+
+/* Form adicionar */
+.mp-add-row {
+  padding: 14px 16px;
+  border-top: 1.5px solid var(--bg);
+  background: var(--bg);
+}
+.mp-form {
+  display: flex; align-items: center; gap: 10px;
+}
+.mp-form .config-input { flex: 1; font-size: 13px; }
+.mp-submit { white-space: nowrap; font-size: 12px; padding: 8px 14px; }
+
+/* Dark mode */
+[data-theme="dark"] .mp-item:hover { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .mp-badge-inativo { background: rgba(255,255,255,0.07); }
+[data-theme="dark"] .mp-add-row { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }

@@ -1,0 +1,776 @@
+/* ============================================================
+   VISI MARKETING CRM — SIDEBAR
+   ============================================================ */
+
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--white);
+  border-right: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  padding: 32px 20px;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
+
+  /* Scroll invisível quando o conteúdo não couber */
+  overflow-y: auto;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE / Edge legado */
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;                /* Chrome, Safari, Opera */
+}
+
+/* ---- Logo ---- */
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 32px;
+  padding: 0 4px;
+}
+
+.sidebar-logo-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--black);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 6px;
+}
+
+.sidebar-logo-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+}
+
+.sidebar-logo-text {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--black);
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+.sidebar-logo-text span {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ---- Section Labels ---- */
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 16px 8px 8px;
+}
+
+/* ---- Nav Links ---- */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: var(--transition);
+  position: relative;
+}
+
+.nav-link svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-link:hover {
+  background: var(--bg);
+  color: var(--black);
+}
+
+.nav-link.active {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.nav-link.active svg { stroke: var(--cyan); }
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--cyan);
+  color: var(--black);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+
+/* ---- Divider ---- */
+.sidebar-divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 12px 0;
+}
+
+/* ---- User Profile ---- */
+.sidebar-bottom { margin-top: auto; }
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.user-profile:hover { background: var(--bg); }
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  background: var(--black);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--black);
+  line-height: 1.3;
+}
+
+.user-role {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ---- Logout Button ---- */
+.sidebar-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: left;
+  margin-top: 4px;
+}
+
+.sidebar-logout-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-logout-btn:hover {
+  background: rgba(220, 38, 38, 0.07);
+  color: #dc2626;
+}
+
+.sidebar-logout-btn:hover svg {
+  stroke: #dc2626;
+}
+
+/* ---- Theme Button ---- */
+.sidebar-theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: left;
+  margin-top: 4px;
+}
+
+.sidebar-theme-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-theme-btn:hover {
+  background: var(--bg);
+  color: var(--cyan);
+}
+
+.sidebar-theme-btn:hover svg {
+  stroke: var(--cyan);
+}
+
+/* ---- Notifications Button ---- */
+.sidebar-notif-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: left;
+  margin-top: 4px;
+  position: relative;
+}
+
+.sidebar-notif-btn:hover {
+  background: var(--bg);
+  color: var(--black);
+}
+
+.sidebar-notif-icon-wrap {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-notif-icon-wrap svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+
+.sidebar-notif-badge {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
+  border: 2px solid var(--white);
+  animation: notif-pulse 2s ease-in-out infinite;
+}
+
+@keyframes notif-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.15); }
+}
+
+/* ---- Notification Panel ---- */
+.notif-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 360px;
+  background: var(--white);
+  border-left: 1px solid var(--border-light);
+  box-shadow: -4px 0 32px rgba(0,0,0,0.12);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.notif-panel.open {
+  transform: translateX(0);
+}
+
+.notif-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 299;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.notif-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Header */
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.notif-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.notif-panel-title svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--cyan, #00bcd4);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.notif-panel-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg, #f5f5f5);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  color: var(--text-secondary);
+}
+
+.notif-panel-close:hover {
+  background: rgba(220,38,38,0.08);
+  color: #dc2626;
+}
+
+.notif-panel-close svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Tabs */
+.notif-panel-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.notif-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.notif-tab:hover {
+  border-color: var(--cyan, #00bcd4);
+  color: var(--cyan, #00bcd4);
+}
+
+.notif-tab.active {
+  background: var(--cyan-dim, rgba(0,188,212,0.1));
+  border-color: var(--cyan, #00bcd4);
+  color: var(--cyan, #00bcd4);
+  font-weight: 600;
+}
+
+.notif-tab-badge {
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* List */
+.notif-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-light) transparent;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empty state */
+.notif-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.notif-empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--bg, #f5f5f5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notif-empty-icon svg {
+  width: 28px;
+  height: 28px;
+  stroke: var(--text-muted, #9ca3af);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notif-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--black);
+  margin: 0;
+}
+
+.notif-empty-desc {
+  font-size: 12px;
+  color: var(--text-muted, #9ca3af);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 220px;
+}
+
+/* Loading state */
+.notif-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted, #9ca3af);
+}
+
+.notif-spinner {
+  width: 32px;
+  height: 32px;
+  stroke: var(--cyan, #00bcd4);
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 56;
+  stroke-dashoffset: 14;
+  animation: notif-spin 0.9s linear infinite;
+}
+
+@keyframes notif-spin {
+  to { transform: rotate(360deg); }
+}
+
+.notif-list::-webkit-scrollbar { width: 4px; }
+.notif-list::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+
+/* Item */
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 20px;
+  position: relative;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  transition: background 0.15s ease;
+  cursor: default;
+}
+
+.notif-item:hover { background: var(--bg, #f9f9f9); }
+
+.notif-item.notif-unread { background: rgba(0, 188, 212, 0.04); }
+.notif-item.notif-unread:hover { background: rgba(0, 188, 212, 0.08); }
+
+/* Icon */
+.notif-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notif-item-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notif-icon-deal  { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.notif-icon-task  { background: rgba(99, 102, 241, 0.12);  color: #4f46e5; }
+.notif-icon-alert { background: rgba(245, 158, 11, 0.12);  color: #d97706; }
+.notif-icon-user  { background: rgba(0, 188, 212, 0.12);   color: var(--cyan, #00bcd4); }
+
+/* Content */
+.notif-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--black);
+  margin: 0 0 3px;
+  line-height: 1.3;
+}
+
+.notif-item-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 5px;
+  line-height: 1.45;
+}
+
+.notif-item-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Unread dot */
+.notif-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan, #00bcd4);
+  flex-shrink: 0;
+  margin-top: 5px;
+  align-self: flex-start;
+}
+
+/* Footer */
+.notif-panel-footer {
+  border-top: 1px solid var(--border-light);
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+
+.notif-mark-all-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.notif-mark-all-btn:hover {
+  border-color: var(--cyan, #00bcd4);
+  color: var(--cyan, #00bcd4);
+  background: rgba(0, 188, 212, 0.05);
+}
+
+/* ─── Alertas Críticos — Negócio sem contato +48h ─────────────────── */
+
+/* Item crítico: fundo vermelho suave com borda esquerda de destaque */
+.notif-item-critico {
+  background: rgba(220, 38, 38, 0.04);
+  border-left: 3px solid #ef4444;
+  cursor: pointer;
+}
+
+.notif-item-critico:hover {
+  background: rgba(220, 38, 38, 0.09) !important;
+}
+
+.notif-item-critico.notif-unread {
+  background: rgba(220, 38, 38, 0.07);
+}
+
+/* Ícone triangular vermelho */
+.notif-icon-critico {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+}
+
+.notif-icon-critico svg {
+  fill: rgba(220, 38, 38, 0.18);
+  stroke: #dc2626;
+}
+
+/* Badge "CRÍTICO" pequeno acima do título */
+.notif-critico-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 4px;
+}
+
+/* Ponto não-lido vermelho (sobreposição ao azul padrão) */
+.notif-item-dot.notif-dot-critico {
+  background: #ef4444;
+  animation: critico-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes critico-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1;   }
+  50%       { transform: scale(1.4); opacity: 0.6; }
+}
+
+/* Separador entre alertas críticos e notificações normais */
+.notif-separador {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted, #9ca3af);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.notif-separador::before,
+.notif-separador::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
+}
+
+/* Badge vermelho pulsante no sino quando há alertas críticos */
+.sidebar-notif-badge.notif-badge-critico {
+  background: #ef4444;
+  animation: notif-pulse 1s ease-in-out infinite;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 68px;
+    min-width: 68px;
+    padding: 24px 12px;
+  }
+  .sidebar-logo-text,
+  .sidebar-section-label,
+  .nav-link span,
+  .nav-badge,
+  .user-name,
+  .user-role { display: none; }
+  .nav-link { justify-content: center; padding: 12px; }
+}
+
+/* ---- DARK MODE OVERRIDES ---- */
+[data-theme="dark"] .sidebar-logo-icon {
+  background: #111111;
+  border: 1px solid var(--border-light);
+}

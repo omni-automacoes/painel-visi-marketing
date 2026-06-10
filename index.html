@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visi Marketing — CRM</title>
+  <meta name="description" content="Visi Marketing CRM — Sistema inteligente de gestão de vendas e pipeline comercial." />
+
+  <!-- Init Theme -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('visi_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- CSS Modular -->
+  <link rel="stylesheet" href="css/global.css" />
+  <link rel="stylesheet" href="css/sidebar.css" />
+  <link rel="stylesheet" href="css/cards.css" />
+  <link rel="stylesheet" href="css/kanban.css" />
+  <link rel="stylesheet" href="css/charts.css" />
+  <link rel="stylesheet" href="css/view-switch.css" />
+  <link rel="stylesheet" href="css/tarefas.css" />
+  <link rel="stylesheet" href="css/email-marketing.css" />
+  <link rel="stylesheet" href="css/configuracoes.css" />
+  <link rel="stylesheet" href="css/np-panel.css" />
+  <link rel="stylesheet" href="css/relatorios.css" />
+  <link rel="stylesheet" href="css/projetos.css" />
+
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- Sidebar: preenchida pelo components/sidebar.js -->
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <!-- Main Content: controlado pelo router -->
+  <main class="main-content">
+    <div id="main-outlet"></div>
+  </main>
+
+</div>
+
+<!-- Entry point -->
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>

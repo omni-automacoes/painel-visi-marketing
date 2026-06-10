@@ -1,0 +1,357 @@
+/* ============================================================
+   VISI MARKETING CRM — CARDS & DASHBOARD
+   ============================================================ */
+
+/* ---- CARD BASE ---- */
+.card {
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+  animation: fadeSlideUp 0.35s ease both;
+}
+
+.card-light {
+  background: var(--card-light);
+  border: 1px solid var(--border-light);
+}
+
+.card-dark {
+  background: var(--card-dark);
+  border: 1px solid var(--border-dark);
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.card-dark .card-title { color: var(--white); }
+.card-light .card-title { color: var(--black); }
+
+.card-subtitle { font-size: 12px; margin-top: 3px; }
+.card-dark .card-subtitle  { color: var(--text-muted); }
+.card-light .card-subtitle { color: var(--text-secondary); }
+
+/* Select Pill */
+.select-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--white);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.select-pill:hover { background: rgba(255,255,255,0.18); }
+.select-pill svg {
+  width: 12px; height: 12px;
+  stroke: var(--white); fill: none;
+  stroke-width: 2.5; stroke-linecap: round;
+}
+
+/* ---- DASHBOARD GRID ---- */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 20px;
+}
+
+/* ---- TOP STATS ROW ---- */
+.top-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-mini-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: 20px 20px 16px;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: var(--transition);
+  animation: fadeSlideUp 0.35s ease both;
+}
+.stat-mini-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.smc-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.smc-icon-cyan { background: var(--cyan-dim); }
+.smc-icon-black { background: rgba(0,0,0,0.05); }
+.smc-icon svg { width: 18px; height: 18px; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.smc-icon-cyan svg { stroke: var(--cyan); }
+.smc-icon-black svg { stroke: var(--black); }
+
+.smc-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.smc-value { font-size: 26px; font-weight: 900; color: var(--black); letter-spacing: -1px; line-height: 1; }
+.smc-delta { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--cyan); }
+.smc-delta svg { width: 12px; height: 12px; stroke: var(--cyan); fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+/* Estado de carregamento dos KPIs */
+.smc-loading {
+  color: var(--text-muted) !important;
+  animation: kpiPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes kpiPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ---- CARD: SALES STATS (DARK) ---- */
+.card-sales-stats { grid-column: 1; grid-row: 1; }
+
+.sales-metric { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.metric-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.metric-badge {
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(26,206,238,0.18);
+  border-radius: 20px; padding: 2px 8px;
+  font-size: 11px; font-weight: 700; color: var(--cyan);
+}
+.metric-badge svg { width: 10px; height: 10px; stroke: var(--cyan); fill: none; stroke-width: 2.5; stroke-linecap: round; }
+.metric-badge--neg { background: rgba(220,38,38,0.12); color: #dc2626; }
+.metric-badge--neg svg { stroke: #dc2626; }
+.metric-value { font-size: 54px; font-weight: 900; color: var(--white); letter-spacing: -2px; line-height: 1; margin-bottom: 24px; }
+
+/* ---- CARD: FUNNEL OVERVIEW ---- */
+.card-funnel-overview { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; }
+.funnel-value { font-size: 36px; font-weight: 900; color: var(--black); letter-spacing: -1.5px; line-height: 1; }
+.funnel-goal { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+.funnel-goal span { font-weight: 700; color: var(--black); }
+.funnel-value-block { margin-bottom: 8px; }
+.gauge-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px 0; position: relative; }
+.funnel-legend { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.legend-item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-secondary); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend-dot-cyan { background: var(--cyan); }
+.legend-dot-black { background: var(--black); }
+.legend-label { flex: 1; }
+.legend-value { font-weight: 700; color: var(--black); }
+
+/* ---- CARD: RECENT ACTIVITIES ---- */
+.card-recent { grid-column: 1; grid-row: 2; }
+
+.activities-list { display: flex; flex-direction: column; gap: 14px; }
+
+.activity-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+.activity-item:hover { background: var(--cyan-dim); }
+
+.activity-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--black);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--cyan);
+  flex-shrink: 0;
+  border: 2px solid var(--cyan-mid);
+}
+.activity-text { flex: 1; }
+.activity-title { font-size: 13px; font-weight: 600; color: var(--black); line-height: 1.3; }
+.activity-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.activity-tag { padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.activity-time { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+
+.tag-signed { background: var(--black); color: var(--cyan); }
+.tag-meeting { background: var(--cyan-dim); color: var(--cyan); }
+.tag-call { background: rgba(0,0,0,0.07); color: var(--text-secondary); }
+
+/* Quick Stat Pills */
+.quick-stats { display: flex; gap: 12px; margin-bottom: 16px; }
+.quick-stat-pill { flex: 1; background: var(--bg); border-radius: var(--radius-md); padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.qs-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.qs-value { font-size: 20px; font-weight: 800; color: var(--black); letter-spacing: -0.5px; }
+.qs-delta { font-size: 10px; font-weight: 600; color: var(--cyan); }
+
+/* ---- BOTTOM ROW ---- */
+.bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+
+/* Mini Table */
+.mini-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.mini-table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 0 10px; border-bottom: 1px solid var(--border-light); }
+.mini-table td { padding: 10px 0; font-size: 12px; color: var(--black); border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+.mini-table tr:last-child td { border-bottom: none; }
+.td-name { font-weight: 600; }
+.td-value { font-weight: 700; }
+
+.progress-mini { width: 80px; height: 5px; background: var(--bg); border-radius: 10px; overflow: hidden; }
+.progress-mini-fill { height: 100%; background: var(--cyan); border-radius: 10px; }
+
+/* ---- TOOLTIP: SAÚDE MÉDIA ---- */
+.saude-info-btn {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.6;
+  position: relative;     /* ancora o tooltip no ícone */
+  transition: opacity 0.2s;
+  outline: none;
+}
+.saude-info-btn:hover,
+.saude-info-btn:focus { opacity: 1; }
+
+/* Garante que o tooltip não seja cortado pelo overflow do card */
+.stat-mini-card { overflow: visible; }
+
+.saude-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px); /* abaixo do ícone */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  background: #0D0D0D;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 12px;
+  color: #ccc;
+  line-height: 1.5;
+  z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  pointer-events: none;
+  white-space: normal;
+}
+.saude-tooltip strong { color: #fff; font-size: 13px; display: block; margin-bottom: 6px; }
+.saude-tooltip p { margin: 4px 0; }
+.saude-tooltip em { color: var(--cyan); font-style: normal; font-weight: 600; }
+.saude-tooltip code {
+  background: rgba(26,206,238,0.1);
+  color: var(--cyan);
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.saude-tooltip-table { width: 100%; margin-top: 8px; border-collapse: collapse; }
+.saude-tooltip-table td { padding: 3px 0; font-size: 11px; }
+.saude-tooltip-table td:last-child { text-align: right; color: var(--cyan); font-weight: 700; }
+
+/* Seta apontando para cima (tooltip está abaixo do ícone) */
+.saude-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: rgba(255,255,255,0.1);
+}
+.saude-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px); left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: #0D0D0D;
+}
+
+/* Mostrar SOMENTE ao hover/focus do ícone */
+.saude-info-btn:hover .saude-tooltip,
+.saude-info-btn:focus .saude-tooltip { display: block; }
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 1200px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .card-funnel-overview { grid-column: 1; grid-row: auto; }
+  .top-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .bottom-row { grid-template-columns: 1fr; }
+}
+
+/* ---- DARK MODE OVERRIDES ---- */
+
+/* Gauge SVG — cores via CSS para respeitar o tema */
+.gauge-track                { stroke: #F0F2F5; }
+.gauge-main-text            { fill: #0D0D0D; }
+.gauge-sub-text             { fill: #888; }
+
+[data-theme="dark"] .gauge-track       { stroke: rgba(255,255,255,0.08); }
+[data-theme="dark"] .gauge-main-text   { fill: #FFFFFF; }
+[data-theme="dark"] .gauge-sub-text    { fill: #888; }
+
+/* Cards base */
+[data-theme="dark"] .card-dark .card-title    { color: #FFFFFF; }
+[data-theme="dark"] .card-dark .card-subtitle { color: var(--text-muted); }
+[data-theme="dark"] .card-light .card-title   { color: #FFFFFF; }
+[data-theme="dark"] .card-light .card-subtitle{ color: #888; }
+
+/* Select pill */
+[data-theme="dark"] .select-pill              { color: #FFFFFF; border-color: rgba(255,255,255,0.18); }
+[data-theme="dark"] .select-pill svg          { stroke: #FFFFFF; }
+
+/* KPI mini-cards */
+[data-theme="dark"] .stat-mini-card           { background: #0D0D0D; border-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .smc-label                { color: #888; }
+[data-theme="dark"] .smc-value                { color: #FFFFFF; }
+[data-theme="dark"] .smc-icon-black           { background: rgba(255,255,255,0.06); }
+[data-theme="dark"] .smc-icon-black svg       { stroke: #FFFFFF; }
+
+/* Metric value (card escuro) */
+[data-theme="dark"] .metric-value             { color: #FFFFFF; }
+
+/* Funnel / Satisfação card */
+[data-theme="dark"] .funnel-value             { color: #FFFFFF; }
+[data-theme="dark"] .funnel-goal              { color: #888; }
+[data-theme="dark"] .funnel-goal span         { color: #FFFFFF; }
+
+/* Legenda de pilares (comunicação, entrega, performance) */
+[data-theme="dark"] .legend-item              { color: #aaaaaa; }
+[data-theme="dark"] .legend-label             { color: #aaaaaa; }
+[data-theme="dark"] .legend-value             { color: #FFFFFF; }
+[data-theme="dark"] .legend-dot-black         { background: #FFFFFF; }
+
+/* Activities list */
+[data-theme="dark"] .activity-item            { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .activity-item:hover      { background: rgba(26,206,238,0.06); }
+[data-theme="dark"] .activity-title           { color: #FFFFFF; }
+[data-theme="dark"] .activity-sub             { color: #888; }
+[data-theme="dark"] .activity-time            { color: #666; }
+
+/* Quick stats pills */
+[data-theme="dark"] .quick-stat-pill          { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .qs-label                 { color: #666; }
+[data-theme="dark"] .qs-value                 { color: #FFFFFF; }
+
+/* Mini table (Top Vendedores / Top Gestores) */
+[data-theme="dark"] .mini-table th            { color: #666; border-bottom-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .mini-table td            { color: #FFFFFF; border-bottom-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .td-name                  { color: #FFFFFF; }
+[data-theme="dark"] .progress-mini            { background: rgba(255,255,255,0.06); }
+
+/* Bottom row — card de evolução da carteira */
+[data-theme="dark"] .chart-legend-item        { color: #888; }
+

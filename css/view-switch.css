@@ -1,0 +1,291 @@
+/* ============================================================
+   VISI MARKETING CRM — VIEW SWITCH (Admin - minimalista)
+   ============================================================ */
+
+/* ── Toggle wrapper integrado no header ── */
+.view-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.view-toggle-label {
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.view-toggle-label.active {
+  color: var(--black);
+}
+
+/* ── O toggle em si ── */
+.view-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.view-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.view-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  border: 1.5px solid var(--border-light);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.view-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  background: var(--black);
+  border-radius: 50%;
+  transition: var(--transition);
+  pointer-events: none;
+}
+
+/* Estado: Operações (checked) */
+.view-toggle input:checked ~ .view-toggle-track {
+  background: var(--black);
+  border-color: var(--black);
+}
+
+.view-toggle input:checked ~ .view-toggle-thumb {
+  transform: translateX(18px);
+  background: var(--cyan);
+}
+
+/* ── Badge de cargo (não-admin, read-only) ── */
+.view-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.view-role-badge svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Animação da área de conteúdo ── */
+.role-view-content {
+  animation: pageFadeIn 0.22s ease both;
+}
+
+/* ── Botão Finalizar Dia ── */
+.btn-finalizar-dia {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-light);
+  background: var(--white);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.btn-finalizar-dia:hover {
+  background: #0F172A;
+  border-color: #0F172A;
+  color: #fff;
+}
+.btn-finalizar-dia svg {
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+.btn-finalizar-dia:hover svg {
+  transform: translateX(2px);
+}
+
+[data-theme="dark"] .btn-finalizar-dia {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.1);
+  color: #94A3B8;
+}
+[data-theme="dark"] .btn-finalizar-dia:hover {
+  background: #fff;
+  border-color: #fff;
+  color: #0F172A;
+}
+
+/* ── Modal Finalizar Dia ──────────────────────────────────── */
+.fd-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(15,23,42,0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.fd-overlay--open  { opacity: 1; }
+.fd-overlay--closing { opacity: 0; pointer-events: none; }
+
+.fd-modal {
+  background: #fff;
+  border-radius: 20px;
+  width: 100%; max-width: 440px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.07);
+  overflow: hidden;
+  transform: scale(0.94) translateY(10px);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease;
+}
+.fd-modal--open { transform: scale(1) translateY(0); opacity: 1; }
+
+/* Header */
+.fd-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid #F1F5F9;
+  position: relative;
+}
+.fd-header-icon {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: #0F172A; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.fd-header-icon svg {
+  width: 18px; height: 18px;
+  stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.fd-title { font-size: 16px; font-weight: 800; color: #0F172A; margin: 0 0 2px; }
+.fd-subtitle { font-size: 12px; color: #64748B; margin: 0; }
+.fd-close {
+  position: absolute; top: 16px; right: 16px;
+  background: #F1F5F9; border: none; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s ease;
+}
+.fd-close:hover { background: #E2E8F0; }
+.fd-close svg { width: 13px; height: 13px; stroke: #64748B; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+/* Body */
+.fd-body { padding: 22px; display: flex; flex-direction: column; gap: 18px; }
+
+.fd-field { display: flex; flex-direction: column; gap: 7px; }
+.fd-label {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 700; color: #0F172A;
+}
+.fd-label-hint {
+  font-size: 10px; font-weight: 500; color: #94A3B8;
+  background: #F1F5F9; padding: 2px 8px; border-radius: 20px;
+}
+
+/* Campo somente leitura */
+.fd-input-readonly {
+  display: flex; align-items: center; gap: 9px;
+  padding: 12px 14px;
+  background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 11px;
+  font-size: 14px; font-weight: 700; color: #0F172A;
+}
+.fd-input-readonly svg {
+  width: 15px; height: 15px; flex-shrink: 0;
+  stroke: #94A3B8; fill: none; stroke-width: 2; stroke-linecap: round;
+}
+
+/* Campo editável */
+.fd-input {
+  padding: 12px 14px;
+  border: 1.5px solid #E2E8F0; border-radius: 11px;
+  background: #F8FAFC;
+  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; color: #0F172A;
+  outline: none; transition: all 0.18s ease;
+  -moz-appearance: textfield;
+}
+.fd-input::-webkit-outer-spin-button,
+.fd-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.fd-input:focus { border-color: #0F172A; background: #fff; box-shadow: 0 0 0 3px rgba(15,23,42,0.07); }
+.fd-input--error { border-color: #EF4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,0.1) !important; }
+.fd-input::placeholder { color: #CBD5E1; }
+
+/* Footer */
+.fd-footer {
+  display: flex; gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid #F1F5F9;
+  background: #FAFAFA;
+}
+.fd-btn-cancel {
+  flex: 1; padding: 11px;
+  border: 1.5px solid #E2E8F0; border-radius: 11px;
+  background: #fff; color: #64748B;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.fd-btn-cancel:hover { border-color: #CBD5E1; color: #0F172A; }
+
+.fd-btn-confirm {
+  flex: 2; padding: 11px 16px;
+  border: none; border-radius: 11px;
+  background: #0F172A; color: #fff;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s ease;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+}
+.fd-btn-confirm:hover:not(:disabled) { background: #1E293B; }
+.fd-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+.fd-btn-confirm svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+.fd-btn-confirm--ok { background: #16A34A !important; }
+
+.fd-saving-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; background: rgba(255,255,255,0.6);
+  animation: fdPulse 0.7s ease infinite alternate;
+}
+@keyframes fdPulse { from { opacity: 0.4; } to { opacity: 1; } }
+
+/* Dark mode */
+[data-theme="dark"] .fd-modal { background: #111; }
+[data-theme="dark"] .fd-header { border-bottom-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .fd-title  { color: #fff; }
+[data-theme="dark"] .fd-subtitle { color: #aaa; }
+[data-theme="dark"] .fd-close { background: #1A1A1A; }
+[data-theme="dark"] .fd-close:hover { background: #222; }
+[data-theme="dark"] .fd-close svg { stroke: #aaa; }
+[data-theme="dark"] .fd-label { color: #fff; }
+[data-theme="dark"] .fd-label-hint { background: #1A1A1A; color: #666; }
+[data-theme="dark"] .fd-input-readonly { background: #1A1A1A; border-color: rgba(255,255,255,0.1); color: #fff; }
+[data-theme="dark"] .fd-input { background: #1A1A1A; border-color: rgba(255,255,255,0.1); color: #fff; }
+[data-theme="dark"] .fd-input:focus { background: #111; border-color: rgba(255,255,255,0.3); box-shadow: 0 0 0 3px rgba(255,255,255,0.04); }
+[data-theme="dark"] .fd-footer { background: #0D0D0D; border-top-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .fd-btn-cancel { background: #1A1A1A; border-color: rgba(255,255,255,0.1); color: #aaa; }
+[data-theme="dark"] .fd-btn-cancel:hover { background: #222; color: #fff; }
+[data-theme="dark"] .fd-btn-confirm { background: #fff; color: #0F172A; }
+[data-theme="dark"] .fd-btn-confirm:hover:not(:disabled) { background: #E5E5E5; }
+[data-theme="dark"] .fd-btn-confirm--ok { background: #16A34A !important; color: #fff !important; }

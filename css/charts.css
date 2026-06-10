@@ -1,0 +1,39 @@
+/* ============================================================
+   VISI MARKETING CRM — CHARTS
+   ============================================================ */
+
+/* ---- Canvas Wrappers ---- */
+.chart-canvas-wrapper {
+  position: relative;
+}
+
+/* ---- Gauge SVG ---- */
+.gauge-wrapper svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* ---- Chart Legend ---- */
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chart-legend-line {
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.chart-legend-line--cyan  { background: var(--cyan); }
+.chart-legend-line--ghost { background: rgba(255,255,255,0.2); }

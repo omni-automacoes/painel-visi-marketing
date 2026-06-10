@@ -1,0 +1,62 @@
+# ─── CRM Visi Marketing — Configuração de Produção ────────────────────────────
+
+Options -MultiViews
+
+# ─── Roteamento SPA (Hash-based router) ───────────────────────────────────────
+# Redireciona tudo que não é arquivo/pasta real para index.html
+RewriteEngine On
+RewriteBase /
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [QSA,L]
+
+# ─── Charset padrão ───────────────────────────────────────────────────────────
+AddDefaultCharset UTF-8
+
+# ─── Compressão GZIP ──────────────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html
+  AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE text/javascript
+  AddOutputFilterByType DEFLATE application/javascript
+  AddOutputFilterByType DEFLATE application/json
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ─── Cache de Assets Estáticos ────────────────────────────────────────────────
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # DESATIVAR CACHE DE HTML, CSS E JS (Para facilitar os deploys diários)
+  ExpiresByType text/html              "access plus 0 seconds"
+  ExpiresByType text/css               "access plus 0 seconds"
+  ExpiresByType application/javascript "access plus 0 seconds"
+  ExpiresByType text/javascript        "access plus 0 seconds"
+
+  # Imagens e fontes — cache de 30 dias (estas raramente mudam)
+  ExpiresByType image/png            "access plus 30 days"
+  ExpiresByType image/jpeg           "access plus 30 days"
+  ExpiresByType image/gif            "access plus 30 days"
+  ExpiresByType image/webp           "access plus 30 days"
+  ExpiresByType image/x-icon         "access plus 30 days"
+  ExpiresByType image/svg+xml        "access plus 30 days"
+</IfModule>
+
+# ─── Forçar No-Cache para Arquivos Críticos ───────────────────────────────────
+# Isso instrui o servidor Hostinger (LiteSpeed) e o navegador a nunca cachear
+<FilesMatch "\.(html|htm|js|css)$">
+  FileETag None
+  <IfModule mod_headers.c>
+    Header unset ETag
+    Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
+  </IfModule>
+</FilesMatch>
+
+# ─── Cabeçalhos de Segurança ──────────────────────────────────────────────────
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options    "nosniff"
+  Header always set X-Frame-Options           "SAMEORIGIN"
+  Header always set Referrer-Policy           "strict-origin-when-cross-origin"
+</IfModule>
