@@ -25,6 +25,7 @@ let _viewModeAtivados = 'cards'; // 'cards' | 'list'
 let _termoBusca      = '';       // pesquisa por nome
 let _resumoListaFat  = {};       // mapa cliente_id → faturamento total
 let _resumoListaCt   = {};       // mapa cliente_id → { reuniao: N, outro: N }
+let _clienteAtivo    = null;     // cliente ativo no drawer
 
 export default {
   render() {
@@ -265,10 +266,17 @@ export default {
 
         /* Cards toolbar no dark */
         [data-theme="dark"] .cards-sort-select,
+        [data-theme="dark"] .cl-filter-select,
         [data-theme="dark"] .cards-sort-dir {
           background: rgba(255,255,255,.06);
           border-color: rgba(255,255,255,.1);
           color: rgba(255,255,255,.8);
+        }
+        [data-theme="dark"] .cards-sort-select option,
+        [data-theme="dark"] .cl-filter-select option,
+        [data-theme="dark"] .cl-select option {
+          background: #1e1e1e;
+          color: #ffffff;
         }
         [data-theme="dark"] .cards-sort-label { color: rgba(255,255,255,.4); }
         [data-theme="dark"] .cards-sort-dir:hover { background: var(--cyan); color: #fff; border-color: var(--cyan); }
@@ -1604,6 +1612,12 @@ export default {
       this._bindModalEvents(isAdmin, userId);
     }
 
+    // Bind do drawer e modals de churn apenas uma vez por ciclo de vida da página
+    if (!this._drawerEventsBound) {
+      this._drawerEventsBound = true;
+      this._bindDrawerEvents();
+    }
+
     // Buscar clientes
     const { data, error } = isAdmin
       ? await Clientes.getAllAdmin()
@@ -1732,6 +1746,18 @@ export default {
     this._bindSearchEvents(isAdmin);
     this._bindPaginationEvents(isAdmin);
     this._bindSortEvents(isAdmin);
+
+    // Delegar cliques de abertura do drawer localmente no container da página
+    container.addEventListener('click', (e) => {
+      const target = e.target.closest('[data-cliente-id]');
+      if (target) {
+        if (target.classList.contains('task-row') || target.closest('.ob-card')) return;
+        if (e.target.closest('button') || e.target.closest('a') || e.target.closest('.rn-del') || e.target.closest('.ct-del') || e.target.closest('.fat-edit') || e.target.closest('.fat-del') || e.target.closest('.fc-del')) return;
+        const id = Number(target.dataset.clienteId);
+        const c  = _todosClientes.find(x => x.cliente_id === id);
+        if (c) this._openClientDrawer(c);
+      }
+    });
   },
 
   // ─── Barra de pesquisa ───────────────────────────────────────────────────
@@ -1873,22 +1899,7 @@ export default {
       _paginaAtivados = 1;
       this._renderPage(isAdmin);
     });
-    // Clique nos cards abre drawer
-    document.querySelectorAll('.cliente-card[data-cliente-id]').forEach(card => {
-      card.addEventListener('click', () => {
-        const id = Number(card.dataset.clienteId);
-        const c  = _todosClientes.find(x => x.cliente_id === id);
-        if (c) this._openClientDrawer(c);
-      });
-    });
-    // Clique nas linhas da tabela lista abre drawer
-    document.querySelectorAll('.cl-list-table tbody tr[data-cliente-id]').forEach(row => {
-      row.addEventListener('click', () => {
-        const id = Number(row.dataset.clienteId);
-        const c  = _todosClientes.find(x => x.cliente_id === id);
-        if (c) this._openClientDrawer(c);
-      });
-    });
+    // Cliques nos cards e linhas da tabela agora são tratados via delegação de eventos no contêiner principal da página
     // View toggle — Cards ↔ Lista
     document.getElementById('view-toggle-cards')?.addEventListener('click', () => {
       if (_viewModeAtivados === 'cards') return;
@@ -2022,7 +2033,6 @@ export default {
         return;
       }
       _close();
-      this._modalBound = false; // permite re-bind no próximo onMount após reset do DOM
       await this.onMount();
     });
   },
@@ -2622,30 +2632,7 @@ export default {
         ${buildPages()}
       </div>` : '';
 
-    // Bind do drawer de detalhes (delegação no documento)
-    if (!document._cdBound) {
-      document._cdBound = true;
-      document.addEventListener('click', (e) => {
-        // Fechar drawer (overlay ou botão X)
-        if (e.target.id === 'cd-overlay' || e.target.closest('#cd-close')) {
-          document.getElementById('cd-drawer')?.classList.remove('open');
-          document.getElementById('cd-overlay')?.classList.remove('open');
-          // Restaura URL sem o param do cliente
-          window.location.hash = 'clientes';
-          return;
-        }
-        // Ignorar cliques dentro do drawer aberto
-        if (e.target.closest('#cd-drawer')) return;
-
-        // Abrir via botão olho OU clique em qualquer célula da linha
-        const row = e.target.closest('tr[data-cliente-id]');
-        if (row) {
-          const id = Number(row.dataset.clienteId);
-          const c  = _todosClientes.find(x => x.cliente_id === id);
-          if (c) this._openClientDrawer(c);
-        }
-      });
-    }
+    // Bind do drawer de detalhes agora é tratado via delegação no contêiner da página
 
     return `
       <section>
@@ -2686,11 +2673,163 @@ export default {
     _sortAtivados   = { col: 'cliente_nome', dir: 'asc' };
     _sortDesativ    = { col: 'cliente_nome', dir: 'asc' };
     _isAdmin        = false;
-    document._cdBound = false;
+    _clienteAtivo   = null;
+    this._modalBound = false;
+    this._drawerEventsBound = false;
+    if (this._acAbort) {
+      this._acAbort.abort();
+      this._acAbort = null;
+    }
+  },
+
+  _bindDrawerEvents() {
+    const btnChurn      = document.getElementById('cd-btn-churn');
+    const btnDelete     = document.getElementById('cd-btn-delete');
+    const churnOverlay  = document.getElementById('churn-overlay');
+    const churnModal    = document.getElementById('churn-modal');
+    const churnCancel   = document.getElementById('churn-cancel');
+    const churnConfirm  = document.getElementById('churn-confirm');
+    const churnDataInp  = document.getElementById('churn-data');
+    const churnRecInp   = document.getElementById('churn-receita');
+    const churnMotivoInp  = document.getElementById('churn-motivo');
+    const churnCharCount  = document.getElementById('churn-char-count');
+    const closeBtn      = document.getElementById('cd-close');
+    const overlay       = document.getElementById('cd-overlay');
+
+    const closeDrawer = () => {
+      document.getElementById('cd-drawer')?.classList.remove('open');
+      document.getElementById('cd-overlay')?.classList.remove('open');
+      window.location.hash = 'clientes';
+      _clienteAtivo = null;
+    };
+    closeBtn?.addEventListener('click', closeDrawer);
+    overlay?.addEventListener('click', closeDrawer);
+
+    const _updateChurnCount = () => {
+      if (!churnMotivoInp || !churnCharCount) return;
+      const remaining = 120 - churnMotivoInp.value.length;
+      churnCharCount.textContent = `${remaining} caractere${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}`;
+      churnCharCount.classList.toggle('warn',   remaining <= 30 && remaining > 10);
+      churnCharCount.classList.toggle('danger', remaining <= 10);
+    };
+    churnMotivoInp?.addEventListener('input', _updateChurnCount);
+
+    const openChurn = () => {
+      if (!_clienteAtivo) return;
+      churnDataInp.value   = new Date().toISOString().split('T')[0];
+      churnRecInp.value    = '';
+      if (churnMotivoInp) churnMotivoInp.value = '';
+      _updateChurnCount();
+      churnOverlay.classList.add('open');
+      churnModal.classList.add('open');
+      churnDataInp.focus();
+    };
+    const closeChurn = () => {
+      churnOverlay.classList.remove('open');
+      churnModal.classList.remove('open');
+    };
+
+    churnRecInp?.addEventListener('input', () => {
+      let v = churnRecInp.value.replace(/\D/g, '');
+      if (!v) { churnRecInp.value = ''; return; }
+      v = (parseInt(v, 10) / 100).toFixed(2);
+      churnRecInp.value = parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    });
+
+    btnChurn?.addEventListener('click', openChurn);
+    churnCancel?.addEventListener('click', closeChurn);
+    churnOverlay?.addEventListener('click', closeChurn);
+
+    churnConfirm?.addEventListener('click', async () => {
+      if (!_clienteAtivo) return;
+      const dataVal = churnDataInp.value;
+      if (!dataVal) { churnDataInp.focus(); return; }
+
+      const recStr  = churnRecInp.value.replace(/\./g, '').replace(',', '.');
+      const recVal  = parseFloat(recStr) || null;
+      const motivoVal = churnMotivoInp?.value.trim() || null;
+
+      churnConfirm.disabled = true;
+      churnConfirm.textContent = 'Salvando…';
+
+      const { error } = await Clientes.registrarChurn(_clienteAtivo.cliente_id, dataVal, recVal, motivoVal);
+      if (error) {
+        churnConfirm.disabled = false;
+        churnConfirm.textContent = 'Confirmar Churn';
+        alert('Erro ao registrar o churn. Tente novamente.');
+        return;
+      }
+
+      const idx = _todosClientes.findIndex(x => x.cliente_id === _clienteAtivo.cliente_id);
+      if (idx !== -1) {
+        _todosClientes[idx] = {
+          ..._todosClientes[idx],
+          cliente_churn:   true,
+          data_churn:      dataVal,
+          receita_perdida: recVal,
+          motivo_churn:    motivoVal,
+          cliente_status:  'Desativado',
+        };
+      }
+
+      closeChurn();
+      document.getElementById('cd-drawer')?.classList.remove('open');
+      document.getElementById('cd-overlay')?.classList.remove('open');
+      window.location.hash = 'clientes';
+      this._renderPage(_isAdmin);
+    });
+
+    btnDelete?.addEventListener('click', async () => {
+      if (!_clienteAtivo) return;
+      const nome = _clienteAtivo.cliente_nome || 'este cliente';
+      const confirmado = confirm(`Tem certeza que deseja excluir "${nome}" permanentemente?\n\nEsta ação não pode ser desfeita.`);
+      if (!confirmado) return;
+
+      btnDelete.disabled = true;
+      const { error } = await Clientes.delete(_clienteAtivo.cliente_id);
+
+      if (error) {
+        btnDelete.disabled = false;
+        alert('Erro ao excluir o cliente: ' + error.message);
+        return;
+      }
+
+      _todosClientes = _todosClientes.filter(x => x.cliente_id !== _clienteAtivo.cliente_id);
+      document.getElementById('cd-drawer')?.classList.remove('open');
+      document.getElementById('cd-overlay')?.classList.remove('open');
+      window.location.hash = 'clientes';
+      this._renderPage(_isAdmin);
+    });
+
+    document.getElementById('cd-tabs')?.querySelectorAll('.cd-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.cd-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.cd-tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${tab}`)?.classList.add('active');
+      });
+    });
   },
 
   // ─── Drawer de Detalhes/Edição do Cliente ─────────────────────────────────────────────
   async _openClientDrawer(c) {
+    _clienteAtivo = c;
+
+    // Reset tabs UI to 'geral' on open
+    document.getElementById('cd-tabs')?.querySelectorAll('.cd-tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === 'geral');
+    });
+
+    // Re-enable persistent buttons that might have been disabled in previous drawer operations
+    const btnDelete = document.getElementById('cd-btn-delete');
+    if (btnDelete) btnDelete.disabled = false;
+    const churnConfirm = document.getElementById('churn-confirm');
+    if (churnConfirm) {
+      churnConfirm.disabled = false;
+      churnConfirm.textContent = 'Confirmar Churn';
+    }
+
     const fmtDate = v => v ? new Date(v).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
     const fmtBRL  = v => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(parseFloat(v||0));
     const statusMap = { 'Ativado':'badge-green', 'Novo Cliente':'badge-blue', 'Desativado':'badge-red' };
@@ -3592,18 +3731,7 @@ export default {
     document.getElementById('cd-overlay')?.classList.add('open');
     window.location.hash = `clientes/${c.cliente_id}`;
 
-    // ── Tabs do drawer ─────────────────────────────────────
-    document.getElementById('cd-tabs')?.querySelectorAll('.cd-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        // desativar todos
-        document.querySelectorAll('.cd-tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.cd-tab-panel').forEach(p => p.classList.remove('active'));
-        // ativar o clicado
-        btn.classList.add('active');
-        document.getElementById(`tab-${tab}`)?.classList.add('active');
-      });
-    });
+    // Eventos das abas do drawer agora são tratados uma única vez via _bindDrawerEvents no onMount
 
     // Eventos de Toggle Editar
     bodyEl.querySelectorAll('.cd-btn-edit[data-edit-target]').forEach(btn => {
@@ -3690,118 +3818,7 @@ export default {
       });
     });
 
-    // ── Botão Churn ──────────────────────────────────────────────────────────────
-    const btnChurn      = document.getElementById('cd-btn-churn');
-    const churnOverlay  = document.getElementById('churn-overlay');
-    const churnModal    = document.getElementById('churn-modal');
-    const churnCancel   = document.getElementById('churn-cancel');
-    const churnConfirm  = document.getElementById('churn-confirm');
-    const churnDataInp  = document.getElementById('churn-data');
-    const churnRecInp   = document.getElementById('churn-receita');
-    const churnMotivoInp  = document.getElementById('churn-motivo');
-    const churnCharCount  = document.getElementById('churn-char-count');
-
-    const _updateChurnCount = () => {
-      if (!churnMotivoInp || !churnCharCount) return;
-      const remaining = 120 - churnMotivoInp.value.length;
-      churnCharCount.textContent = `${remaining} caractere${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}`;
-      churnCharCount.classList.toggle('warn',   remaining <= 30 && remaining > 10);
-      churnCharCount.classList.toggle('danger', remaining <= 10);
-    };
-    churnMotivoInp?.addEventListener('input', _updateChurnCount);
-
-    const openChurn = () => {
-      // Pré-preenche com hoje
-      churnDataInp.value   = new Date().toISOString().split('T')[0];
-      churnRecInp.value    = '';
-      if (churnMotivoInp) churnMotivoInp.value = '';
-      _updateChurnCount(); // reset contador
-      churnOverlay.classList.add('open');
-      churnModal.classList.add('open');
-      churnDataInp.focus();
-    };
-    const closeChurn = () => {
-      churnOverlay.classList.remove('open');
-      churnModal.classList.remove('open');
-    };
-
-    // Máscara BRL no campo receita
-    churnRecInp?.addEventListener('input', () => {
-      let v = churnRecInp.value.replace(/\D/g, '');
-      if (!v) { churnRecInp.value = ''; return; }
-      v = (parseInt(v, 10) / 100).toFixed(2);
-      churnRecInp.value = parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    });
-
-    btnChurn?.addEventListener('click', openChurn);
-    churnCancel?.addEventListener('click', closeChurn);
-    churnOverlay?.addEventListener('click', closeChurn);
-
-    churnConfirm?.addEventListener('click', async () => {
-      const dataVal = churnDataInp.value;
-      if (!dataVal) { churnDataInp.focus(); return; }
-
-      // Converte valor BRL → number
-      const recStr  = churnRecInp.value.replace(/\./g, '').replace(',', '.');
-      const recVal  = parseFloat(recStr) || null;
-      const motivoVal = churnMotivoInp?.value.trim() || null;
-
-      churnConfirm.disabled = true;
-      churnConfirm.textContent = 'Salvando…';
-
-      const { error } = await Clientes.registrarChurn(c.cliente_id, dataVal, recVal, motivoVal);
-      if (error) {
-        churnConfirm.disabled = false;
-        churnConfirm.textContent = 'Confirmar Churn';
-        alert('Erro ao registrar o churn. Tente novamente.');
-        return;
-      }
-
-      // Atualiza local
-      const idx = _todosClientes.findIndex(x => x.cliente_id === c.cliente_id);
-      if (idx !== -1) {
-        _todosClientes[idx] = {
-          ..._todosClientes[idx],
-          cliente_churn:   true,
-          data_churn:      dataVal,
-          receita_perdida: recVal,
-          motivo_churn:    motivoVal,
-          cliente_status:  'Desativado',
-        };
-      }
-
-      closeChurn();
-      // Fecha drawer e recarrega a view
-      document.getElementById('cd-drawer')?.classList.remove('open');
-      document.getElementById('cd-overlay')?.classList.remove('open');
-      window.location.hash = 'clientes';
-      this._renderPage(_isAdmin);
-    });
-
-    // ── Botão Excluir Cliente ────────────────────────────────────────
-    const btnDelete = document.getElementById('cd-btn-delete');
-    btnDelete?.addEventListener('click', async () => {
-      const nome = c.cliente_nome || 'este cliente';
-      const confirmado = confirm(`Tem certeza que deseja excluir "${nome}" permanentemente?\n\nEsta ação não pode ser desfeita.`);
-      if (!confirmado) return;
-
-      btnDelete.disabled = true;
-      const { error } = await Clientes.delete(c.cliente_id);
-
-      if (error) {
-        btnDelete.disabled = false;
-        alert('Erro ao excluir o cliente: ' + error.message);
-        return;
-      }
-
-      // Remove da lista local
-      _todosClientes = _todosClientes.filter(x => x.cliente_id !== c.cliente_id);
-
-      // Fecha o drawer e recarrega a view
-      document.getElementById('cd-drawer')?.classList.remove('open');
-      document.getElementById('cd-overlay')?.classList.remove('open');
-      this._renderPage(_isAdmin);
-    });
+    // Os eventos de Churn e Exclusão de cliente agora são tratados uma única vez via _bindDrawerEvents no onMount
 
     // ── Eventos Especiais: Reuniões ─────────────────────────────────────────────
     const rnList = document.getElementById('rn-list');

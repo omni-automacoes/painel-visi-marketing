@@ -98,7 +98,7 @@ export const Clientes = {
   },
 
   async delete(id) {
-    return supabase.from('clientes').delete().eq('id', id);
+    return supabase.from('clientes').delete().eq('cliente_id', id);
   },
 
   /**
