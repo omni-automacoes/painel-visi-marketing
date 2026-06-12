@@ -582,6 +582,14 @@ export default {
           box-shadow: 0 8px 28px rgba(0,0,0,0.06);
           border-color: #BFDBFE;
         }
+        .ob-info-btn {
+          background: none; border: none; padding: 4px; display: inline-flex;
+          align-items: center; justify-content: center; cursor: pointer;
+          color: var(--text-secondary); transition: var(--transition); border-radius: 6px;
+        }
+        .ob-info-btn:hover {
+          background: var(--bg); color: var(--cyan);
+        }
         .ob-header {
           display: flex;
           justify-content: space-between;
@@ -1554,6 +1562,15 @@ export default {
               <label class="cl-label">Investimento de Mídia (R$)</label>
               <input id="cl-midia" class="cl-input" type="number" min="0" step="0.01" placeholder="0,00" autocomplete="off">
             </div>
+            <div class="cl-field" style="display: flex; flex-direction: row; align-items: center; gap: 8px; margin-top: 12px; margin-bottom: 12px;">
+              <input id="cl-contrato" type="checkbox" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--cyan);">
+              <label for="cl-contrato" class="cl-label" style="cursor: pointer; margin: 0; user-select: none;">Possui Contrato?</label>
+            </div>
+            <div class="cl-field" id="cl-contrato-duracao-wrap" style="display: none;">
+              <label class="cl-label">Duração do Contrato (meses)<span class="cl-required">*</span></label>
+              <input id="cl-contrato-duracao" class="cl-input" type="number" min="1" step="1" placeholder="Ex: 12" autocomplete="off">
+              <span class="cl-error-msg" id="cl-contrato-duracao-err"></span>
+            </div>
             <div class="cl-field">
               <label class="cl-label">Contexto Geral</label>
               <textarea id="cl-contexto" class="cl-textarea" placeholder="Informações relevantes sobre o cliente…"></textarea>
@@ -1923,12 +1940,35 @@ export default {
     const submitBtn= document.getElementById('cl-btn-submit');
     if (!overlay || !form) return;
 
-    const _open  = () => { overlay.classList.add('open');    form.reset(); document.getElementById('cl-negocio-id').value = ''; };
+    const _open  = () => { 
+      overlay.classList.add('open'); 
+      form.reset(); 
+      document.getElementById('cl-negocio-id').value = ''; 
+      const wrapDuracao = document.getElementById('cl-contrato-duracao-wrap');
+      if (wrapDuracao) wrapDuracao.style.display = 'none';
+    };
     const _close = () => { overlay.classList.remove('open'); };
     btnOpen?.addEventListener('click', _open);
     btnClose?.addEventListener('click', _close);
     btnCancel?.addEventListener('click', _close);
     overlay.addEventListener('click', e => { if (e.target === overlay) _close(); });
+
+    // Toggle da visibilidade da duração do contrato no modal manual
+    const inputContrato = document.getElementById('cl-contrato');
+    const wrapDuracao = document.getElementById('cl-contrato-duracao-wrap');
+    const inputDuracao = document.getElementById('cl-contrato-duracao');
+    inputContrato?.addEventListener('change', () => {
+      if (inputContrato.checked) {
+        if (wrapDuracao) wrapDuracao.style.display = 'block';
+        if (inputDuracao) inputDuracao.required = true;
+      } else {
+        if (wrapDuracao) wrapDuracao.style.display = 'none';
+        if (inputDuracao) {
+          inputDuracao.required = false;
+          inputDuracao.value = '';
+        }
+      }
+    });
 
     // Preencher select de usuários (admin only)
     if (isAdmin) {
@@ -2001,6 +2041,13 @@ export default {
 
       setErr('cl-nome-err',     nome     ? '' : 'Nome é obrigatório');
       setErr('cl-telefone-err', telefone ? '' : 'Telefone é obrigatório');
+      const hasContrato = document.getElementById('cl-contrato')?.checked || false;
+      if (hasContrato) {
+        const duracao = document.getElementById('cl-contrato-duracao').value.trim();
+        setErr('cl-contrato-duracao-err', duracao ? '' : 'Duração é obrigatória');
+      } else {
+        setErr('cl-contrato-duracao-err', '');
+      }
       if (!valid) return;
 
       submitBtn.disabled = true;
@@ -2018,6 +2065,8 @@ export default {
         negocio_id:         negocioId ? Number(negocioId) : null,
         user_id:            targetUserId,
         investimento_midia: parseFloat(document.getElementById('cl-midia').value) || 0,
+        cliente_contrato:   hasContrato,
+        contrato_duracao:   hasContrato ? (parseInt(document.getElementById('cl-contrato-duracao').value, 10) || null) : null,
         segmento:           document.getElementById('cl-segmento').value.trim()   || null,
         contexto_geral:     document.getElementById('cl-contexto').value.trim()   || null,
         descricao_empresa:  document.getElementById('cl-descricao').value.trim()  || null,
@@ -2073,12 +2122,13 @@ export default {
   _renderOnboardingSection(novos, tasksByNegocio = {}) {
     if (novos.length === 0) return '';
 
-    // Nomes das 4 tarefas reais (a 5ª é o botão Start)
+    // Nomes das 5 tarefas reais (a 6ª é o botão Start)
     const TASK_NAMES = [
-      'Enviar contrato / Pegar acessos',
-      'Configurações de páginas e BM',
-      'Desenvolvimento de criativos',
-      'Estruturar campanha / Solicitar saldo',
+      'Pegar Acessos',
+      'Configurações BM e Páginas',
+      'Token do Dashboard',
+      'Desenvolvimento de Criativos',
+      'Estruturar Campanha e Solicitar Saldo',
     ];
 
     const _deadline = (criadoEm) => {
@@ -2141,7 +2191,16 @@ export default {
         <div class="ob-card ${dl?.estado === 'atrasado' ? 'ob-card--late' : dl?.estado === 'hoje' ? 'ob-card--today' : ''}" id="ob-card-${c.cliente_id}">
           <div class="ob-header">
             <div class="client-info">
-              <span class="client-name">${c.cliente_nome}</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="client-name">${c.cliente_nome}</span>
+                <button type="button" class="ob-info-btn" data-cliente-id="${c.cliente_id}" title="Ver informações do cliente">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+              </div>
               <span class="client-meta">${c.cliente_email || ''} ${c.segmento ? '· ' + c.segmento : ''}</span>
             </div>
             ${statusBadge}
@@ -2179,6 +2238,15 @@ export default {
     // Delegação em todo o container
     document.getElementById('clientes-page')?.addEventListener('click', async (e) => {
 
+      // ── Botão Abrir Gaveta do Cliente ───────────────────────────────────
+      const infoBtn = e.target.closest('.ob-info-btn');
+      if (infoBtn) {
+        const clienteId = Number(infoBtn.dataset.clienteId);
+        const c = _todosClientes.find(x => x.cliente_id === clienteId);
+        if (c) this._openClientDrawer(c);
+        return;
+      }
+
       // ── Checkbox de tarefa ──────────────────────────────────────────────
       const taskRow = e.target.closest('.task-row[data-tarefa-id]');
       if (taskRow && !taskRow.classList.contains('done')) {
@@ -2201,7 +2269,7 @@ export default {
           // Atualizar barra de progresso para 100%
           card.querySelector('.progress-bar-fill')?.style.setProperty('width', '100%');
           card.querySelector('.progress-bar-fill')?.classList.add('complete');
-          card.querySelector('.ob-progress-labels span:last-child').textContent = `4/4 tarefas`;
+          card.querySelector('.ob-progress-labels span:last-child').textContent = `${allRows.length}/${allRows.length} tarefas`;
           // Habilitar botão Start
           const btn = card.querySelector('.ob-start-btn');
           if (btn) {
@@ -2998,9 +3066,15 @@ export default {
       })()}
 
       <!-- Financeiro -->
-      <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
-        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Investimento em Mídia</div>
-        <div style="font-size:17px;font-weight:900;color:var(--black)">${fmtBRL(c.investimento_midia)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Inv. Mídia</div>
+          <div style="font-size:15px;font-weight:800;color:var(--black);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fmtBRL(c.investimento_midia)}</div>
+        </div>
+        <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Contrato</div>
+          <div style="font-size:15px;font-weight:800;color:var(--black);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cliente_contrato ? `${c.contrato_duracao || 0} meses` : 'Sem contrato'}</div>
+        </div>
       </div>
 
     </div>`;
@@ -3012,6 +3086,32 @@ export default {
       fld('E-mail', inp('e-email',c.cliente_email,'email','E-mail')) +
       fld('Segmento', inp('e-seg',c.segmento,'text','Segmento')) +
       fld('Inv. Mídia (R$)', inp('e-midia',c.investimento_midia,'number','0'))
+    );
+
+    // ── Card Contrato (seção financeira) ─────────────────────────────────────────────
+    const contratoView = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;grid-column:1/-1">
+        <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Possui Contrato?</div>
+          <div style="font-size:15px;font-weight:800;color:var(--black)">${c.cliente_contrato ? 'Sim' : 'Não'}</div>
+        </div>
+        <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Duração do Contrato</div>
+          <div style="font-size:15px;font-weight:800;color:var(--black)">${c.cliente_contrato ? `${c.contrato_duracao || 0} meses` : '—'}</div>
+        </div>
+      </div>
+    `;
+
+    const cardContrato = renderCard('contrato', '💼', 'Informações de Contrato',
+      contratoView,
+      fld('Contrato', `<div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <input type="checkbox" id="e-contrato" ${c.cliente_contrato ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer">
+        <label for="e-contrato" style="font-size:13px;cursor:pointer;user-select:none;color:var(--black)">Possui Contrato</label>
+      </div>`, true) +
+      `<div id="e-contrato-duracao-wrap" class="cd-field" style="display: ${c.cliente_contrato ? 'block' : 'none'};">
+        <span class="cd-field-label">Duração (meses)</span>
+        <input id="e-contrato-duracao" class="cl-input" type="number" value="${c.contrato_duracao||''}" placeholder="Ex: 12" style="font-size:13px;padding:7px 10px;width:100%" ${c.cliente_contrato ? 'required' : ''}>
+      </div>`
     );
 
     // ── Card Saúde & Status (visual rico) ────────────────────────────────────────────
@@ -3710,6 +3810,7 @@ export default {
         </div>
         <!-- Aba: Financeiro -->
         <div class="cd-tab-panel" id="tab-financeiro">
+          <div class="cd-card-full">${cardContrato}</div>
           <div class="cd-card-full">${cardFaturamento}</div>
         </div>
         <!-- Aba: Contatos -->
@@ -3730,6 +3831,23 @@ export default {
     document.getElementById('cd-drawer')?.classList.add('open');
     document.getElementById('cd-overlay')?.classList.add('open');
     window.location.hash = `clientes/${c.cliente_id}`;
+
+    // Toggle da visibilidade da duração do contrato no drawer de edição
+    const editContrato = document.getElementById('e-contrato');
+    const editDuracaoWrap = document.getElementById('e-contrato-duracao-wrap');
+    const editDuracaoInput = document.getElementById('e-contrato-duracao');
+    editContrato?.addEventListener('change', () => {
+      if (editContrato.checked) {
+        if (editDuracaoWrap) editDuracaoWrap.style.display = 'block';
+        if (editDuracaoInput) editDuracaoInput.required = true;
+      } else {
+        if (editDuracaoWrap) editDuracaoWrap.style.display = 'none';
+        if (editDuracaoInput) {
+          editDuracaoInput.required = false;
+          editDuracaoInput.value = '';
+        }
+      }
+    });
 
     // Eventos das abas do drawer agora são tratados uma única vez via _bindDrawerEvents no onMount
 
@@ -3773,6 +3891,18 @@ export default {
             cliente_email: g('e-email') || null,
             segmento: g('e-seg') || null,
             investimento_midia: parseFloat(g('e-midia')) || 0,
+          };
+        } else if (section === 'contrato') {
+          const hasContrato = document.getElementById('e-contrato')?.checked || false;
+          if (hasContrato && !g('e-contrato-duracao').trim()) {
+            alert('Por favor, insira a duração do contrato em meses.');
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Salvar Alterações';
+            return;
+          }
+          payload = {
+            cliente_contrato: hasContrato,
+            contrato_duracao: hasContrato ? (parseInt(g('e-contrato-duracao'), 10) || null) : null,
           };
         } else if (section === 'status') {
           payload = {

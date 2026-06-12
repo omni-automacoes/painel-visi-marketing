@@ -224,6 +224,36 @@ export default class GanhoModal {
                   >
                 </div>
               </div>
+              <div class="ganho-form-grid ganho-form-grid--1" style="margin-top:12px">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                    <input
+                      type="checkbox"
+                      id="gf-contrato"
+                      name="gf_contrato"
+                      style="width: 18px; height: 18px; accent-color: #059669; cursor: pointer; margin: 0;"
+                    >
+                    Possui Contrato?
+                  </label>
+                </div>
+              </div>
+              <div class="ganho-form-grid ganho-form-grid--1" id="gf-contrato-duracao-wrap" style="margin-top:12px; display:none;">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-contrato-duracao">
+                    Duração do Contrato (meses)
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <input
+                    class="ganho-form-input"
+                    id="gf-contrato-duracao"
+                    name="gf_contrato_duracao"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Quantidade de meses"
+                  >
+                </div>
+              </div>
             </div>
 
 
@@ -351,9 +381,27 @@ export default class GanhoModal {
         mensInput.value = num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       });
     }
+
+    // Toggle da visibilidade da duração do contrato
+    const contratoInput = document.getElementById('gf-contrato');
+    const duracaoWrap = document.getElementById('gf-contrato-duracao-wrap');
+    const duracaoInput = document.getElementById('gf-contrato-duracao');
+    contratoInput?.addEventListener('change', () => {
+      if (contratoInput.checked) {
+        duracaoWrap.style.display = 'grid';
+        duracaoInput.required = true;
+      } else {
+        duracaoWrap.style.display = 'none';
+        duracaoInput.required = false;
+        duracaoInput.value = '';
+        duracaoInput.classList.remove('ganho-form-input--error');
+      }
+    });
   }
 
   _submit() {
+    const isContrato = document.getElementById('gf-contrato')?.checked || false;
+
     // Lista de todos os campos obrigatórios
     const campos = [
       { id: 'gf-nome',         label: 'Nome do Cliente',           tipo: 'input'    },
@@ -366,6 +414,10 @@ export default class GanhoModal {
       { id: 'gf-contexto',     label: 'Contexto Geral do Cliente', tipo: 'textarea' },
       { id: 'gf-descricao',    label: 'Descrição Sobre a Empresa', tipo: 'textarea' },
     ];
+
+    if (isContrato) {
+      campos.push({ id: 'gf-contrato-duracao', label: 'Duração do Contrato', tipo: 'input' });
+    }
 
     // Valida todos e coleta os inválidos
     let primeiroInvalido = null;
@@ -402,6 +454,8 @@ export default class GanhoModal {
       responsavel_id:     document.getElementById('gf-responsavel')?.value          || null,
       investimento_midia: document.getElementById('gf-investimento')?.value.trim()  || '',
       mensalidade:        document.getElementById('gf-mensalidade')?.value.trim()   || '',
+      cliente_contrato:   isContrato,
+      contrato_duracao:   isContrato ? (parseInt(document.getElementById('gf-contrato-duracao')?.value, 10) || null) : null,
       segmento:           document.getElementById('gf-segmento')?.value.trim()      || '',
       // origem_cliente é preenchida automaticamente com negocio_origem
       origem_cliente:     this._negocio?.negocio_origem                              || '',

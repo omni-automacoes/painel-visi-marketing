@@ -433,6 +433,11 @@ export default {
         </div>
         <div class="pipeline-divider"></div>
         <div class="pipeline-stat">
+          <div class="pipeline-stat-label">Total Fechado</div>
+          <div class="pipeline-stat-value" id="kpi-fechado-valor">—</div>
+        </div>
+        <div class="pipeline-divider"></div>
+        <div class="pipeline-stat">
           <div class="pipeline-stat-label">Negócios</div>
           <div class="pipeline-stat-value">
             <span id="kpi-opp-count">—</span><span> negociações</span>

@@ -534,6 +534,8 @@ export default class NegocioPanel {
             cliente_email: dados.email_cliente || null,
             investimento_midia: investimento,
             cliente_mensalidade: mensalidade,
+            cliente_contrato: dados.cliente_contrato || false,
+            contrato_duracao: dados.contrato_duracao ?? null,
             segmento: dados.segmento || null,
             cliente_origem: dados.origem_cliente || null,
             contexto_geral: dados.contexto_geral || null,
@@ -544,10 +546,11 @@ export default class NegocioPanel {
           };
 
           const tarefasOnboarding = [
-            'Enviar contrato / Pegar acessos',
-            'Configurações de páginas e BM',
-            'Desenvolvimento de criativos',
-            'Estruturar campanha / Solicitar saldo',
+            'Pegar Acessos',
+            'Configurações BM e Páginas',
+            'Token do Dashboard',
+            'Desenvolvimento de Criativos',
+            'Estruturar Campanha e Solicitar Saldo',
           ].map(titulo => ({
             tarefa_titulo: titulo,
             tarefa_status: false,

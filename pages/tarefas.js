@@ -24,6 +24,9 @@ let _busca        = '';
 let _vendedores   = [];
 let _membroAtual  = '';   // '' = todos
 let _dataAtual    = '';   // yyyy-mm-dd
+let _historicoExpandido = false;
+let _recentesExpandido  = false;
+let _futurasExpandido   = false;
 
 // ─── Helpers de data ───────────────────────────────────────────────
 
@@ -31,6 +34,26 @@ function _isAtrasada(tarefa) {
   if (tarefa.tarefa_status) return false;           // concluída → não está atrasada
   if (!tarefa.tarefa_vencimento) return false;
   return new Date(tarefa.tarefa_vencimento) < new Date();
+}
+
+function _isConcluidaRecente(tarefa) {
+  if (!tarefa.tarefa_status || !tarefa.data_conclusao) return false;
+  const diff = new Date() - new Date(tarefa.data_conclusao);
+  return diff < 8 * 24 * 60 * 60 * 1000; // 8 dias em ms
+}
+
+function _obterDivisorDataConclusao(dataIso) {
+  if (!dataIso) return 'Sem data';
+  const dataConclusao = new Date(dataIso);
+  const hoje = new Date();
+  const dConclusao = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth(), dataConclusao.getDate());
+  const dHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const diffTime = dHoje - dConclusao;
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'Hoje';
+  if (diffDays === 1) return 'Ontem';
+  if (diffDays > 1 && diffDays < 8) return `Há ${diffDays} dias`;
+  return dConclusao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 }
 
 function _formatarData(iso) {
@@ -276,7 +299,17 @@ function _htmlTarefaItem(t) {
         ${tempoHTML}
         <div class="tf-item-meta">
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <span>${_formatarData(t.tarefa_vencimento)}</span>
+          <span>Vencimento: ${_formatarData(t.tarefa_vencimento)}</span>
+          ${t.data_conclusao ? `
+            <span class="tf-item-negocio-sep">·</span>
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>Conclusão: ${_formatarData(t.data_conclusao)}</span>
+          ` : ''}
+          ${t.usuarios?.user_nome ? `
+            <span class="tf-item-negocio-sep">·</span>
+            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Responsável: <strong>${t.usuarios.user_nome}</strong></span>
+          ` : ''}
           ${t.negocio_id ? `
             <span class="tf-item-negocio-sep">·</span>
             <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
@@ -298,6 +331,26 @@ function _htmlTarefaItem(t) {
       </div>
     </div>
   `;
+}
+
+function _htmlGrupoPorData(tarefas) {
+  const ordenadas = [...tarefas].sort((a, b) => new Date(b.data_conclusao) - new Date(a.data_conclusao));
+  let html = '';
+  let ultimoDivisor = '';
+  ordenadas.forEach(t => {
+    const divisor = _obterDivisorDataConclusao(t.data_conclusao);
+    if (divisor !== ultimoDivisor) {
+      ultimoDivisor = divisor;
+      html += `
+        <div class="tf-date-divider" style="margin: 16px 0 10px 4px; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">${divisor}</span>
+          <div style="flex: 1; height: 1px; background: var(--border-light, #e5e7eb); opacity: 0.6;"></div>
+        </div>
+      `;
+    }
+    html += _htmlTarefaItem(t);
+  });
+  return html;
 }
 
 function _htmlLista() {
@@ -322,31 +375,78 @@ function _htmlLista() {
   }
 
   // Separar por status
+  const limiteFuturo = new Date();
+  limiteFuturo.setDate(limiteFuturo.getDate() + 7);
+
   const pendentes  = filtradas.filter(t => !t.tarefa_status);
+  const pendentesPrincipais = pendentes.filter(t => !t.tarefa_vencimento || new Date(t.tarefa_vencimento) < limiteFuturo);
+  const pendentesFuturas    = pendentes.filter(t => t.tarefa_vencimento && new Date(t.tarefa_vencimento) >= limiteFuturo);
+
   const concluidas = filtradas.filter(t =>  t.tarefa_status);
+  const concluidasRecentes = concluidas.filter(t => _isConcluidaRecente(t));
+  const concluidasAntigas  = concluidas.filter(t => !_isConcluidaRecente(t));
 
   let html = '';
 
-  if (pendentes.length && _filtroAtual !== 'concluidas') {
+  if (pendentesPrincipais.length && _filtroAtual !== 'concluidas') {
     html += `
       <div class="tf-group">
         <div class="tf-group-header">
           <span>Pendentes</span>
-          <span class="tf-group-count">${pendentes.length}</span>
+          <span class="tf-group-count">${pendentesPrincipais.length}</span>
         </div>
-        ${pendentes.map(_htmlTarefaItem).join('')}
+        ${pendentesPrincipais.map(_htmlTarefaItem).join('')}
       </div>
     `;
   }
 
-  if (concluidas.length && _filtroAtual !== 'pendentes') {
+  if (pendentesFuturas.length && _filtroAtual !== 'concluidas') {
     html += `
-      <div class="tf-group">
-        <div class="tf-group-header">
-          <span>Concluídas</span>
-          <span class="tf-group-count">${concluidas.length}</span>
+      <div class="tf-group ${!_futurasExpandido ? 'tf-group--collapsed' : ''}" id="tf-group-futuras">
+        <div class="tf-group-header tf-group-header--clickable" id="tf-toggle-futuras" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>Tarefas Planejadas (Futuro)</span>
+            <span class="tf-group-count">${pendentesFuturas.length}</span>
+          </div>
+          <svg class="tf-chevron-icon" style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${_futurasExpandido ? 'rotate(90deg)' : 'rotate(0deg)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
-        ${concluidas.map(_htmlTarefaItem).join('')}
+        <div class="tf-group-content" style="display: ${_futurasExpandido ? 'block' : 'none'}; padding-top: 10px;">
+          ${pendentesFuturas.map(_htmlTarefaItem).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  if (concluidasRecentes.length && _filtroAtual !== 'pendentes') {
+    html += `
+      <div class="tf-group ${!_recentesExpandido ? 'tf-group--collapsed' : ''}" id="tf-group-recentes">
+        <div class="tf-group-header tf-group-header--clickable" id="tf-toggle-recentes" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>Concluídas Recentemente</span>
+            <span class="tf-group-count">${concluidasRecentes.length}</span>
+          </div>
+          <svg class="tf-chevron-icon" style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${_recentesExpandido ? 'rotate(90deg)' : 'rotate(0deg)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="tf-group-content" style="display: ${_recentesExpandido ? 'block' : 'none'}; padding-top: 10px;">
+          ${_htmlGrupoPorData(concluidasRecentes)}
+        </div>
+      </div>
+    `;
+  }
+
+  if (concluidasAntigas.length && _filtroAtual !== 'pendentes') {
+    html += `
+      <div class="tf-group ${!_historicoExpandido ? 'tf-group--collapsed' : ''}" id="tf-group-historico">
+        <div class="tf-group-header tf-group-header--clickable" id="tf-toggle-historico" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>Histórico de Tarefas</span>
+            <span class="tf-group-count">${concluidasAntigas.length}</span>
+          </div>
+          <svg class="tf-chevron-icon" style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${_historicoExpandido ? 'rotate(90deg)' : 'rotate(0deg)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="tf-group-content" style="display: ${_historicoExpandido ? 'block' : 'none'}; padding-top: 10px;">
+          ${concluidasAntigas.map(_htmlTarefaItem).join('')}
+        </div>
       </div>
     `;
   }
@@ -419,6 +519,69 @@ function _bindEvents() {
 
   // Toggle check + timing (delegação)
   document.getElementById('tf-list-area')?.addEventListener('click', async e => {
+    // Clique no cabeçalho do histórico (toggle)
+    const btnToggle = e.target.closest('#tf-toggle-historico');
+    if (btnToggle) {
+      const group = document.getElementById('tf-group-historico');
+      const content = group?.querySelector('.tf-group-content');
+      const chevron = group?.querySelector('.tf-chevron-icon');
+      if (group && content && chevron) {
+        _historicoExpandido = !_historicoExpandido;
+        if (_historicoExpandido) {
+          content.style.display = 'block';
+          chevron.style.transform = 'rotate(90deg)';
+          group.classList.remove('tf-group--collapsed');
+        } else {
+          content.style.display = 'none';
+          chevron.style.transform = 'rotate(0deg)';
+          group.classList.add('tf-group--collapsed');
+        }
+      }
+      return;
+    }
+
+    // Clique no cabeçalho do recentes (toggle)
+    const btnToggleRecentes = e.target.closest('#tf-toggle-recentes');
+    if (btnToggleRecentes) {
+      const group = document.getElementById('tf-group-recentes');
+      const content = group?.querySelector('.tf-group-content');
+      const chevron = group?.querySelector('.tf-chevron-icon');
+      if (group && content && chevron) {
+        _recentesExpandido = !_recentesExpandido;
+        if (_recentesExpandido) {
+          content.style.display = 'block';
+          chevron.style.transform = 'rotate(90deg)';
+          group.classList.remove('tf-group--collapsed');
+        } else {
+          content.style.display = 'none';
+          chevron.style.transform = 'rotate(0deg)';
+          group.classList.add('tf-group--collapsed');
+        }
+      }
+      return;
+    }
+
+    // Clique no cabeçalho do futuras (toggle)
+    const btnToggleFuturas = e.target.closest('#tf-toggle-futuras');
+    if (btnToggleFuturas) {
+      const group = document.getElementById('tf-group-futuras');
+      const content = group?.querySelector('.tf-group-content');
+      const chevron = group?.querySelector('.tf-chevron-icon');
+      if (group && content && chevron) {
+        _futurasExpandido = !_futurasExpandido;
+        if (_futurasExpandido) {
+          content.style.display = 'block';
+          chevron.style.transform = 'rotate(90deg)';
+          group.classList.remove('tf-group--collapsed');
+        } else {
+          content.style.display = 'none';
+          chevron.style.transform = 'rotate(0deg)';
+          group.classList.add('tf-group--collapsed');
+        }
+      }
+      return;
+    }
+
     // Botão Iniciar → grava data_inicio
     const btnIniciar = e.target.closest('.tf-btn-iniciar');
     if (btnIniciar) {
@@ -529,6 +692,16 @@ function _bindNewTaskModal() {
   const closeModal = () => {
     overlay.style.display = 'none';
     form?.reset();
+    const camposRepeticao = document.getElementById('tf-repeticao-campos');
+    if (camposRepeticao) camposRepeticao.style.display = 'none';
+    const selectTipoRepeticao = document.getElementById('tf-sel-tipo-repeticao');
+    if (selectTipoRepeticao) selectTipoRepeticao.value = 'dias';
+    const campoIntervalo = document.getElementById('tf-campo-intervalo');
+    if (campoIntervalo) campoIntervalo.style.display = 'block';
+    const campoDiasSemana = document.getElementById('tf-campo-dias-semana');
+    if (campoDiasSemana) campoDiasSemana.style.display = 'none';
+    const containerDias = document.getElementById('tf-container-dias-semana');
+    if (containerDias) containerDias.style.outline = 'none';
     const btn = document.getElementById('tf-modal-submit');
     if (btn) { btn.disabled = false; btn.textContent = '✔ Criar Tarefa'; }
   };
@@ -536,6 +709,25 @@ function _bindNewTaskModal() {
   btnOpen?.addEventListener('click', openModal);
   document.getElementById('tf-modal-close')?.addEventListener('click', closeModal);
   document.getElementById('tf-modal-cancel')?.addEventListener('click', closeModal);
+
+  const checkboxRepetir = document.getElementById('tf-inp-repetir');
+  const camposRepeticao = document.getElementById('tf-repeticao-campos');
+  checkboxRepetir?.addEventListener('change', e => {
+    camposRepeticao.style.display = e.target.checked ? 'flex' : 'none';
+  });
+
+  const selectTipoRepeticao = document.getElementById('tf-sel-tipo-repeticao');
+  const campoIntervalo = document.getElementById('tf-campo-intervalo');
+  const campoDiasSemana = document.getElementById('tf-campo-dias-semana');
+  selectTipoRepeticao?.addEventListener('change', e => {
+    if (e.target.value === 'semana') {
+      campoIntervalo.style.display = 'none';
+      campoDiasSemana.style.display = 'block';
+    } else {
+      campoIntervalo.style.display = 'block';
+      campoDiasSemana.style.display = 'none';
+    }
+  });
 
   // Fechar ao clicar fora do modal
   overlay?.addEventListener('click', e => {
@@ -560,30 +752,117 @@ function _bindNewTaskModal() {
 
     const descricao  = document.getElementById('tf-inp-desc')?.value.trim() || null;
     const vencimento = document.getElementById('tf-inp-venc')?.value || null;
-    const vendedorId = UserStore.getUserId();
+    
+    let vendedorId = UserStore.getUserId();
+    if (UserStore.isAdmin()) {
+      const selectResp = document.getElementById('tf-inp-responsavel');
+      if (selectResp && selectResp.value) {
+        vendedorId = selectResp.value;
+      } else if (selectResp) {
+        selectResp.focus();
+        selectResp.style.setProperty('border-color', '#ef4444');
+        return;
+      }
+    }
 
+    const repetir = document.getElementById('tf-inp-repetir')?.checked || false;
     const submitBtn = document.getElementById('tf-modal-submit');
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Salvando…'; }
 
-    const payload = {
-      tarefa_titulo:     titulo,
-      tarefa_descricao:  descricao,
-      tarefa_vencimento: vencimento ? new Date(vencimento).toISOString() : null,
-      tarefa_status:     false,
-      vendedor_id:       vendedorId,
-      negocio_id:        null,
-    };
+    let resData, resError;
 
-    const { data, error } = await Tarefas.create(payload);
+    if (repetir) {
+      const tipoRepeticao = document.getElementById('tf-sel-tipo-repeticao')?.value || 'dias';
+      const vezes = Math.max(1, Math.min(50, Number(document.getElementById('tf-inp-vezes')?.value) || 1));
+      const dataBase = vencimento ? new Date(vencimento) : new Date();
+      const payloads = [];
 
-    if (error) {
-      console.error('[Tarefas] Erro ao criar tarefa:', error);
+      if (tipoRepeticao === 'semana') {
+        const diasSemanaSelecionados = Array.from(document.querySelectorAll('.tf-inp-dia-semana:checked')).map(el => Number(el.value));
+        if (diasSemanaSelecionados.length === 0) {
+          const containerDias = document.getElementById('tf-container-dias-semana');
+          if (containerDias) {
+            containerDias.style.outline = '1.5px solid #ef4444';
+            containerDias.style.borderRadius = '8px';
+            containerDias.style.padding = '4px';
+          }
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✔ Criar Tarefa'; }
+          return;
+        } else {
+          const containerDias = document.getElementById('tf-container-dias-semana');
+          if (containerDias) containerDias.style.outline = 'none';
+        }
+
+        let dataAtual = new Date(dataBase);
+        let ocorrenciasGeradas = 0;
+        
+        while (ocorrenciasGeradas < vezes) {
+          const diaSemana = dataAtual.getDay(); // 0 (Dom) a 6 (Sáb)
+          if (diasSemanaSelecionados.includes(diaSemana)) {
+            const dataVenc = new Date(dataAtual);
+            payloads.push({
+              tarefa_titulo:     titulo,
+              tarefa_descricao:  descricao,
+              tarefa_vencimento: dataVenc.toISOString(),
+              tarefa_status:     false,
+              vendedor_id:       vendedorId,
+              negocio_id:        null,
+            });
+            ocorrenciasGeradas++;
+          }
+          dataAtual.setDate(dataAtual.getDate() + 1);
+        }
+      } else {
+        const intervalo = Math.max(1, Number(document.getElementById('tf-inp-intervalo')?.value) || 1);
+        for (let i = 0; i < vezes; i++) {
+          const dataVenc = new Date(dataBase);
+          dataVenc.setDate(dataVenc.getDate() + (i * intervalo));
+          
+          payloads.push({
+            tarefa_titulo:     titulo,
+            tarefa_descricao:  descricao,
+            tarefa_vencimento: dataVenc.toISOString(),
+            tarefa_status:     false,
+            vendedor_id:       vendedorId,
+            negocio_id:        null,
+          });
+        }
+      }
+
+      const { data, error } = await Tarefas.createBulk(payloads);
+      resData = data;
+      resError = error;
+    } else {
+      const payload = {
+        tarefa_titulo:     titulo,
+        tarefa_descricao:  descricao,
+        tarefa_vencimento: vencimento ? new Date(vencimento).toISOString() : null,
+        tarefa_status:     false,
+        vendedor_id:       vendedorId,
+        negocio_id:        null,
+      };
+
+      const { data, error } = await Tarefas.create(payload);
+      resData = data ? [data] : [];
+      resError = error;
+    }
+
+    if (resError) {
+      console.error('[Tarefas] Erro ao criar tarefas:', resError);
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✔ Criar Tarefa'; }
       return;
     }
 
     // Adiciona ao cache local e atualiza a UI
-    if (data) _tarefas.unshift(data);
+    if (resData && resData.length) {
+      _tarefas.unshift(...resData);
+      _tarefas.sort((a, b) => {
+        if (!a.tarefa_vencimento) return 1;
+        if (!b.tarefa_vencimento) return -1;
+        return new Date(a.tarefa_vencimento) - new Date(b.tarefa_vencimento);
+      });
+    }
+    
     _atualizarKpis();
     _atualizarLista();
     closeModal();
@@ -813,6 +1092,63 @@ export default {
               <label class="tf-modal-label" for="tf-inp-venc">Data de Vencimento <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
               <input id="tf-inp-venc" class="tf-modal-input" type="datetime-local">
             </div>
+
+            <!-- Checkbox de Repetição -->
+            <div class="tf-modal-field" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: 14px; user-select: none;">
+              <input id="tf-inp-repetir" type="checkbox" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+              <label class="tf-modal-label" for="tf-inp-repetir" style="cursor: pointer; margin-bottom: 0; text-transform: none; font-size: 13px; font-weight: 600; color: var(--text-secondary);">Repetir tarefa?</label>
+            </div>
+
+            <!-- Campos de personalização da repetição -->
+            <div id="tf-repeticao-campos" style="display: none; flex-direction: column; gap: 14px; margin-bottom: 14px;">
+              <div class="tf-modal-field" style="margin-bottom: 0;">
+                <label class="tf-modal-label" for="tf-sel-tipo-repeticao">Frequência</label>
+                <select id="tf-sel-tipo-repeticao" class="tf-modal-input" style="background: var(--bg); color: var(--text-primary); cursor: pointer;">
+                  <option value="dias">Por intervalo (dias)</option>
+                  <option value="semana">Dias da semana</option>
+                </select>
+              </div>
+
+              <!-- Frequência: Por Intervalo de Dias -->
+              <div class="tf-modal-field" id="tf-campo-intervalo" style="margin-bottom: 0;">
+                <label class="tf-modal-label" for="tf-inp-intervalo">Repetir a cada (dias) <span style="color:#ef4444">*</span></label>
+                <input id="tf-inp-intervalo" class="tf-modal-input" type="number" min="1" value="1">
+              </div>
+
+              <!-- Frequência: Dias da Semana (escondido por padrão) -->
+              <div class="tf-modal-field" id="tf-campo-dias-semana" style="display: none; margin-bottom: 0;">
+                <label class="tf-modal-label">Selecione os dias <span style="color:#ef4444">*</span></label>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;" id="tf-container-dias-semana">
+                  ${[
+                    { label: 'Dom', val: 0 },
+                    { label: 'Seg', val: 1 },
+                    { label: 'Ter', val: 2 },
+                    { label: 'Qua', val: 3 },
+                    { label: 'Qui', val: 4 },
+                    { label: 'Sex', val: 5 },
+                    { label: 'Sáb', val: 6 }
+                  ].map(d => `
+                    <label style="display: inline-flex; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--border-light); padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; user-select: none; color: var(--text-secondary);">
+                      <input type="checkbox" class="tf-inp-dia-semana" value="${d.val}" style="margin: 0; cursor: pointer;">
+                      ${d.label}
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="tf-modal-field" style="margin-bottom: 0;">
+                <label class="tf-modal-label" for="tf-inp-vezes">Quantidade de vezes <span style="color:#ef4444">*</span></label>
+                <input id="tf-inp-vezes" class="tf-modal-input" type="number" min="1" max="50" value="5">
+              </div>
+            </div>
+            ${UserStore.isAdmin() ? `
+            <div class="tf-modal-field" id="tf-responsavel-field" style="display:none">
+              <label class="tf-modal-label" for="tf-inp-responsavel">Responsável <span style="color:#ef4444">*</span></label>
+              <select id="tf-inp-responsavel" class="tf-modal-input" required>
+                <option value="">Selecione o responsável...</option>
+              </select>
+            </div>
+            ` : ''}
             <div class="tf-modal-footer">
               <button type="button" class="tf-modal-cancel" id="tf-modal-cancel">Cancelar</button>
               <button type="submit" class="tf-modal-submit" id="tf-modal-submit">✔ Criar Tarefa</button>
@@ -832,7 +1168,19 @@ export default {
 
     if (isAdmin) {
       const resVends = await Usuarios.getVendedoresAtivos();
-      if (resVends.data) _vendedores = resVends.data;
+      if (resVends.data) {
+        _vendedores = resVends.data;
+        const select = document.getElementById('tf-inp-responsavel');
+        const field = document.getElementById('tf-responsavel-field');
+        if (select && field) {
+          const vopts = _vendedores.map(v => `<option value="${v.user_id}">${v.user_nome}</option>`).join('');
+          select.innerHTML = `
+            <option value="">Selecione o responsável...</option>
+            ${vopts}
+          `;
+          field.style.display = 'flex';
+        }
+      }
       const resTar = await Tarefas.getAllAdmin();
       data = resTar.data;
       error = resTar.error;
@@ -877,5 +1225,8 @@ export default {
     _vendedores  = [];
     _membroAtual = '';
     _dataAtual   = '';
+    _historicoExpandido = false;
+    _recentesExpandido  = false;
+    _futurasExpandido   = false;
   },
 };

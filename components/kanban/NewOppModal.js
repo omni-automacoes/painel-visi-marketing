@@ -123,18 +123,31 @@ export default class NewOppModal {
               </div>
             </div>
 
-            <!-- Faturamento do Cliente (opcional) -->
-            <div class="form-field">
-              <label class="form-label" for="opp-faturamento">
-                Faturamento do Cliente
-                <span style="font-size:10px;font-weight:400;color:var(--text-muted);margin-left:4px">(opcional)</span>
-              </label>
-              <div style="position:relative">
-                <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);pointer-events:none">R$</span>
-                <input class="form-input" id="opp-faturamento" name="negocio_faturamento"
-                       type="text" inputmode="decimal"
-                       placeholder="0,00"
-                       style="padding-left:32px">
+            <!-- Valor do Negócio + Faturamento do Cliente -->
+            <div class="form-row">
+              <div class="form-field">
+                <label class="form-label" for="opp-valor">
+                  Valor do Negócio
+                </label>
+                <div style="position:relative">
+                  <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);pointer-events:none">R$</span>
+                  <input class="form-input" id="opp-valor" name="negocio_valor"
+                         type="text" inputmode="decimal"
+                         placeholder="0,00"
+                         style="padding-left:32px">
+                </div>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="opp-faturamento">
+                  Faturamento do Cliente
+                </label>
+                <div style="position:relative">
+                  <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);pointer-events:none">R$</span>
+                  <input class="form-input" id="opp-faturamento" name="negocio_faturamento"
+                         type="text" inputmode="decimal"
+                         placeholder="0,00"
+                         style="padding-left:32px">
+                </div>
               </div>
             </div>
 
@@ -217,6 +230,11 @@ export default class NewOppModal {
     if (email)    payload.negocio_email         = email;
     if (origem)   payload.negocio_origem        = origem;
     if (segmento) payload.negocio_segmento      = segmento;
+
+    // Valor do Negócio: converte "1.500,00" → 1500.00
+    const valStr = (form.negocio_valor?.value || '').trim().replace(/\./g, '').replace(',', '.');
+    const valor = parseFloat(valStr);
+    if (!isNaN(valor) && valor > 0) payload.negocio_valor = valor;
 
     // Faturamento: converte "1.500,00" → 1500.00
     const fatStr = (form.negocio_faturamento?.value || '').trim().replace(/\./g, '').replace(',', '.');

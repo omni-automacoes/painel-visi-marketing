@@ -244,7 +244,9 @@ export const Clientes = {
         cliente_origem,
         data_churn,
         receita_perdida,
-        motivo_churn
+        motivo_churn,
+        cliente_contrato,
+        contrato_duracao
       `)
       .eq('user_id', userId)
       .order('cliente_nome', { ascending: true });
@@ -285,7 +287,9 @@ export const Clientes = {
         cliente_origem,
         data_churn,
         receita_perdida,
-        motivo_churn
+        motivo_churn,
+        cliente_contrato,
+        contrato_duracao
       `)
       .order('cliente_nome', { ascending: true });
   },
@@ -582,7 +586,7 @@ export const Tarefas = {
   },
 
   async create(payload) {
-    return supabase.from('tarefas').insert(payload).select().single();
+    return supabase.from('tarefas').insert(payload).select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)').single();
   },
 
   /**
@@ -590,7 +594,7 @@ export const Tarefas = {
    * @param {Array<Object>} payloads - Array de objetos com os dados de cada tarefa
    */
   async createBulk(payloads) {
-    return supabase.from('tarefas').insert(payloads).select();
+    return supabase.from('tarefas').insert(payloads).select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)');
   },
 
 
@@ -628,7 +632,7 @@ export const Tarefas = {
     if (!negocioIds?.length) return { data: [], error: null };
     return supabase
       .from('tarefas')
-      .select('tarefa_id, negocio_id')
+      .select('tarefa_id, negocio_id, usuarios(user_nome)')
       .in('negocio_id', negocioIds)
       .eq('tarefa_status', false);
   },
@@ -640,7 +644,7 @@ export const Tarefas = {
   async getByNegocio(negocioId) {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, usuarios(user_nome)')
       .eq('negocio_id', negocioId)
       .order('tarefa_vencimento', { ascending: true });
   },
@@ -694,7 +698,7 @@ export const Tarefas = {
   async getAllPorVendedor(vendedorId) {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)')
       .eq('vendedor_id', vendedorId)
       .order('tarefa_vencimento', { ascending: true });
   },
@@ -705,7 +709,7 @@ export const Tarefas = {
   async getAllAdmin() {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)')
       .order('tarefa_vencimento', { ascending: true });
   },
 
@@ -1871,17 +1875,18 @@ export const DiaFinalizado = {
 // ══════════════════════════════════════════════════════════════════
 
 export const KanbanColunas = {
-  async getAll() {
+  async getAll(tipoKanban) {
     return supabase
       .from('kanban_colunas')
-      .select('coluna_id, coluna_nome, coluna_cor, coluna_ordem')
+      .select('coluna_id, coluna_nome, coluna_cor, coluna_ordem, tipo_kanban')
+      .eq('tipo_kanban', tipoKanban)
       .order('coluna_ordem', { ascending: true });
   },
-  async create(nome, cor, ordem) {
+  async create(nome, cor, ordem, tipoKanban) {
     return supabase
       .from('kanban_colunas')
-      .insert({ coluna_nome: nome, coluna_cor: cor, coluna_ordem: ordem })
-      .select('coluna_id, coluna_nome, coluna_cor, coluna_ordem')
+      .insert({ coluna_nome: nome, coluna_cor: cor, coluna_ordem: ordem, tipo_kanban: tipoKanban })
+      .select('coluna_id, coluna_nome, coluna_cor, coluna_ordem, tipo_kanban')
       .single();
   },
   async update(id, payload) {
@@ -1896,7 +1901,7 @@ export const KanbanCards = {
   async getByColuna(colunaId) {
     return supabase
       .from('kanban_cards')
-      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem')
+      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban')
       .eq('coluna_id', colunaId)
       .order('card_ordem', { ascending: true });
   },
@@ -1904,7 +1909,7 @@ export const KanbanCards = {
     return supabase
       .from('kanban_cards')
       .insert(payload)
-      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem')
+      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban')
       .single();
   },
   async update(id, payload) {

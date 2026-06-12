@@ -11,6 +11,7 @@ let _state = {
   columns:    [],  // [{ coluna_id, coluna_nome, coluna_cor, coluna_ordem }]
   cards:      {},  // { [coluna_id]: [...cards] }
   openCardId: null,
+  tipoKanban: 'Projetos',
 };
 
 // ── Constantes ──────────────────────────────────────────────────────
@@ -129,10 +130,10 @@ async function _loadBoard() {
   board.innerHTML = `
     <div class="pj-loading">
       <div class="funil-spinner"></div>
-      Carregando projetos...
+      Carregando ${_state.tipoKanban.toLowerCase()}...
     </div>`;
 
-  const { data: columns, error } = await KanbanColunas.getAll();
+  const { data: columns, error } = await KanbanColunas.getAll(_state.tipoKanban);
   if (error) {
     board.innerHTML = `<div class="pj-loading">❌ Erro ao carregar colunas: ${_esc(error.message)}</div>`;
     return;
@@ -158,14 +159,13 @@ function _renderBoard() {
 
   const addWrap = `
     <div class="pj-add-col-wrap">
-      <button class="pj-add-col-btn" id="pj-add-col-btn">
+      <button class="pj-add-col-btn" id="pj-add-col-btn" data-action="add-col">
         <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Nova coluna
       </button>
     </div>`;
 
   board.innerHTML = _state.columns.map(_renderColumn).join('') + addWrap;
-  _bindBoardActions();
 }
 
 // ── Painel do card ──────────────────────────────────────────────────
@@ -609,6 +609,11 @@ function _bindBoardActions() {
       return;
     }
 
+    if (action === 'add-col') {
+      document.getElementById('pj-add-col-overlay').style.display = 'flex';
+      document.getElementById('pj-col-title-input')?.focus();
+      return;
+    }
     if (action === 'add-card') { _openAddCardModal(btn.dataset.colId); return; }
     if (action === 'edit-col') { await _editColumn(parseInt(btn.dataset.colId)); return; }
     if (action === 'del-col')  { await _deleteColumn(parseInt(btn.dataset.colId)); return; }
@@ -616,12 +621,6 @@ function _bindBoardActions() {
       e.stopPropagation();
       await _deleteCard(parseInt(btn.dataset.cardId));
     }
-  });
-
-  // ── Nova coluna ──
-  document.getElementById('pj-add-col-btn')?.addEventListener('click', () => {
-    document.getElementById('pj-add-col-overlay').style.display = 'flex';
-    document.getElementById('pj-col-title-input')?.focus();
   });
 
   const closeAddCol = () => {
@@ -652,7 +651,7 @@ function _bindBoardActions() {
     const ordem = _state.columns.length
       ? Math.max(..._state.columns.map(c => c.coluna_ordem)) + 1 : 0;
 
-    const { data, error } = await KanbanColunas.create(nome, cor, ordem);
+    const { data, error } = await KanbanColunas.create(nome, cor, ordem, _state.tipoKanban);
     if (error) { alert('Erro: ' + error.message); return; }
 
     _state.columns.push(data);
@@ -690,6 +689,7 @@ function _bindBoardActions() {
       coluna_id: colId, card_titulo: titulo,
       card_descricao: desc, card_data_entrega: due,
       card_prioridade: priority, card_ordem: ordem,
+      tipo_kanban: _state.tipoKanban,
     });
     if (error) { alert('Erro: ' + error.message); return; }
 
@@ -781,10 +781,67 @@ function _filterCards(query, priority) {
   });
 }
 
+// ── Abas de navegação ──
+function _bindTabsEvents() {
+  const row = document.getElementById('pj-tabs-row');
+  if (!row) return;
+
+  row.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.pj-tab-btn');
+    if (!btn) return;
+
+    const newType = btn.dataset.type;
+    if (newType === _state.tipoKanban) return;
+
+    _state.tipoKanban = newType;
+
+    // Atualiza classe ativa nas abas
+    row.querySelectorAll('.pj-tab-btn').forEach(b => {
+      b.classList.toggle('pj-tab-btn--active', b.dataset.type === newType);
+    });
+
+    // Re-carrega o quadro para o novo tipo
+    await _loadBoard();
+  });
+}
+
 // ── Módulo ──────────────────────────────────────────────────────────
 export default {
   render() {
     return `
+      <style>
+        .pj-tabs-row {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 24px;
+          border-bottom: 1.5px solid var(--border-light);
+          padding-bottom: 0px;
+          align-items: center;
+        }
+        .pj-tab-btn {
+          background: none;
+          border: none;
+          padding: 10px 18px;
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border-bottom: 3px solid transparent;
+          margin-bottom: -1.5px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .pj-tab-btn:hover {
+          color: var(--cyan);
+        }
+        .pj-tab-btn--active {
+          color: var(--cyan) !important;
+          border-bottom-color: var(--cyan) !important;
+        }
+      </style>
+
       <div class="page-header pj-page-header">
         <div class="page-title-block">
           <h1>Projetos</h1>
@@ -802,6 +859,14 @@ export default {
             <button class="pj-filter-btn" data-filter="Baixa">🟢 Baixa</button>
           </div>
         </div>
+      </div>
+
+      <!-- Navigation Tabs for Kanban Types -->
+      <div class="pj-tabs-row" id="pj-tabs-row">
+        <button class="pj-tab-btn${_state.tipoKanban === 'Projetos' ? ' pj-tab-btn--active' : ''}" data-type="Projetos">📁 Projetos</button>
+        <button class="pj-tab-btn${_state.tipoKanban === 'Campanhas' ? ' pj-tab-btn--active' : ''}" data-type="Campanhas">📢 Campanhas</button>
+        <button class="pj-tab-btn${_state.tipoKanban === 'Criativos' ? ' pj-tab-btn--active' : ''}" data-type="Criativos">🎨 Criativos</button>
+        <button class="pj-tab-btn${_state.tipoKanban === 'Posts' ? ' pj-tab-btn--active' : ''}" data-type="Posts">📝 Posts</button>
       </div>
 
       <div class="pj-board-wrap">
@@ -891,9 +956,11 @@ export default {
 
   onMount() {
     _loadBoard();
+    _bindTabsEvents();
+    _bindBoardActions();
   },
 
   onDestroy() {
-    _state = { columns: [], cards: {}, openCardId: null };
+    _state = { columns: [], cards: {}, openCardId: null, tipoKanban: 'Projetos' };
   },
 };
