@@ -1651,11 +1651,9 @@ export default {
     _todosClientes  = data || [];
     _filtroUserId   = '';
 
-    // Admin: buscar lista de usuários para o filtro
-    if (isAdmin) {
-      const { data: usrs } = await Usuarios.getVendedoresAtivos();
-      _usuarios = usrs || [];
-    }
+    // Buscar lista de usuários ativos para filtro e mapeamento de gestor responsável
+    const { data: usrs } = await Usuarios.getVendedoresAtivos();
+    _usuarios = usrs || [];
 
     // Buscar tarefas de onboarding + dados complementares da lista (em paralelo)
     const novosAll = _todosClientes.filter(c => c.cliente_status === 'Novo Cliente');
@@ -3014,6 +3012,9 @@ export default {
     const fld = (label, input, full=false) => `<div class="cd-field ${full?'full':''}"><span class="cd-field-label">${label}</span>${input}</div>`;
 
     // ── Card Informações Principais (visual rico) ─────────────────────────────────────
+    const responsavel = _usuarios.find(u => u.user_id === c.user_id);
+    const responsavelNome = responsavel ? responsavel.user_nome : 'Não atribuído';
+
     const fmtRecontato = v => {
       if (!v) return null;
       return new Date(v).toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric', timeZone:'America/Sao_Paulo' });
@@ -3051,6 +3052,7 @@ export default {
           c.cliente_email    ? infoRow('✉️',  'E-mail',   `<a href="mailto:${c.cliente_email}" style="color:var(--black);text-decoration:none">${c.cliente_email}</a>`) : null,
           c.data_recontato   ? infoRow('📅', 'Recontato', fmtRecontato(c.data_recontato), recontVencido ? 'color:#dc2626;' : '') : null,
           c.segmento         ? infoRow('🏷️', 'Segmento', c.segmento) : null,
+          infoRow('👤', 'Responsável', responsavelNome),
         ].filter(Boolean);
         if (!rows.length) return '';
         // Agrupa em pares
@@ -3079,13 +3081,15 @@ export default {
 
     </div>`;
 
+    const userOpts = _usuarios.map(u => ({ v: u.user_id, l: u.user_nome }));
     const cardIdentificacao = renderCard('identificacao', '📋', 'Informações Principais',
       identificacaoView,
       fld('Nome', inp('e-nome',c.cliente_nome,'text','Nome do cliente'), true) +
       fld('Telefone', inp('e-tel',c.cliente_telefone,'text','Telefone')) +
       fld('E-mail', inp('e-email',c.cliente_email,'email','E-mail')) +
       fld('Segmento', inp('e-seg',c.segmento,'text','Segmento')) +
-      fld('Inv. Mídia (R$)', inp('e-midia',c.investimento_midia,'number','0'))
+      fld('Inv. Mídia (R$)', inp('e-midia',c.investimento_midia,'number','0')) +
+      (_isAdmin ? fld('Responsável', sel('e-user-id', [{ v: '', l: '— Sem gestor —' }, ...userOpts], c.user_id || '')) : '')
     );
 
     // ── Card Contrato (seção financeira) ─────────────────────────────────────────────
@@ -3892,6 +3896,9 @@ export default {
             segmento: g('e-seg') || null,
             investimento_midia: parseFloat(g('e-midia')) || 0,
           };
+          if (_isAdmin) {
+            payload.user_id = g('e-user-id') || null;
+          }
         } else if (section === 'contrato') {
           const hasContrato = document.getElementById('e-contrato')?.checked || false;
           if (hasContrato && !g('e-contrato-duracao').trim()) {
