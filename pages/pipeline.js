@@ -214,7 +214,6 @@ function _pillDropdownHTML(pillId) {
       opts = [
         { value: '',        label: 'Todos' },
         { value: 'Aberto',  label: '🟢 Aberto'  },
-        { value: 'Ganho',   label: '✅ Ganho'   },
         { value: 'Perdido', label: '❌ Perdido' },
       ];
       break;
@@ -433,7 +432,7 @@ export default {
         </div>
         <div class="pipeline-divider"></div>
         <div class="pipeline-stat">
-          <div class="pipeline-stat-label">Total Fechado</div>
+          <div class="pipeline-stat-label">Total Vendido</div>
           <div class="pipeline-stat-value" id="kpi-fechado-valor">—</div>
         </div>
         <div class="pipeline-divider"></div>

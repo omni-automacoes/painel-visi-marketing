@@ -18,15 +18,25 @@ import NegocioPanel from '../components/kanban/NegocioPanel.js';
 const _negocioPanel = new NegocioPanel();
 
 // ─── Estado local ──────────────────────────────────────────────────
-let _tarefas      = [];        // cache completo
-let _filtroAtual  = 'todas';   // 'todas' | 'pendentes' | 'concluidas'
+let _tarefas      = [];           // cache completo
+let _filtroAtual  = 'pendentes';  // 'todas' | 'pendentes' | 'concluidas' — padrão: pendentes
 let _busca        = '';
 let _vendedores   = [];
 let _membroAtual  = '';   // '' = todos
 let _dataAtual    = '';   // yyyy-mm-dd
-let _historicoExpandido = false;
-let _recentesExpandido  = false;
-let _futurasExpandido   = false;
+
+// Estado de expansão das seções (persistido entre re-renders)
+let _sectionExpanded = {
+  'pend-hoje':    true,   // Pendentes · Hoje (aberto por padrão)
+  'pend-3dias':   false,
+  'pend-7dias':   false,
+  'pend-30dias':  false,
+  'conc-hoje':    false,  // Concluídas · Hoje
+  'conc-7dias':   false,
+  'conc-15dias':  false,
+  'conc-30dias':  false,
+  'conc-resto':   false,
+};
 
 // ─── Helpers de data ───────────────────────────────────────────────
 
@@ -36,24 +46,78 @@ function _isAtrasada(tarefa) {
   return new Date(tarefa.tarefa_vencimento) < new Date();
 }
 
-function _isConcluidaRecente(tarefa) {
-  if (!tarefa.tarefa_status || !tarefa.data_conclusao) return false;
-  const diff = new Date() - new Date(tarefa.data_conclusao);
-  return diff < 8 * 24 * 60 * 60 * 1000; // 8 dias em ms
+// Classifica tarefa PENDENTE pela proximidade do vencimento
+function _classifyPendente(t) {
+  if (!t.tarefa_vencimento) return 'hoje'; // sem data → Hoje
+  const venc  = new Date(t.tarefa_vencimento);
+  const hoje  = new Date();
+  const dVenc = new Date(venc.getFullYear(),  venc.getMonth(),  venc.getDate());
+  const dHoje = new Date(hoje.getFullYear(),  hoje.getMonth(),  hoje.getDate());
+  const diff  = Math.round((dVenc - dHoje) / 86400000);
+  if (diff <= 0) return 'hoje';    // hoje ou atrasada
+  if (diff <= 3) return '3dias';
+  if (diff <= 7) return '7dias';
+  return '30dias';                  // 8+ dias
 }
 
-function _obterDivisorDataConclusao(dataIso) {
-  if (!dataIso) return 'Sem data';
-  const dataConclusao = new Date(dataIso);
-  const hoje = new Date();
-  const dConclusao = new Date(dataConclusao.getFullYear(), dataConclusao.getMonth(), dataConclusao.getDate());
+// Classifica tarefa CONCLUÍDA pela distância da data de conclusão
+function _classifyConcluida(t) {
+  if (!t.data_conclusao) return 'resto';
+  const conc  = new Date(t.data_conclusao);
+  const hoje  = new Date();
+  const dConc = new Date(conc.getFullYear(), conc.getMonth(), conc.getDate());
   const dHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-  const diffTime = dHoje - dConclusao;
-  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Hoje';
-  if (diffDays === 1) return 'Ontem';
-  if (diffDays > 1 && diffDays < 8) return `Há ${diffDays} dias`;
-  return dConclusao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+  const diff  = Math.round((dHoje - dConc) / 86400000);
+  if (diff === 0) return 'hoje';
+  if (diff <= 7)  return '7dias';
+  if (diff <= 15) return '15dias';
+  if (diff <= 30) return '30dias';
+  return 'resto';
+}
+
+// Renderiza um grupo colapsável genérico
+function _htmlSection(id, label, tarefas, sortMode) {
+  if (!tarefas.length) return '';
+  const expanded = _sectionExpanded[id] ?? false;
+
+  let sorted = [...tarefas];
+  if (sortMode === 'venc-asc') {
+    sorted.sort((a, b) => {
+      if (!a.tarefa_vencimento && !b.tarefa_vencimento) return 0;
+      if (!a.tarefa_vencimento) return 1;
+      if (!b.tarefa_vencimento) return -1;
+      return new Date(a.tarefa_vencimento) - new Date(b.tarefa_vencimento);
+    });
+  } else {
+    sorted.sort((a, b) => {
+      if (!a.data_conclusao && !b.data_conclusao) return 0;
+      if (!a.data_conclusao) return 1;
+      if (!b.data_conclusao) return -1;
+      return new Date(b.data_conclusao) - new Date(a.data_conclusao);
+    });
+  }
+
+  return `
+    <div class="tf-group" id="tf-group-${id}">
+      <div class="tf-group-header tf-group-header--clickable tf-section-toggle"
+           data-section-id="${id}"
+           style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>${label}</span>
+          <span class="tf-group-count">${tarefas.length}</span>
+        </div>
+        <svg class="tf-chevron-icon"
+             style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${expanded ? 'rotate(90deg)' : 'rotate(0deg)'};"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </div>
+      <div class="tf-group-content" style="display: ${expanded ? 'block' : 'none'}; padding-top: 10px;">
+        ${sorted.map(_htmlTarefaItem).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function _formatarData(iso) {
@@ -240,23 +304,38 @@ function _htmlTarefaItem(t) {
   const descricao  = t.tarefa_descricao?.trim() || '';
   const emAndamento = !concluida && !!t.data_inicio;
 
-  // Tempo decorrido: concluída = data_conclusao - data_inicio | em andamento = agora - data_inicio
+  const acumulado = Number(t.tempo_acumulado_ms) || 0;
+
+  // Tempo decorrido
   let tempoHTML = '';
-  if (t.data_inicio) {
-    const fim = t.data_conclusao ? new Date(t.data_conclusao) : new Date();
-    const ms  = fim - new Date(t.data_inicio);
-    const tempo = _formatarTempo(ms);
-    if (concluida) {
+  if (concluida) {
+    let ms = acumulado;
+    // Fallback para tarefas legadas
+    if (ms === 0 && t.data_inicio && t.data_conclusao) {
+      ms = new Date(t.data_conclusao) - new Date(t.data_inicio);
+    }
+    if (ms > 0) {
       tempoHTML = `
         <div class="tf-timing tf-timing--done">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Tempo: <strong>${tempo}</strong>
+          Tempo: <strong>${_formatarTempo(ms)}</strong>
         </div>`;
-    } else {
+    }
+  } else {
+    if (t.data_inicio) {
+      // Rodando
+      const ms = acumulado + (new Date() - new Date(t.data_inicio));
       tempoHTML = `
         <div class="tf-timing tf-timing--running">
           <span class="tf-timing-dot"></span>
-          Em andamento • <strong id="tf-timer-${t.tarefa_id}">${tempo}</strong>
+          Em andamento • <strong id="tf-timer-${t.tarefa_id}">${_formatarTempo(ms)}</strong>
+        </div>`;
+    } else if (acumulado > 0) {
+      // Pausado
+      tempoHTML = `
+        <div class="tf-timing tf-timing--paused">
+          <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          Pausado • <strong>${_formatarTempo(acumulado)}</strong>
         </div>`;
     }
   }
@@ -265,13 +344,18 @@ function _htmlTarefaItem(t) {
   let timingBtn = '';
   if (!concluida) {
     if (!t.data_inicio) {
+      const label = (acumulado > 0) ? 'Retomar' : 'Iniciar';
       timingBtn = `
-        <button class="tf-btn-timing tf-btn-iniciar" data-tarefa-id="${t.tarefa_id}" title="Iniciar cronometro">
+        <button class="tf-btn-timing tf-btn-iniciar" data-tarefa-id="${t.tarefa_id}" title="${label} cronômetro">
           <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Iniciar
+          ${label}
         </button>`;
     } else {
       timingBtn = `
+        <button class="tf-btn-timing tf-btn-pausar" data-tarefa-id="${t.tarefa_id}" title="Pausar tarefa">
+          <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          Pausar
+        </button>
         <button class="tf-btn-timing tf-btn-finalizar" data-tarefa-id="${t.tarefa_id}" title="Finalizar e concluir tarefa">
           <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
           Finalizar
@@ -328,29 +412,15 @@ function _htmlTarefaItem(t) {
             Ver negócio
           </button>
         ` : ''}
+        <button class="tf-btn-excluir"
+                data-tarefa-id="${t.tarefa_id}"
+                title="Excluir tarefa">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Excluir
+        </button>
       </div>
     </div>
   `;
-}
-
-function _htmlGrupoPorData(tarefas) {
-  const ordenadas = [...tarefas].sort((a, b) => new Date(b.data_conclusao) - new Date(a.data_conclusao));
-  let html = '';
-  let ultimoDivisor = '';
-  ordenadas.forEach(t => {
-    const divisor = _obterDivisorDataConclusao(t.data_conclusao);
-    if (divisor !== ultimoDivisor) {
-      ultimoDivisor = divisor;
-      html += `
-        <div class="tf-date-divider" style="margin: 16px 0 10px 4px; display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">${divisor}</span>
-          <div style="flex: 1; height: 1px; background: var(--border-light, #e5e7eb); opacity: 0.6;"></div>
-        </div>
-      `;
-    }
-    html += _htmlTarefaItem(t);
-  });
-  return html;
 }
 
 function _htmlLista() {
@@ -374,81 +444,49 @@ function _htmlLista() {
     `;
   }
 
-  // Separar por status
-  const limiteFuturo = new Date();
-  limiteFuturo.setDate(limiteFuturo.getDate() + 7);
-
   const pendentes  = filtradas.filter(t => !t.tarefa_status);
-  const pendentesPrincipais = pendentes.filter(t => !t.tarefa_vencimento || new Date(t.tarefa_vencimento) < limiteFuturo);
-  const pendentesFuturas    = pendentes.filter(t => t.tarefa_vencimento && new Date(t.tarefa_vencimento) >= limiteFuturo);
-
   const concluidas = filtradas.filter(t =>  t.tarefa_status);
-  const concluidasRecentes = concluidas.filter(t => _isConcluidaRecente(t));
-  const concluidasAntigas  = concluidas.filter(t => !_isConcluidaRecente(t));
 
   let html = '';
 
-  if (pendentesPrincipais.length && _filtroAtual !== 'concluidas') {
-    html += `
-      <div class="tf-group">
-        <div class="tf-group-header">
-          <span>Pendentes</span>
-          <span class="tf-group-count">${pendentesPrincipais.length}</span>
-        </div>
-        ${pendentesPrincipais.map(_htmlTarefaItem).join('')}
-      </div>
-    `;
+  // ── Seções de PENDENTES — agrupadas por prazo de vencimento ────────
+  if (_filtroAtual !== 'concluidas' && pendentes.length) {
+    const grupos = {
+      hoje:     pendentes.filter(t => _classifyPendente(t) === 'hoje'),
+      '3dias':  pendentes.filter(t => _classifyPendente(t) === '3dias'),
+      '7dias':  pendentes.filter(t => _classifyPendente(t) === '7dias'),
+      '30dias': pendentes.filter(t => _classifyPendente(t) === '30dias'),
+    };
+
+    html += _htmlSection('pend-hoje',   'Hoje',             grupos.hoje,     'venc-asc');
+    html += _htmlSection('pend-3dias',  'Próximos 3 Dias',  grupos['3dias'], 'venc-asc');
+    html += _htmlSection('pend-7dias',  'Próximos 7 Dias',  grupos['7dias'], 'venc-asc');
+    html += _htmlSection('pend-30dias', 'Próximos 30 Dias', grupos['30dias'],'venc-asc');
   }
 
-  if (pendentesFuturas.length && _filtroAtual !== 'concluidas') {
-    html += `
-      <div class="tf-group ${!_futurasExpandido ? 'tf-group--collapsed' : ''}" id="tf-group-futuras">
-        <div class="tf-group-header tf-group-header--clickable" id="tf-toggle-futuras" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>Tarefas Planejadas (Futuro)</span>
-            <span class="tf-group-count">${pendentesFuturas.length}</span>
-          </div>
-          <svg class="tf-chevron-icon" style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${_futurasExpandido ? 'rotate(90deg)' : 'rotate(0deg)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div class="tf-group-content" style="display: ${_futurasExpandido ? 'block' : 'none'}; padding-top: 10px;">
-          ${pendentesFuturas.map(_htmlTarefaItem).join('')}
-        </div>
-      </div>
-    `;
-  }
+  // ── Seções de CONCLUÍDAS — Histórico agrupado por data de conclusão
+  if (_filtroAtual !== 'pendentes' && concluidas.length) {
+    const grupos = {
+      hoje:     concluidas.filter(t => _classifyConcluida(t) === 'hoje'),
+      '7dias':  concluidas.filter(t => _classifyConcluida(t) === '7dias'),
+      '15dias': concluidas.filter(t => _classifyConcluida(t) === '15dias'),
+      '30dias': concluidas.filter(t => _classifyConcluida(t) === '30dias'),
+      resto:    concluidas.filter(t => _classifyConcluida(t) === 'resto'),
+    };
 
-  if (concluidasRecentes.length && _filtroAtual !== 'pendentes') {
+    // Cabeçalho do bloco Histórico (separador visual, sem toggle próprio)
     html += `
-      <div class="tf-group ${!_recentesExpandido ? 'tf-group--collapsed' : ''}" id="tf-group-recentes">
-        <div class="tf-group-header tf-group-header--clickable" id="tf-toggle-recentes" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>Concluídas Recentemente</span>
-            <span class="tf-group-count">${concluidasRecentes.length}</span>
-          </div>
-          <svg class="tf-chevron-icon" style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${_recentesExpandido ? 'rotate(90deg)' : 'rotate(0deg)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div class="tf-group-content" style="display: ${_recentesExpandido ? 'block' : 'none'}; padding-top: 10px;">
-          ${_htmlGrupoPorData(concluidasRecentes)}
-        </div>
+      <div class="tf-group-header" style="margin-top: ${_filtroAtual === 'todas' && pendentes.length ? '12px' : '0'};">
+        <span>Histórico de Tarefas</span>
+        <span class="tf-group-count">${concluidas.length}</span>
       </div>
     `;
-  }
 
-  if (concluidasAntigas.length && _filtroAtual !== 'pendentes') {
-    html += `
-      <div class="tf-group ${!_historicoExpandido ? 'tf-group--collapsed' : ''}" id="tf-group-historico">
-        <div class="tf-group-header tf-group-header--clickable" id="tf-toggle-historico" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>Histórico de Tarefas</span>
-            <span class="tf-group-count">${concluidasAntigas.length}</span>
-          </div>
-          <svg class="tf-chevron-icon" style="width: 16px; height: 16px; transition: transform 0.2s; transform: ${_historicoExpandido ? 'rotate(90deg)' : 'rotate(0deg)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div class="tf-group-content" style="display: ${_historicoExpandido ? 'block' : 'none'}; padding-top: 10px;">
-          ${concluidasAntigas.map(_htmlTarefaItem).join('')}
-        </div>
-      </div>
-    `;
+    html += _htmlSection('conc-hoje',   'Hoje',             grupos.hoje,     'conc-desc');
+    html += _htmlSection('conc-7dias',  'Últimos 7 Dias',   grupos['7dias'], 'conc-desc');
+    html += _htmlSection('conc-15dias', 'Últimos 15 Dias',  grupos['15dias'],'conc-desc');
+    html += _htmlSection('conc-30dias', 'Últimos 30 Dias',  grupos['30dias'],'conc-desc');
+    html += _htmlSection('conc-resto',  'Anteriores',       grupos.resto,    'conc-desc');
   }
 
   return `<div class="tf-list">${html}</div>`;
@@ -519,64 +557,19 @@ function _bindEvents() {
 
   // Toggle check + timing (delegação)
   document.getElementById('tf-list-area')?.addEventListener('click', async e => {
-    // Clique no cabeçalho do histórico (toggle)
-    const btnToggle = e.target.closest('#tf-toggle-historico');
-    if (btnToggle) {
-      const group = document.getElementById('tf-group-historico');
-      const content = group?.querySelector('.tf-group-content');
-      const chevron = group?.querySelector('.tf-chevron-icon');
-      if (group && content && chevron) {
-        _historicoExpandido = !_historicoExpandido;
-        if (_historicoExpandido) {
-          content.style.display = 'block';
-          chevron.style.transform = 'rotate(90deg)';
-          group.classList.remove('tf-group--collapsed');
-        } else {
-          content.style.display = 'none';
-          chevron.style.transform = 'rotate(0deg)';
-          group.classList.add('tf-group--collapsed');
-        }
-      }
-      return;
-    }
-
-    // Clique no cabeçalho do recentes (toggle)
-    const btnToggleRecentes = e.target.closest('#tf-toggle-recentes');
-    if (btnToggleRecentes) {
-      const group = document.getElementById('tf-group-recentes');
-      const content = group?.querySelector('.tf-group-content');
-      const chevron = group?.querySelector('.tf-chevron-icon');
-      if (group && content && chevron) {
-        _recentesExpandido = !_recentesExpandido;
-        if (_recentesExpandido) {
-          content.style.display = 'block';
-          chevron.style.transform = 'rotate(90deg)';
-          group.classList.remove('tf-group--collapsed');
-        } else {
-          content.style.display = 'none';
-          chevron.style.transform = 'rotate(0deg)';
-          group.classList.add('tf-group--collapsed');
-        }
-      }
-      return;
-    }
-
-    // Clique no cabeçalho do futuras (toggle)
-    const btnToggleFuturas = e.target.closest('#tf-toggle-futuras');
-    if (btnToggleFuturas) {
-      const group = document.getElementById('tf-group-futuras');
-      const content = group?.querySelector('.tf-group-content');
-      const chevron = group?.querySelector('.tf-chevron-icon');
-      if (group && content && chevron) {
-        _futurasExpandido = !_futurasExpandido;
-        if (_futurasExpandido) {
-          content.style.display = 'block';
-          chevron.style.transform = 'rotate(90deg)';
-          group.classList.remove('tf-group--collapsed');
-        } else {
-          content.style.display = 'none';
-          chevron.style.transform = 'rotate(0deg)';
-          group.classList.add('tf-group--collapsed');
+    // Toggle genérico para todas as seções colapsáveis via atributo data-section-id
+    const toggleEl = e.target.closest('.tf-section-toggle');
+    if (toggleEl) {
+      const id = toggleEl.dataset.sectionId;
+      if (id) {
+        const group   = document.getElementById(`tf-group-${id}`);
+        const content = group?.querySelector('.tf-group-content');
+        const chevron = group?.querySelector('.tf-chevron-icon');
+        if (group && content && chevron) {
+          _sectionExpanded[id] = !(_sectionExpanded[id] ?? false);
+          const open = _sectionExpanded[id];
+          content.style.display = open ? 'block' : 'none';
+          chevron.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
         }
       }
       return;
@@ -600,11 +593,48 @@ function _bindEvents() {
     if (btnFinalizar) {
       const id  = Number(btnFinalizar.dataset.tarefaId);
       const idx = _tarefas.findIndex(t => t.tarefa_id === id);
-      const agora = new Date().toISOString();
-      if (idx !== -1) _tarefas[idx] = { ..._tarefas[idx], tarefa_status: true, data_conclusao: agora };
-      _atualizarKpis();
-      _atualizarLista();
-      await Tarefas.concluir(id);
+      if (idx !== -1) {
+        const t = _tarefas[idx];
+        const agora = new Date().toISOString();
+        const acumulado = Number(t.tempo_acumulado_ms) || 0;
+        let novoTempo = acumulado;
+        if (t.data_inicio) {
+          novoTempo += new Date() - new Date(t.data_inicio);
+        }
+        _tarefas[idx] = { 
+          ...t, 
+          tarefa_status: true, 
+          data_conclusao: agora,
+          data_inicio: null,
+          tempo_acumulado_ms: novoTempo
+        };
+        _atualizarKpis();
+        _atualizarLista();
+        await Tarefas.concluir(id, novoTempo);
+      }
+      return;
+    }
+
+    // Botão Pausar → pausa o cronômetro
+    const btnPausar = e.target.closest('.tf-btn-pausar');
+    if (btnPausar) {
+      const id  = Number(btnPausar.dataset.tarefaId);
+      const idx = _tarefas.findIndex(t => t.tarefa_id === id);
+      if (idx !== -1) {
+        const t = _tarefas[idx];
+        if (t.data_inicio) {
+          const acumulado = Number(t.tempo_acumulado_ms) || 0;
+          const novoTempo = acumulado + (new Date() - new Date(t.data_inicio));
+          
+          _tarefas[idx] = {
+            ...t,
+            data_inicio: null,
+            tempo_acumulado_ms: novoTempo
+          };
+          _atualizarLista();
+          await Tarefas.pausar(id, novoTempo);
+        }
+      }
       return;
     }
 
@@ -613,6 +643,41 @@ function _bindEvents() {
     if (btnNegocio) {
       const negocioId = Number(btnNegocio.dataset.negocioId);
       if (negocioId) _negocioPanel.open(negocioId);
+      return;
+    }
+
+    // Botão Excluir → remove da lista e do banco
+    const btnExcluir = e.target.closest('.tf-btn-excluir');
+    if (btnExcluir) {
+      const id  = Number(btnExcluir.dataset.tarefaId);
+      const idx = _tarefas.findIndex(t => t.tarefa_id === id);
+      if (idx === -1) return;
+
+      // Feedback visual imediato: marca o item como "removendo"
+      const itemEl = document.querySelector(`.tf-item[data-id="${id}"]`);
+      if (itemEl) {
+        itemEl.style.transition = 'opacity 0.2s, transform 0.2s';
+        itemEl.style.opacity    = '0.4';
+        itemEl.style.transform  = 'translateX(8px)';
+        itemEl.style.pointerEvents = 'none';
+      }
+
+      // Remove do cache local e atualiza UI
+      const [removida] = _tarefas.splice(idx, 1);
+      setTimeout(() => {
+        _atualizarKpis();
+        _atualizarLista();
+      }, 180); // espera a animação
+
+      // Persiste no Supabase
+      const { error } = await Tarefas.excluir(id);
+      if (error) {
+        console.error('[Tarefas] Erro ao excluir:', error);
+        // Reverte: reinsere a tarefa na posição original
+        _tarefas.splice(idx, 0, removida);
+        _atualizarKpis();
+        _atualizarLista();
+      }
       return;
     }
 
@@ -626,14 +691,34 @@ function _bindEvents() {
 
     // Atualiza UI otimistamente
     const idx = _tarefas.findIndex(t => t.tarefa_id === id);
+    let novoTempoConcluir = 0;
+
     if (idx !== -1) {
-      _tarefas[idx] = {
-        ..._tarefas[idx],
-        tarefa_status:  nova,
-        // Ao reabrir: limpa timers localmente
-        data_inicio:    nova ? _tarefas[idx].data_inicio : null,
-        data_conclusao: nova ? _tarefas[idx].data_conclusao : null,
-      };
+      const t = _tarefas[idx];
+      if (nova) {
+        // Concluindo
+        const acumulado = Number(t.tempo_acumulado_ms) || 0;
+        novoTempoConcluir = acumulado;
+        if (t.data_inicio) {
+          novoTempoConcluir += new Date() - new Date(t.data_inicio);
+        }
+        _tarefas[idx] = {
+          ...t,
+          tarefa_status: true,
+          data_inicio: null,
+          data_conclusao: new Date().toISOString(),
+          tempo_acumulado_ms: novoTempoConcluir
+        };
+      } else {
+        // Reabrindo
+        _tarefas[idx] = {
+          ...t,
+          tarefa_status: false,
+          data_inicio: null,
+          data_conclusao: null,
+          // mantém tempo_acumulado_ms para que não perca o trabalho já feito
+        };
+      }
     }
 
     _atualizarKpis();
@@ -641,7 +726,7 @@ function _bindEvents() {
 
     // Persiste no Supabase
     const { error } = nova
-      ? await Tarefas.concluir(id)
+      ? await Tarefas.concluir(id, novoTempoConcluir)
       : await Tarefas.reabrir(id);
 
     if (error) {
@@ -671,11 +756,77 @@ function _iniciarTicker() {
     emAndamento.forEach(t => {
       const el = document.getElementById(`tf-timer-${t.tarefa_id}`);
       if (el) {
-        const ms = new Date() - new Date(t.data_inicio);
+        const acumulado = Number(t.tempo_acumulado_ms) || 0;
+        const ms = acumulado + (new Date() - new Date(t.data_inicio));
         el.textContent = _formatarTempo(ms);
       }
     });
   }, 1000);
+}
+
+// ─── Calendário de multi-seleção de datas ─────────────────────────
+
+let _datasRepetir = [];   // datas selecionadas no calendário (array de 'YYYY-MM-DD')
+let _calMesAtual  = (() => { const d = new Date(); d.setDate(1); return d; })();
+
+function _atualizarContadorDatas() {
+  const el = document.getElementById('tf-cal-contador');
+  if (!el) return;
+  const n = _datasRepetir.length;
+  if (n === 0) {
+    el.textContent = 'Nenhuma data selecionada';
+    el.style.color = 'var(--text-muted)';
+  } else {
+    el.textContent = `${n} data${n > 1 ? 's' : ''} selecionada${n > 1 ? 's' : ''} — ${n} tarefa${n > 1 ? 's' : ''} serão criadas`;
+    el.style.color = '#3B82F6';
+  }
+  // Remove erro visual do grid se tiver datas
+  if (n > 0) {
+    const calGrid = document.getElementById('tf-cal-grid');
+    if (calGrid) calGrid.style.outline = 'none';
+  }
+}
+
+function _renderCalendario() {
+  const tituloEl = document.getElementById('tf-cal-titulo');
+  const gridEl   = document.getElementById('tf-cal-grid');
+  if (!tituloEl || !gridEl) return;
+
+  const ano  = _calMesAtual.getFullYear();
+  const mes  = _calMesAtual.getMonth(); // 0-based
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  tituloEl.textContent = `${meses[mes]} ${ano}`;
+
+  const primeiroDia    = new Date(ano, mes, 1).getDay(); // 0=Dom
+  const diasNoMes      = new Date(ano, mes + 1, 0).getDate();
+  const hoje           = new Date();
+  const dHoje          = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+
+  let html = '';
+
+  // Células vazias antes do dia 1
+  for (let i = 0; i < primeiroDia; i++) {
+    html += `<div class="tf-cal-day tf-cal-day--empty"></div>`;
+  }
+
+  for (let d = 1; d <= diasNoMes; d++) {
+    const data  = new Date(ano, mes, d);
+    const iso   = `${ano}-${String(mes + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const past  = data < dHoje;
+    const isHoje = data.getTime() === dHoje.getTime();
+    const sel   = _datasRepetir.includes(iso);
+
+    let cls = 'tf-cal-day';
+    if (past)   cls += ' tf-cal-day--past';
+    if (isHoje) cls += ' tf-cal-day--hoje';
+    if (sel)    cls += ' tf-cal-day--selected';
+
+    html += `<div class="${cls}" data-date="${iso}">${d}</div>`;
+  }
+
+  gridEl.innerHTML = html;
+  _atualizarContadorDatas();
 }
 
 // ─── Modal de Nova Tarefa ───────────────────────────────────────────
@@ -688,20 +839,16 @@ function _bindNewTaskModal() {
   const openModal = () => {
     overlay.style.display = 'flex';
     document.getElementById('tf-inp-titulo')?.focus();
+    _renderCalendario(); // garante calendário atualizado ao abrir
   };
   const closeModal = () => {
     overlay.style.display = 'none';
     form?.reset();
+    _datasRepetir = [];
+    _calMesAtual = new Date();
+    _calMesAtual.setDate(1);
     const camposRepeticao = document.getElementById('tf-repeticao-campos');
     if (camposRepeticao) camposRepeticao.style.display = 'none';
-    const selectTipoRepeticao = document.getElementById('tf-sel-tipo-repeticao');
-    if (selectTipoRepeticao) selectTipoRepeticao.value = 'dias';
-    const campoIntervalo = document.getElementById('tf-campo-intervalo');
-    if (campoIntervalo) campoIntervalo.style.display = 'block';
-    const campoDiasSemana = document.getElementById('tf-campo-dias-semana');
-    if (campoDiasSemana) campoDiasSemana.style.display = 'none';
-    const containerDias = document.getElementById('tf-container-dias-semana');
-    if (containerDias) containerDias.style.outline = 'none';
     const btn = document.getElementById('tf-modal-submit');
     if (btn) { btn.disabled = false; btn.textContent = '✔ Criar Tarefa'; }
   };
@@ -713,20 +860,33 @@ function _bindNewTaskModal() {
   const checkboxRepetir = document.getElementById('tf-inp-repetir');
   const camposRepeticao = document.getElementById('tf-repeticao-campos');
   checkboxRepetir?.addEventListener('change', e => {
-    camposRepeticao.style.display = e.target.checked ? 'flex' : 'none';
+    const mostrar = e.target.checked;
+    camposRepeticao.style.display = mostrar ? 'block' : 'none';
+    if (mostrar) _renderCalendario();
   });
 
-  const selectTipoRepeticao = document.getElementById('tf-sel-tipo-repeticao');
-  const campoIntervalo = document.getElementById('tf-campo-intervalo');
-  const campoDiasSemana = document.getElementById('tf-campo-dias-semana');
-  selectTipoRepeticao?.addEventListener('change', e => {
-    if (e.target.value === 'semana') {
-      campoIntervalo.style.display = 'none';
-      campoDiasSemana.style.display = 'block';
+  // ── Calendário de multi-seleção ────────────────────────────────
+  document.getElementById('tf-cal-prev')?.addEventListener('click', () => {
+    _calMesAtual.setMonth(_calMesAtual.getMonth() - 1);
+    _renderCalendario();
+  });
+  document.getElementById('tf-cal-next')?.addEventListener('click', () => {
+    _calMesAtual.setMonth(_calMesAtual.getMonth() + 1);
+    _renderCalendario();
+  });
+  document.getElementById('tf-cal-grid')?.addEventListener('click', e => {
+    const cell = e.target.closest('.tf-cal-day');
+    if (!cell || cell.classList.contains('tf-cal-day--empty') || cell.classList.contains('tf-cal-day--past')) return;
+    const iso = cell.dataset.date;
+    const idx = _datasRepetir.indexOf(iso);
+    if (idx === -1) {
+      _datasRepetir.push(iso);
+      cell.classList.add('tf-cal-day--selected');
     } else {
-      campoIntervalo.style.display = 'block';
-      campoDiasSemana.style.display = 'none';
+      _datasRepetir.splice(idx, 1);
+      cell.classList.remove('tf-cal-day--selected');
     }
+    _atualizarContadorDatas();
   });
 
   // Fechar ao clicar fora do modal
@@ -772,62 +932,26 @@ function _bindNewTaskModal() {
     let resData, resError;
 
     if (repetir) {
-      const tipoRepeticao = document.getElementById('tf-sel-tipo-repeticao')?.value || 'dias';
-      const vezes = Math.max(1, Math.min(50, Number(document.getElementById('tf-inp-vezes')?.value) || 1));
-      const dataBase = vencimento ? new Date(vencimento) : new Date();
-      const payloads = [];
-
-      if (tipoRepeticao === 'semana') {
-        const diasSemanaSelecionados = Array.from(document.querySelectorAll('.tf-inp-dia-semana:checked')).map(el => Number(el.value));
-        if (diasSemanaSelecionados.length === 0) {
-          const containerDias = document.getElementById('tf-container-dias-semana');
-          if (containerDias) {
-            containerDias.style.outline = '1.5px solid #ef4444';
-            containerDias.style.borderRadius = '8px';
-            containerDias.style.padding = '4px';
-          }
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✔ Criar Tarefa'; }
-          return;
-        } else {
-          const containerDias = document.getElementById('tf-container-dias-semana');
-          if (containerDias) containerDias.style.outline = 'none';
+      // Valida se há datas selecionadas no calendário
+      if (!_datasRepetir.length) {
+        const calGrid = document.getElementById('tf-cal-grid');
+        if (calGrid) {
+          calGrid.style.outline = '1.5px solid #ef4444';
+          calGrid.style.borderRadius = '10px';
         }
-
-        let dataAtual = new Date(dataBase);
-        let ocorrenciasGeradas = 0;
-        
-        while (ocorrenciasGeradas < vezes) {
-          const diaSemana = dataAtual.getDay(); // 0 (Dom) a 6 (Sáb)
-          if (diasSemanaSelecionados.includes(diaSemana)) {
-            const dataVenc = new Date(dataAtual);
-            payloads.push({
-              tarefa_titulo:     titulo,
-              tarefa_descricao:  descricao,
-              tarefa_vencimento: dataVenc.toISOString(),
-              tarefa_status:     false,
-              vendedor_id:       vendedorId,
-              negocio_id:        null,
-            });
-            ocorrenciasGeradas++;
-          }
-          dataAtual.setDate(dataAtual.getDate() + 1);
-        }
-      } else {
-        const intervalo = Math.max(1, Number(document.getElementById('tf-inp-intervalo')?.value) || 1);
-        for (let i = 0; i < vezes; i++) {
-          const dataVenc = new Date(dataBase);
-          dataVenc.setDate(dataVenc.getDate() + (i * intervalo));
-          
-          payloads.push({
-            tarefa_titulo:     titulo,
-            tarefa_descricao:  descricao,
-            tarefa_vencimento: dataVenc.toISOString(),
-            tarefa_status:     false,
-            vendedor_id:       vendedorId,
-            negocio_id:        null,
-          });
-        }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '\u2714 Criar Tarefa'; }
+        return;
       }
+
+      // Cria uma tarefa para cada data selecionada no calendário
+      const payloads = _datasRepetir.map(iso => ({
+        tarefa_titulo:     titulo,
+        tarefa_descricao:  descricao,
+        tarefa_vencimento: new Date(iso + 'T12:00:00').toISOString(),
+        tarefa_status:     false,
+        vendedor_id:       vendedorId,
+        negocio_id:        null,
+      }));
 
       const { data, error } = await Tarefas.createBulk(payloads);
       resData = data;
@@ -900,6 +1024,7 @@ export default {
           box-shadow: 0 24px 60px rgba(0,0,0,.22);
           width: 100%; max-width: 480px; padding: 28px 28px 24px;
           animation: tf-slide-up .22s ease;
+          max-height: 90vh; overflow-y: auto;
         }
         @keyframes tf-slide-up { from { transform: translateY(20px); opacity:0 } to { transform: translateY(0); opacity:1 } }
         .tf-modal-header {
@@ -976,6 +1101,10 @@ export default {
           background: linear-gradient(135deg, #f59e0b, #d97706);
           color: #fff;
         }
+        .tf-btn-pausar {
+          background: linear-gradient(135deg, #64748b, #475569);
+          color: #fff;
+        }
         /* Timing display */
         .tf-timing {
           display: inline-flex; align-items: center; gap: 6px;
@@ -991,6 +1120,9 @@ export default {
         }
         .tf-timing--done {
           background: rgba(16,185,129,.1); color: #059669;
+        }
+        .tf-timing--paused {
+          background: rgba(100,116,139,.12); color: #475569;
         }
         .tf-timing-dot {
           width: 7px; height: 7px; border-radius: 50%;
@@ -1009,6 +1141,9 @@ export default {
         }
         [data-theme="dark"] .tf-timing--done {
           background: rgba(16,185,129,.15); color: #34d399;
+        }
+        [data-theme="dark"] .tf-timing--paused {
+          background: rgba(100,116,139,.15); color: #94a3b8;
         }
 
         /* ── Dark mode ── */
@@ -1053,6 +1188,75 @@ export default {
           background: #2d3548;
           color: #f1f5f9;
         }
+
+        /* ── Calendário de multi-seleção ── */
+        .tf-cal-wrap {
+          border: 1px solid var(--border-light); border-radius: 14px;
+          padding: 14px; background: var(--bg);
+        }
+        .tf-cal-header {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 12px;
+        }
+        .tf-cal-titulo {
+          font-size: 13px; font-weight: 700; color: var(--text-primary);
+        }
+        .tf-cal-nav {
+          width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border-light);
+          background: var(--white); cursor: pointer; display: flex;
+          align-items: center; justify-content: center; transition: background .15s;
+          flex-shrink: 0;
+        }
+        .tf-cal-nav svg {
+          width: 14px; height: 14px; stroke: var(--text-secondary);
+          stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round;
+        }
+        .tf-cal-nav:hover { background: var(--black); }
+        .tf-cal-nav:hover svg { stroke: var(--white); }
+        .tf-cal-weekdays {
+          display: grid; grid-template-columns: repeat(7, 1fr);
+          gap: 2px; margin-bottom: 4px;
+        }
+        .tf-cal-weekdays span {
+          text-align: center; font-size: 10px; font-weight: 700;
+          color: var(--text-muted); text-transform: uppercase; padding: 4px 0;
+        }
+        .tf-cal-grid {
+          display: grid; grid-template-columns: repeat(7, 1fr);
+          gap: 3px;
+        }
+        .tf-cal-day {
+          aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+          border-radius: 8px; font-size: 12px; font-weight: 500;
+          color: var(--text-primary); cursor: pointer;
+          transition: background .12s, color .12s, transform .1s;
+          user-select: none;
+        }
+        .tf-cal-day:hover:not(.tf-cal-day--past):not(.tf-cal-day--empty) {
+          background: rgba(59,130,246,.12); color: #2563eb;
+          transform: scale(1.08);
+        }
+        .tf-cal-day--empty { cursor: default; }
+        .tf-cal-day--past  { color: var(--text-muted); cursor: not-allowed; opacity: .45; }
+        .tf-cal-day--hoje  {
+          font-weight: 800; color: #3B82F6;
+          outline: 2px solid #3B82F6; outline-offset: -2px; border-radius: 8px;
+        }
+        .tf-cal-day--selected {
+          background: linear-gradient(135deg, #06B6D4, #3B82F6) !important;
+          color: #fff !important; font-weight: 700; transform: scale(1.05);
+        }
+        .tf-cal-contador {
+          margin-top: 10px; text-align: center; font-size: 12px;
+          font-weight: 600; color: var(--text-muted);
+          padding: 6px; border-radius: 8px; background: var(--white);
+          border: 1px solid var(--border-light);
+        }
+        [data-theme="dark"] .tf-cal-wrap { background: #141824; border-color: #334155; }
+        [data-theme="dark"] .tf-cal-nav  { background: #2d3548; border-color: #334155; }
+        [data-theme="dark"] .tf-cal-nav:hover { background: #3B82F6; }
+        [data-theme="dark"] .tf-cal-day  { color: #e2e8f0; }
+        [data-theme="dark"] .tf-cal-contador { background: #1e2433; border-color: #334155; }
       </style>
 
       <div class="page-header">
@@ -1099,46 +1303,27 @@ export default {
               <label class="tf-modal-label" for="tf-inp-repetir" style="cursor: pointer; margin-bottom: 0; text-transform: none; font-size: 13px; font-weight: 600; color: var(--text-secondary);">Repetir tarefa?</label>
             </div>
 
-            <!-- Campos de personalização da repetição -->
-            <div id="tf-repeticao-campos" style="display: none; flex-direction: column; gap: 14px; margin-bottom: 14px;">
-              <div class="tf-modal-field" style="margin-bottom: 0;">
-                <label class="tf-modal-label" for="tf-sel-tipo-repeticao">Frequência</label>
-                <select id="tf-sel-tipo-repeticao" class="tf-modal-input" style="background: var(--bg); color: var(--text-primary); cursor: pointer;">
-                  <option value="dias">Por intervalo (dias)</option>
-                  <option value="semana">Dias da semana</option>
-                </select>
-              </div>
-
-              <!-- Frequência: Por Intervalo de Dias -->
-              <div class="tf-modal-field" id="tf-campo-intervalo" style="margin-bottom: 0;">
-                <label class="tf-modal-label" for="tf-inp-intervalo">Repetir a cada (dias) <span style="color:#ef4444">*</span></label>
-                <input id="tf-inp-intervalo" class="tf-modal-input" type="number" min="1" value="1">
-              </div>
-
-              <!-- Frequência: Dias da Semana (escondido por padrão) -->
-              <div class="tf-modal-field" id="tf-campo-dias-semana" style="display: none; margin-bottom: 0;">
-                <label class="tf-modal-label">Selecione os dias <span style="color:#ef4444">*</span></label>
-                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;" id="tf-container-dias-semana">
-                  ${[
-                    { label: 'Dom', val: 0 },
-                    { label: 'Seg', val: 1 },
-                    { label: 'Ter', val: 2 },
-                    { label: 'Qua', val: 3 },
-                    { label: 'Qui', val: 4 },
-                    { label: 'Sex', val: 5 },
-                    { label: 'Sáb', val: 6 }
-                  ].map(d => `
-                    <label style="display: inline-flex; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--border-light); padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; user-select: none; color: var(--text-secondary);">
-                      <input type="checkbox" class="tf-inp-dia-semana" value="${d.val}" style="margin: 0; cursor: pointer;">
-                      ${d.label}
-                    </label>
-                  `).join('')}
+            <!-- Calendário de multi-seleção de datas -->
+            <div id="tf-repeticao-campos" style="display: none; margin-bottom: 14px;">
+              <div class="tf-cal-wrap">
+                <div class="tf-cal-header">
+                  <button type="button" id="tf-cal-prev" class="tf-cal-nav" title="Mês anterior">
+                    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <span id="tf-cal-titulo" class="tf-cal-titulo"></span>
+                  <button type="button" id="tf-cal-next" class="tf-cal-nav" title="Próximo mês">
+                    <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
                 </div>
-              </div>
-
-              <div class="tf-modal-field" style="margin-bottom: 0;">
-                <label class="tf-modal-label" for="tf-inp-vezes">Quantidade de vezes <span style="color:#ef4444">*</span></label>
-                <input id="tf-inp-vezes" class="tf-modal-input" type="number" min="1" max="50" value="5">
+                <div class="tf-cal-weekdays">
+                  ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d =>
+                    `<span>${d}</span>`
+                  ).join('')}
+                </div>
+                <div id="tf-cal-grid" class="tf-cal-grid"></div>
+                <div id="tf-cal-contador" class="tf-cal-contador">
+                  Nenhuma data selecionada
+                </div>
               </div>
             </div>
             ${UserStore.isAdmin() ? `
@@ -1220,13 +1405,23 @@ export default {
 
   onDestroy() {
     _tarefas     = [];
-    _filtroAtual = 'todas';
+    _filtroAtual = 'pendentes';
     _busca       = '';
     _vendedores  = [];
     _membroAtual = '';
     _dataAtual   = '';
-    _historicoExpandido = false;
-    _recentesExpandido  = false;
-    _futurasExpandido   = false;
+    _datasRepetir = [];
+    _calMesAtual  = new Date(); _calMesAtual.setDate(1);
+    _sectionExpanded = {
+      'pend-hoje':    true,
+      'pend-3dias':   false,
+      'pend-7dias':   false,
+      'pend-30dias':  false,
+      'conc-hoje':    false,
+      'conc-7dias':   false,
+      'conc-15dias':  false,
+      'conc-30dias':  false,
+      'conc-resto':   false,
+    };
   },
 };

@@ -96,8 +96,13 @@ export default class ListView {
       ? this._allNegocios.filter(n => n.vendedor_id === this._vendedorFilter)
       : [...this._allNegocios];
 
-    if (this._statusFilter !== 'Todos')
-      list = list.filter(n => n.negocio_status === this._statusFilter);
+    if (this._statusFilter !== 'Todos') {
+      if (this._statusFilter === 'Aberto') {
+        list = list.filter(n => n.negocio_status === 'Aberto' || n.negocio_status === 'Ganho');
+      } else {
+        list = list.filter(n => n.negocio_status === this._statusFilter);
+      }
+    }
 
     if (this._etapaFilter !== null)
       list = list.filter(n => n.etapa_id === this._etapaFilter);
@@ -214,7 +219,13 @@ export default class ListView {
     let base = this._vendedorFilter
       ? this._allNegocios.filter(n => n.vendedor_id === this._vendedorFilter)
       : [...this._allNegocios];
-    if (this._statusFilter !== 'Todos') base = base.filter(n => n.negocio_status === this._statusFilter);
+    if (this._statusFilter !== 'Todos') {
+      if (this._statusFilter === 'Aberto') {
+        base = base.filter(n => n.negocio_status === 'Aberto' || n.negocio_status === 'Ganho');
+      } else {
+        base = base.filter(n => n.negocio_status === this._statusFilter);
+      }
+    }
     base.forEach(n => { countMap[n.etapa_id] = (countMap[n.etapa_id] || 0) + 1; });
 
     const chipsWithCount = [

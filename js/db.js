@@ -651,15 +651,18 @@ export const Tarefas = {
 
   /**
    * Marca uma tarefa como concluída (tarefa_status = true).
-   * Registra data_conclusao com o timestamp atual.
+   * Atualiza o tempo acumulado e registra data_conclusao.
    * @param {number} tarefaId
+   * @param {number} tempoAcumulado - tempo total em milissegundos
    */
-  async concluir(tarefaId) {
+  async concluir(tarefaId, tempoAcumulado = 0) {
     return supabase
       .from('tarefas')
       .update({
         tarefa_status:  true,
         data_conclusao: nowBrasilia(),
+        data_inicio:    null,
+        tempo_acumulado_ms: tempoAcumulado
       })
       .eq('tarefa_id', tarefaId);
   },
@@ -698,7 +701,7 @@ export const Tarefas = {
   async getAllPorVendedor(vendedorId) {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
       .eq('vendedor_id', vendedorId)
       .order('tarefa_vencimento', { ascending: true });
   },
@@ -709,7 +712,7 @@ export const Tarefas = {
   async getAllAdmin() {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
       .order('tarefa_vencimento', { ascending: true });
   },
 
@@ -725,6 +728,22 @@ export const Tarefas = {
   },
 
   /**
+   * Pausa o cronômetro de uma tarefa.
+   * Define data_inicio como null e salva o tempo acumulado.
+   * @param {number} tarefaId
+   * @param {number} tempoAcumulado
+   */
+  async pausar(tarefaId, tempoAcumulado) {
+    return supabase
+      .from('tarefas')
+      .update({ 
+        data_inicio: null, 
+        tempo_acumulado_ms: tempoAcumulado 
+      })
+      .eq('tarefa_id', tarefaId);
+  },
+
+  /**
    * Reabre uma tarefa (tarefa_status = false).
    * Limpa data_inicio e data_conclusao para resetar o cronômetro.
    * @param {number} tarefaId
@@ -733,6 +752,17 @@ export const Tarefas = {
     return supabase
       .from('tarefas')
       .update({ tarefa_status: false, data_inicio: null, data_conclusao: null })
+      .eq('tarefa_id', tarefaId);
+  },
+
+  /**
+   * Exclui permanentemente uma tarefa da tabela.
+   * @param {number} tarefaId
+   */
+  async excluir(tarefaId) {
+    return supabase
+      .from('tarefas')
+      .delete()
       .eq('tarefa_id', tarefaId);
   },
 };
@@ -1901,7 +1931,7 @@ export const KanbanCards = {
   async getByColuna(colunaId) {
     return supabase
       .from('kanban_cards')
-      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban')
+      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban, card_etiqueta')
       .eq('coluna_id', colunaId)
       .order('card_ordem', { ascending: true });
   },
@@ -1909,7 +1939,7 @@ export const KanbanCards = {
     return supabase
       .from('kanban_cards')
       .insert(payload)
-      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban')
+      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban, card_etiqueta')
       .single();
   },
   async update(id, payload) {

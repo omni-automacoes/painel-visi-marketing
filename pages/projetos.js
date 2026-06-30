@@ -76,6 +76,7 @@ function _renderCard(card) {
           <span class="pj-pri-dot" style="background:${pri.dot}"></span>
           ${_esc(card.card_prioridade)}
         </span>
+        ${card.card_etiqueta ? `<span class="pj-card-tag" style="background:#e0e7ff; color:#3730a3; padding:2px 6px; border-radius:4px; font-size:10px; margin-left:6px; font-weight:600;">${_esc(card.card_etiqueta)}</span>` : ''}
         <button class="pj-card-menu" data-action="card-del" data-card-id="${card.card_id}" title="Excluir card">
           <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
@@ -238,6 +239,22 @@ function _buildPanelSkeleton(card) {
               <svg class="config-select-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
           </div>
+          <div class="pjp-meta-item">
+            <span class="pjp-meta-label">
+              <svg viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+              Etiqueta
+            </span>
+            <div class="config-input-wrap config-select-wrap pjp-select-wrap">
+              <select id="pjp-etiqueta" class="config-input config-select">
+                <option value="" ${!card.card_etiqueta ? 'selected' : ''}>Sem Etiqueta</option>
+                <option value="Arte feita" ${card.card_etiqueta === 'Arte feita' ? 'selected' : ''}>🎨 Arte feita</option>
+                <option value="Enviado ao Cliente" ${card.card_etiqueta === 'Enviado ao Cliente' ? 'selected' : ''}>📤 Enviado ao Cliente</option>
+                <option value="Alteração Aprovado" ${card.card_etiqueta === 'Alteração Aprovado' ? 'selected' : ''}>✏️ Alteração Aprovado</option>
+                <option value="Postado" ${card.card_etiqueta === 'Postado' ? 'selected' : ''}>🚀 Postado</option>
+              </select>
+              <svg class="config-select-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
         </div>
 
         <!-- Descrição -->
@@ -251,9 +268,7 @@ function _buildPanelSkeleton(card) {
 
         <!-- Salvar / Editar -->
         <button class="pjp-save-btn" id="pjp-save-btn">
-          ${card.card_descricao
-            ? `<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar`
-            : `<svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Adicionar Descrição`}
+          <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Salvar Alterações
         </button>
 
         <!-- Arquivos -->
@@ -398,6 +413,7 @@ function _bindPanelActions(card) {
     const desc     = document.getElementById('pjp-desc')?.value.trim() || null;
     const due      = document.getElementById('pjp-due')?.value || null;
     const priority = document.getElementById('pjp-priority')?.value;
+    const etiqueta = document.getElementById('pjp-etiqueta')?.value || null;
     if (!titulo) return;
 
     const btn = document.getElementById('pjp-save-btn');
@@ -409,6 +425,7 @@ function _bindPanelActions(card) {
       card_descricao:    desc,
       card_data_entrega: due,
       card_prioridade:   priority,
+      card_etiqueta:     etiqueta,
     });
 
     btn.disabled = false;
@@ -426,6 +443,7 @@ function _bindPanelActions(card) {
         c.card_descricao    = desc;
         c.card_data_entrega = due;
         c.card_prioridade   = priority;
+        c.card_etiqueta     = etiqueta;
         // Re-render card no board
         const cardEl = document.getElementById(`pjcard-${cardId}`);
         if (cardEl) cardEl.outerHTML = _renderCard(c);
@@ -444,11 +462,15 @@ function _bindPanelActions(card) {
     setTimeout(() => {
       const b = document.getElementById('pjp-save-btn');
       if (!b) return;
-      const hasDesc = !!document.getElementById('pjp-desc')?.value.trim();
-      b.innerHTML = hasDesc
-        ? `<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar`
-        : `<svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Adicionar Descrição`;
+      b.innerHTML = `<svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Salvar Alterações`;
     }, 2000);
+  });
+
+  // Auto-salvar ao alterar selects ou data
+  ['pjp-priority', 'pjp-etiqueta', 'pjp-due'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      document.getElementById('pjp-save-btn')?.click();
+    });
   });
 
   // ── Excluir card ──
@@ -865,7 +887,6 @@ export default {
       <div class="pj-tabs-row" id="pj-tabs-row">
         <button class="pj-tab-btn${_state.tipoKanban === 'Projetos' ? ' pj-tab-btn--active' : ''}" data-type="Projetos">📁 Projetos</button>
         <button class="pj-tab-btn${_state.tipoKanban === 'Campanhas' ? ' pj-tab-btn--active' : ''}" data-type="Campanhas">📢 Campanhas</button>
-        <button class="pj-tab-btn${_state.tipoKanban === 'Criativos' ? ' pj-tab-btn--active' : ''}" data-type="Criativos">🎨 Criativos</button>
         <button class="pj-tab-btn${_state.tipoKanban === 'Posts' ? ' pj-tab-btn--active' : ''}" data-type="Posts">📝 Posts</button>
       </div>
 

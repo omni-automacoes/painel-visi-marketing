@@ -976,6 +976,10 @@
   border-color: rgba(255,255,255,0.1);
   color: #fff;
 }
+[data-theme="dark"] .pjp-select-wrap .config-input option {
+  background: #1A1A1A;
+  color: #fff;
+}
 
 /* Seções — separadores */
 [data-theme="dark"] .pjp-section {

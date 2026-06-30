@@ -140,8 +140,13 @@ export default class KanbanBoard {
       ? this._allNegocios.filter(n => n.vendedor_id === this._vendedorFilter)
       : [...this._allNegocios];
 
-    if (this._statusFilter !== 'Todos')
-      list = list.filter(n => n.negocio_status === this._statusFilter);
+    if (this._statusFilter !== 'Todos') {
+      if (this._statusFilter === 'Aberto') {
+        list = list.filter(n => n.negocio_status === 'Aberto' || n.negocio_status === 'Ganho');
+      } else {
+        list = list.filter(n => n.negocio_status === this._statusFilter);
+      }
+    }
 
     if (this._origemFilter)
       list = list.filter(n => n.negocio_origem === this._origemFilter);
@@ -215,28 +220,28 @@ export default class KanbanBoard {
     const abertos    = this._allNegocios.filter(n => n.negocio_status === 'Aberto');
     const totalValor = negocios.reduce((s, n) => s + (parseFloat(n.negocio_valor) || 0), 0);
 
-    // Calcular Total Fechado (Perdido) aplicando os mesmos filtros
-    let listPerdido = this._vendedorFilter
+    // Calcular Total Vendido (Ganho) aplicando os mesmos filtros
+    let listGanho = this._vendedorFilter
       ? this._allNegocios.filter(n => n.vendedor_id === this._vendedorFilter)
       : [...this._allNegocios];
 
-    listPerdido = listPerdido.filter(n => n.negocio_status === 'Perdido');
+    listGanho = listGanho.filter(n => n.negocio_status === 'Ganho');
 
     if (this._origemFilter)
-      listPerdido = listPerdido.filter(n => n.negocio_origem === this._origemFilter);
+      listGanho = listGanho.filter(n => n.negocio_origem === this._origemFilter);
 
     if (this._recontadoFilter)
-      listPerdido = _applyDateFilter(listPerdido, this._recontadoFilter);
+      listGanho = _applyDateFilter(listGanho, this._recontadoFilter);
 
     const q = (this._searchQuery || '').toLowerCase();
     if (q) {
-      listPerdido = listPerdido.filter(n =>
+      listGanho = listGanho.filter(n =>
         (n.negocio_titulo   || '').toLowerCase().includes(q) ||
         (n.negocio_telefone || '').toLowerCase().includes(q)
       );
     }
 
-    const totalFechado = listPerdido.reduce((s, n) => s + (parseFloat(n.negocio_valor) || 0), 0);
+    const totalVendido = listGanho.reduce((s, n) => s + (parseFloat(n.negocio_valor) || 0), 0);
 
     const labelTotal = this._statusFilter === 'Todos'   ? 'Valor Total'
                      : this._statusFilter === 'Aberto'  ? 'Total em aberto'
@@ -251,7 +256,7 @@ export default class KanbanBoard {
 
     set('kpi-total-label', labelTotal);
     set('kpi-total-valor', totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }));
-    set('kpi-fechado-valor', totalFechado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }));
+    set('kpi-fechado-valor', totalVendido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }));
     set('kpi-opp-count',   `${negocios.length}`);
     set('funil-opp-count', subLabel);
 
