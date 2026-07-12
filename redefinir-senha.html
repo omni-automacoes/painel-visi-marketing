@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redefinir Senha — Visi Marketing CRM</title>
+  <meta name="description" content="Redefina sua senha de acesso ao CRM Visi Marketing." />
+
+  <!-- Init Theme -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('visi_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/login.css" />
+</head>
+<body>
+
+  <!-- Fundo animado -->
+  <div class="login-bg">
+    <div class="login-bg__orb login-bg__orb--1"></div>
+    <div class="login-bg__orb login-bg__orb--2"></div>
+    <div class="login-bg__orb login-bg__orb--3"></div>
+    <div class="login-bg__grid"></div>
+  </div>
+
+  <!-- Card de login -->
+  <main class="login-shell">
+    <div class="login-card">
+
+      <!-- Logo -->
+      <div class="login-logo">
+        <div class="login-logo__icon">
+          <img src="assets/logo-visi.png" alt="Visi Marketing" />
+        </div>
+        <div class="login-logo__text">
+          Visi Marketing
+          <span>CRM</span>
+        </div>
+      </div>
+
+      <!-- Título -->
+      <div class="login-heading">
+        <h1>Redefinir Senha</h1>
+        <p>Digite sua nova senha abaixo</p>
+      </div>
+
+      <!-- Formulário -->
+      <form id="reset-form" class="login-form" novalidate>
+
+        <!-- Nova Senha -->
+        <div class="field-group" id="field-password">
+          <label for="input-password">Nova Senha</label>
+          <div class="field-input-wrap">
+            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input
+              id="input-password"
+              type="password"
+              placeholder="Min. 8 caracteres"
+              minlength="8"
+              required
+            />
+            <button type="button" class="toggle-password" id="btn-toggle-password" aria-label="Mostrar senha">
+              <svg id="eye-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <span class="field-error" id="error-password"></span>
+        </div>
+
+        <!-- Erro/Sucesso geral -->
+        <div class="login-alert" id="reset-alert" role="alert" aria-live="polite"></div>
+
+        <!-- Botão -->
+        <button type="submit" class="btn-login" id="btn-reset">
+          <span id="btn-reset-text">Atualizar Senha</span>
+          <span id="btn-reset-spinner" class="btn-spinner" hidden>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+          </span>
+        </button>
+
+      </form>
+
+      <!-- Footer do card -->
+      <p class="login-footer">
+        Acesso restrito a membros da equipe Visi Marketing.
+      </p>
+
+    </div>
+  </main>
+
+  <script type="module" src="js/redefinir-senha.js"></script>
+</body>
+</html>

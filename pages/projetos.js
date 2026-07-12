@@ -70,8 +70,11 @@ function _renderCard(card) {
   const over = _isOverdue(card.card_data_entrega);
 
   return `
-    <div class="pj-card" data-card-id="${card.card_id}" id="pjcard-${card.card_id}">
+    <div class="pj-card" data-card-id="${card.card_id}" id="pjcard-${card.card_id}" draggable="true">
       <div class="pj-card-top">
+        <span class="pj-card-drag-handle" title="Arrastar">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+        </span>
         <span class="pj-priority ${pri.cls}">
           <span class="pj-pri-dot" style="background:${pri.dot}"></span>
           ${_esc(card.card_prioridade)}
@@ -98,8 +101,11 @@ function _renderColumn(col) {
   const cardsHtml = cards.map(_renderCard).join('');
   return `
     <div class="pj-column" data-col-id="${col.coluna_id}" id="pjcol-${col.coluna_id}">
-      <div class="pj-col-header">
+      <div class="pj-col-header" draggable="true" data-col-drag="${col.coluna_id}">
         <div class="pj-col-left">
+          <span class="pj-col-grip" title="Arrastar coluna">
+            <svg viewBox="0 0 10 16"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
+          </span>
           <span class="pj-col-dot" style="background:${col.coluna_cor}"></span>
           <span class="pj-col-title" data-col-title="${col.coluna_id}">${_esc(col.coluna_nome)}</span>
           <span class="pj-col-count">${cards.length}</span>
@@ -152,6 +158,7 @@ async function _loadBoard() {
   );
 
   _renderBoard();
+  _bindDragDrop();
 }
 
 function _renderBoard() {
@@ -167,6 +174,222 @@ function _renderBoard() {
     </div>`;
 
   board.innerHTML = _state.columns.map(_renderColumn).join('') + addWrap;
+}
+
+// ── Drag & Drop ─────────────────────────────────────────────────────
+let _dnd = {
+  draggingCard:    null,
+  draggingCol:     null,
+  cardPlaceholder: null,
+  colPlaceholder:  null,
+};
+
+function _createCardPlaceholder(refEl) {
+  const ph = document.createElement('div');
+  ph.className = 'pj-card pj-card--placeholder';
+  ph.style.height = (refEl?.offsetHeight || 80) + 'px';
+  return ph;
+}
+
+function _createColPlaceholder(refEl) {
+  const ph = document.createElement('div');
+  ph.className = 'pj-column pj-column--placeholder';
+  ph.style.minWidth = (refEl?.offsetWidth || 280) + 'px';
+  return ph;
+}
+
+function _bindDragDrop() {
+  const board = document.getElementById('pj-board');
+  if (!board) return;
+
+  // ── COLUNAS: drag pelos headers ──────────────────────────────────
+  const colHeaders = board.querySelectorAll('[data-col-drag]');
+
+  colHeaders.forEach(header => {
+    const colEl = header.closest('.pj-column');
+
+    header.addEventListener('dragstart', e => {
+      if (e.target.closest('button')) { e.preventDefault(); return; }
+      _dnd.draggingCol = colEl;
+      colEl.classList.add('pj-col--dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'col:' + colEl.dataset.colId);
+      _dnd.colPlaceholder = _createColPlaceholder(colEl);
+      setTimeout(() => { colEl.style.opacity = '0.35'; }, 0);
+    });
+
+    header.addEventListener('dragend', async () => {
+      if (!_dnd.draggingCol) return;
+      
+      // Move a coluna para a posição final do placeholder antes de ler o DOM
+      if (_dnd.colPlaceholder && _dnd.colPlaceholder.parentNode) {
+        _dnd.colPlaceholder.parentNode.insertBefore(_dnd.draggingCol, _dnd.colPlaceholder);
+      }
+
+      _dnd.draggingCol.style.opacity = '';
+      _dnd.draggingCol.classList.remove('pj-col--dragging');
+      _dnd.colPlaceholder?.remove();
+
+      // Persiste nova ordem das colunas lendo o DOM atualizado
+      const colsInDom = [...board.querySelectorAll('.pj-column[data-col-id]')];
+      const newOrder  = colsInDom.map((el, i) => ({ id: parseInt(el.dataset.colId), ordem: i + 1 }));
+
+      const results = await Promise.all(newOrder.map(({ id, ordem }) =>
+        KanbanColunas.update(id, { coluna_ordem: ordem })
+      ));
+      results.forEach((res, i) => {
+        if (res.error) console.error('[DnD] Erro ao salvar coluna', newOrder[i].id, ':', res.error);
+      });
+
+      newOrder.forEach(({ id, ordem }) => {
+        const col = _state.columns.find(c => c.coluna_id === id);
+        if (col) col.coluna_ordem = ordem;
+      });
+
+      _dnd.draggingCol    = null;
+      _dnd.colPlaceholder = null;
+    });
+  });
+
+  // ── COLUNAS: zona de drag ────────────────────────────────────────
+  board.querySelectorAll('.pj-column').forEach(colEl => {
+    colEl.addEventListener('dragover', e => {
+      if (!_dnd.draggingCol || _dnd.draggingCol === colEl) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const rect   = colEl.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+
+      _dnd.colPlaceholder?.remove();
+      _dnd.colPlaceholder = _createColPlaceholder(_dnd.draggingCol);
+      if (before) {
+        board.insertBefore(_dnd.colPlaceholder, colEl);
+      } else {
+        colEl.after(_dnd.colPlaceholder);
+      }
+    });
+
+    colEl.addEventListener('dragenter', e => {
+      if (!_dnd.draggingCol || _dnd.draggingCol === colEl) return;
+      e.preventDefault();
+    });
+  });
+
+  // ── CARDS: drag ──────────────────────────────────────────────────
+  board.querySelectorAll('.pj-card').forEach(cardEl => {
+    cardEl.addEventListener('dragstart', e => {
+      if (e.target.closest('button')) { e.preventDefault(); return; }
+      _dnd.draggingCard = cardEl;
+      cardEl.classList.add('pj-card--dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'card:' + cardEl.dataset.cardId);
+      _dnd.cardPlaceholder = _createCardPlaceholder(cardEl);
+      setTimeout(() => { cardEl.style.opacity = '0.35'; }, 0);
+    });
+
+    cardEl.addEventListener('dragend', async () => {
+      if (!_dnd.draggingCard) return;
+
+      // Move o card para a posição final do placeholder antes de ler o DOM
+      if (_dnd.cardPlaceholder && _dnd.cardPlaceholder.parentNode) {
+        _dnd.cardPlaceholder.parentNode.insertBefore(_dnd.draggingCard, _dnd.cardPlaceholder);
+      }
+
+      _dnd.draggingCard.style.opacity = '';
+      _dnd.draggingCard.classList.remove('pj-card--dragging');
+      _dnd.cardPlaceholder?.remove();
+
+      const cardId     = parseInt(_dnd.draggingCard.dataset.cardId);
+      const destColEl  = _dnd.draggingCard.closest('.pj-column');
+      const destColId  = destColEl ? parseInt(destColEl.dataset.colId) : null;
+
+      if (destColId) {
+        // Descobre coluna de origem
+        let srcColId = null;
+        for (const cid in _state.cards) {
+          if (_state.cards[cid].some(c => c.card_id === cardId)) {
+            srcColId = parseInt(cid); break;
+          }
+        }
+
+        // Atualiza estado local se mudou de coluna
+        if (srcColId !== null && srcColId !== destColId) {
+          const card = _state.cards[srcColId]?.find(c => c.card_id === cardId);
+          _state.cards[srcColId] = _state.cards[srcColId].filter(c => c.card_id !== cardId);
+          if (card) {
+            card.coluna_id = destColId;
+            _state.cards[destColId] = _state.cards[destColId] || [];
+            _state.cards[destColId].push(card);
+          }
+          const srcCount = document.querySelector(`#pjcol-${srcColId} .pj-col-count`);
+          if (srcCount) srcCount.textContent = _state.cards[srcColId].length;
+          const dstCount = document.querySelector(`#pjcol-${destColId} .pj-col-count`);
+          if (dstCount) dstCount.textContent = _state.cards[destColId].length;
+        }
+
+        // Persiste: nova coluna + nova ordem em destino
+        const destCards = [...destColEl.querySelectorAll('.pj-card[data-card-id]')];
+        await Promise.all(destCards.map((el, i) =>
+          KanbanCards.update(parseInt(el.dataset.cardId), {
+            coluna_id:  destColId,
+            card_ordem: i + 1,
+          })
+        ));
+
+        // Persiste ordem na origem se mudou de coluna
+        if (srcColId && srcColId !== destColId) {
+          const srcList = document.querySelector(`#pjlist-${srcColId}`);
+          const srcCards = [...(srcList?.querySelectorAll('.pj-card[data-card-id]') || [])];
+          await Promise.all(srcCards.map((el, i) =>
+            KanbanCards.update(parseInt(el.dataset.cardId), { card_ordem: i + 1 })
+          ));
+        }
+      }
+
+      _dnd.draggingCard    = null;
+      _dnd.cardPlaceholder = null;
+    });
+  });
+
+  // ── CARDS: zona de drag nas listas ──────────────────────────────
+  board.querySelectorAll('.pj-cards-list').forEach(listEl => {
+    listEl.addEventListener('dragenter', e => {
+      // Permite entrada para não bloquear o cursor
+      if (_dnd.draggingCard || _dnd.draggingCol) e.preventDefault();
+    });
+
+    listEl.addEventListener('dragover', e => {
+      if (_dnd.draggingCol) { e.preventDefault(); return; }
+      if (!_dnd.draggingCard) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const afterEl = _getDragAfterElement(listEl, e.clientY);
+      _dnd.cardPlaceholder?.remove();
+      _dnd.cardPlaceholder = _createCardPlaceholder(_dnd.draggingCard);
+
+      const addBtn = listEl.querySelector('.pj-add-card-btn');
+      if (!afterEl) {
+        listEl.insertBefore(_dnd.cardPlaceholder, addBtn);
+      } else {
+        listEl.insertBefore(_dnd.cardPlaceholder, afterEl);
+      }
+    });
+  });
+}
+
+// Retorna o elemento antes do qual o card deve ser inserido (baseado em Y)
+function _getDragAfterElement(container, y) {
+  const els = [...container.querySelectorAll(
+    '.pj-card:not(.pj-card--dragging):not(.pj-card--placeholder)'
+  )];
+  return els.reduce((closest, el) => {
+    const box    = el.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return { offset, element: el };
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 // ── Painel do card ──────────────────────────────────────────────────

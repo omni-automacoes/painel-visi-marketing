@@ -90,8 +90,27 @@ export default class GanhoModal {
           <!-- Formulário -->
           <form class="ganho-modal-form" id="ganho-modal-form" autocomplete="off" novalidate>
 
+            <!-- Seleção de Tipo de Cliente -->
+            <div class="ganho-form-section ganho-tipo-section">
+              <div class="ganho-form-section-title">
+                <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                Tipo de Cliente
+              </div>
+              <div class="ganho-tipo-toggle" id="ganho-tipo-toggle">
+                <button type="button" class="ganho-tipo-btn ganho-tipo-btn--active" id="ganho-tipo-assessoria" data-tipo="Assessoria">
+                  <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  Assessoria
+                </button>
+                <button type="button" class="ganho-tipo-btn" id="ganho-tipo-outros" data-tipo="Outros">
+                  <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                  Outros
+                </button>
+              </div>
+              <input type="hidden" id="gf-tipo" name="gf_tipo" value="Assessoria">
+            </div>
+
             <!-- Seção: Dados do Cliente -->
-            <div class="ganho-form-section">
+            <div class="ganho-form-section" id="ganho-secao-dados-cliente">
               <div class="ganho-form-section-title">
                 <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Dados do Cliente
@@ -257,8 +276,8 @@ export default class GanhoModal {
             </div>
 
 
-            <!-- Seção: Contexto e Descrição -->
-            <div class="ganho-form-section">
+            <!-- Seção: Contexto e Descrição (apenas Assessoria) -->
+            <div class="ganho-form-section" id="ganho-secao-contexto">
               <div class="ganho-form-section-title">
                 <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                 Contexto e Descrição
@@ -290,6 +309,29 @@ export default class GanhoModal {
                     rows="3"
                     placeholder="Descreva a empresa do cliente, seu mercado de atuação, produtos/serviços e diferenciais…"
                     required
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Seção: Descrição simplificada (apenas Outros) -->
+            <div class="ganho-form-section" id="ganho-secao-outros" style="display:none;">
+              <div class="ganho-form-section-title">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Descrição
+              </div>
+              <div class="ganho-form-grid ganho-form-grid--1">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-outros-descricao">
+                    Descrição do Negócio
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <textarea
+                    class="ganho-form-textarea"
+                    id="gf-outros-descricao"
+                    name="gf_outros_descricao"
+                    rows="4"
+                    placeholder="Descreva os detalhes deste negócio…"
                   ></textarea>
                 </div>
               </div>
@@ -397,43 +439,117 @@ export default class GanhoModal {
         duracaoInput.classList.remove('ganho-form-input--error');
       }
     });
+
+    // Toggle tipo: Assessoria / Outros
+    document.querySelectorAll('.ganho-tipo-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tipo = btn.dataset.tipo;
+        document.getElementById('gf-tipo').value = tipo;
+        document.querySelectorAll('.ganho-tipo-btn').forEach(b => b.classList.remove('ganho-tipo-btn--active'));
+        btn.classList.add('ganho-tipo-btn--active');
+        this._toggleTipoView(tipo);
+      });
+    });
+  }
+
+  _toggleTipoView(tipo) {
+    const secaoCliente   = document.getElementById('ganho-secao-dados-cliente');
+    const secaoFinanceiro = document.querySelector('.ganho-form-section:nth-of-type(3)');
+    const secaoContexto  = document.getElementById('ganho-secao-contexto');
+    const secaoOutros    = document.getElementById('ganho-secao-outros');
+
+    if (tipo === 'Outros') {
+      // Esconde seções de Assessoria
+      if (secaoCliente) {
+        // Esconde os campos de responsável, investimento etc mas mantém nome/telefone/email
+        const responsavelWrap = secaoCliente.querySelector('.ganho-form-grid.ganho-form-grid--1');
+        if (responsavelWrap) responsavelWrap.style.display = 'none';
+        // Esconde campos telefone e email mas mantém nome
+        const grid3 = secaoCliente.querySelector('.ganho-form-grid.ganho-form-grid--3');
+        if (grid3) {
+          const fields = grid3.querySelectorAll('.ganho-form-field');
+          fields.forEach((f, i) => { if (i > 0) f.style.display = 'none'; });
+        }
+      }
+      // Esconde seção de informações financeiras
+      const allSections = document.querySelectorAll('.ganho-form-section');
+      allSections.forEach(s => {
+        if (s.id !== 'ganho-secao-dados-cliente' && s.id !== 'ganho-secao-outros' && !s.classList.contains('ganho-tipo-section')) {
+          s.style.display = 'none';
+        }
+      });
+      if (secaoOutros) secaoOutros.style.display = '';
+      // Título da seção de dados
+      const tituloSecao = secaoCliente?.querySelector('.ganho-form-section-title');
+      if (tituloSecao) tituloSecao.style.display = 'none';
+    } else {
+      // Assessoria: restaura tudo
+      if (secaoCliente) {
+        const responsavelWrap = secaoCliente.querySelector('.ganho-form-grid.ganho-form-grid--1');
+        if (responsavelWrap) responsavelWrap.style.display = '';
+        const grid3 = secaoCliente.querySelector('.ganho-form-grid.ganho-form-grid--3');
+        if (grid3) {
+          const fields = grid3.querySelectorAll('.ganho-form-field');
+          fields.forEach(f => f.style.display = '');
+        }
+        const tituloSecao = secaoCliente?.querySelector('.ganho-form-section-title');
+        if (tituloSecao) tituloSecao.style.display = '';
+      }
+      const allSections = document.querySelectorAll('.ganho-form-section');
+      allSections.forEach(s => { s.style.display = ''; });
+      if (secaoOutros) secaoOutros.style.display = 'none';
+      // Respeita checkbox de contrato
+      const duracaoWrap = document.getElementById('gf-contrato-duracao-wrap');
+      const contratoInput = document.getElementById('gf-contrato');
+      if (duracaoWrap && contratoInput) {
+        duracaoWrap.style.display = contratoInput.checked ? 'grid' : 'none';
+      }
+    }
   }
 
   _submit() {
+    const tipo       = document.getElementById('gf-tipo')?.value || 'Assessoria';
     const isContrato = document.getElementById('gf-contrato')?.checked || false;
 
-    // Lista de todos os campos obrigatórios
-    const campos = [
-      { id: 'gf-nome',         label: 'Nome do Cliente',           tipo: 'input'    },
-      { id: 'gf-telefone',     label: 'Telefone do Cliente',       tipo: 'input'    },
-      { id: 'gf-email',        label: 'E-mail do Cliente',         tipo: 'input'    },
-      { id: 'gf-responsavel',  label: 'Responsável pelo Cliente',  tipo: 'input'    },
-      { id: 'gf-investimento', label: 'Investimento em Mídia',     tipo: 'input'    },
-      { id: 'gf-mensalidade',  label: 'Valor da Mensalidade',      tipo: 'input'    },
-      { id: 'gf-segmento',     label: 'Segmento',                  tipo: 'input'    },
-      { id: 'gf-contexto',     label: 'Contexto Geral do Cliente', tipo: 'textarea' },
-      { id: 'gf-descricao',    label: 'Descrição Sobre a Empresa', tipo: 'textarea' },
-    ];
-
-    if (isContrato) {
-      campos.push({ id: 'gf-contrato-duracao', label: 'Duração do Contrato', tipo: 'input' });
+    // Campos obrigatórios conforme o tipo selecionado
+    let campos;
+    if (tipo === 'Outros') {
+      campos = [
+        { id: 'gf-nome',             label: 'Nome do Cliente', tipo: 'input'    },
+        { id: 'gf-outros-descricao', label: 'Descrição',       tipo: 'textarea' },
+      ];
+    } else {
+      // Assessoria — todos os campos completos
+      campos = [
+        { id: 'gf-nome',         label: 'Nome do Cliente',           tipo: 'input'    },
+        { id: 'gf-telefone',     label: 'Telefone do Cliente',       tipo: 'input'    },
+        { id: 'gf-email',        label: 'E-mail do Cliente',         tipo: 'input'    },
+        { id: 'gf-responsavel',  label: 'Responsável pelo Cliente',  tipo: 'input'    },
+        { id: 'gf-investimento', label: 'Investimento em Mídia',     tipo: 'input'    },
+        { id: 'gf-mensalidade',  label: 'Valor da Mensalidade',      tipo: 'input'    },
+        { id: 'gf-segmento',     label: 'Segmento',                  tipo: 'input'    },
+        { id: 'gf-contexto',     label: 'Contexto Geral do Cliente', tipo: 'textarea' },
+        { id: 'gf-descricao',    label: 'Descrição Sobre a Empresa', tipo: 'textarea' },
+      ];
+      if (isContrato) {
+        campos.push({ id: 'gf-contrato-duracao', label: 'Duração do Contrato', tipo: 'input' });
+      }
     }
 
-    // Valida todos e coleta os inválidos
+    // Valida e coleta inválidos
     let primeiroInvalido = null;
     const invalidos = [];
 
-    campos.forEach(({ id, tipo }) => {
+    campos.forEach(({ id, tipo: tipoCampo }) => {
       const el = document.getElementById(id);
       if (!el) return;
       const vazio = !el.value.trim();
       el.classList.toggle('ganho-form-input--error', vazio);
-      if (tipo === 'textarea') el.classList.toggle('ganho-form-textarea--error', vazio);
+      if (tipoCampo === 'textarea') el.classList.toggle('ganho-form-textarea--error', vazio);
       if (vazio) {
         invalidos.push(id);
         if (!primeiroInvalido) primeiroInvalido = el;
       } else {
-        // Remove erro ao digitar/selecionar
         el.addEventListener('input',  () => el.classList.remove('ganho-form-input--error', 'ganho-form-textarea--error'), { once: true });
         el.addEventListener('change', () => el.classList.remove('ganho-form-input--error'), { once: true });
       }
@@ -441,29 +557,29 @@ export default class GanhoModal {
 
     if (invalidos.length > 0) {
       primeiroInvalido?.focus();
-      // Scroll para o primeiro campo inválido
       primeiroInvalido?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
-    // Todos válidos — coleta dados
+    // Todos válidos — coleta os dados
     const dados = {
-      nome_cliente:       document.getElementById('gf-nome')?.value.trim()          || '',
-      telefone_cliente:   document.getElementById('gf-telefone')?.value.trim()      || '',
-      email_cliente:      document.getElementById('gf-email')?.value.trim()         || '',
-      responsavel_id:     document.getElementById('gf-responsavel')?.value          || null,
-      investimento_midia: document.getElementById('gf-investimento')?.value.trim()  || '',
-      mensalidade:        document.getElementById('gf-mensalidade')?.value.trim()   || '',
+      tipo_cliente:       tipo,
+      nome_cliente:       document.getElementById('gf-nome')?.value.trim()             || '',
+      telefone_cliente:   document.getElementById('gf-telefone')?.value.trim()         || '',
+      email_cliente:      document.getElementById('gf-email')?.value.trim()            || '',
+      responsavel_id:     document.getElementById('gf-responsavel')?.value             || null,
+      investimento_midia: document.getElementById('gf-investimento')?.value.trim()     || '',
+      mensalidade:        document.getElementById('gf-mensalidade')?.value.trim()      || '',
       cliente_contrato:   isContrato,
       contrato_duracao:   isContrato ? (parseInt(document.getElementById('gf-contrato-duracao')?.value, 10) || null) : null,
-      segmento:           document.getElementById('gf-segmento')?.value.trim()      || '',
-      // origem_cliente é preenchida automaticamente com negocio_origem
-      origem_cliente:     this._negocio?.negocio_origem                              || '',
-      contexto_geral:     document.getElementById('gf-contexto')?.value.trim()      || '',
-      descricao_empresa:  document.getElementById('gf-descricao')?.value.trim()     || '',
+      segmento:           document.getElementById('gf-segmento')?.value.trim()         || '',
+      origem_cliente:     this._negocio?.negocio_origem                                || '',
+      contexto_geral:     document.getElementById('gf-contexto')?.value.trim()         || '',
+      descricao_empresa:  document.getElementById('gf-descricao')?.value.trim()        || '',
+      outros_descricao:   document.getElementById('gf-outros-descricao')?.value.trim() || '',
     };
 
-    // Feedback visual de sucesso no botão
+    // Feedback visual no botão
     const btn  = document.getElementById('ganho-btn-confirm');
     const card = document.getElementById('ganho-modal-card');
     if (btn)  { btn.disabled = true; btn.innerHTML = '<span class="ganho-btn-spinner"></span> Salvando…'; }
@@ -474,6 +590,7 @@ export default class GanhoModal {
       if (typeof this._onConfirm === 'function') this._onConfirm(dados);
     }, 420);
   }
+
 
   // ── Util ───────────────────────────────────────────────────────
 

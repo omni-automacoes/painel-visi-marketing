@@ -1073,3 +1073,86 @@
 [data-theme="dark"] .pjp-del-card-btn:hover {
   background: rgba(239,68,68,0.15);
 }
+
+/* ── Drag & Drop ─────────────────────────────────────────────────── */
+
+/* Grip handle da coluna */
+.pj-col-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  cursor: grab;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+.pj-col-grip svg {
+  width: 10px;
+  height: 16px;
+  fill: currentColor;
+}
+.pj-column:hover .pj-col-grip { opacity: 0.6; }
+.pj-col-grip:hover { opacity: 1 !important; color: var(--cyan); }
+[data-col-drag] { cursor: grab; }
+[data-col-drag]:active { cursor: grabbing; }
+
+/* Grip handle do card */
+.pj-card-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  cursor: grab;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.pj-card-drag-handle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+}
+.pj-card:hover .pj-card-drag-handle { opacity: 0.5; }
+.pj-card-drag-handle:hover { opacity: 1 !important; color: var(--cyan); }
+
+/* Estado: coluna sendo arrastada */
+.pj-col--dragging {
+  outline: 2px dashed rgba(26,206,238,0.4);
+  outline-offset: 2px;
+}
+
+/* Placeholder de coluna */
+.pj-column--placeholder {
+  background: rgba(26,206,238,0.06);
+  border: 2px dashed rgba(26,206,238,0.35);
+  border-radius: 16px;
+  min-height: 100px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Placeholder de card */
+.pj-card--placeholder {
+  background: rgba(26,206,238,0.06);
+  border: 2px dashed rgba(26,206,238,0.35);
+  border-radius: 12px;
+  pointer-events: none;
+  min-height: 56px;
+}
+
+/* Card sendo arrastado */
+.pj-card--dragging {
+  box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
+  transform: rotate(1.5deg) scale(1.02) !important;
+}
+
+/* Cabeçalho da coluna draggable — não interferir em botões */
+.pj-col-header [data-action] { cursor: pointer; }
+

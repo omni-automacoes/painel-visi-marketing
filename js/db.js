@@ -1,4 +1,4 @@
-/**
+﻿/**
  * db.js — Camada de acesso a dados do CRM Visi Marketing
  *
  * Centraliza todas as queries ao Supabase.
@@ -930,6 +930,11 @@ export const Usuarios = {
       .select('smtp_email, smtp_senha, smtp_host, smtp_port, smtp_ssl')
       .single();
   },
+
+  /** Remove o registro do usuário da tabela usuarios */
+  async deletar(userId) {
+    return supabase.from('usuarios').delete().eq('user_id', userId);
+  },
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -1531,6 +1536,14 @@ export const MotivosPerdas = {
     return supabase
       .from('motivos_perda')
       .update({ ...payload, ultima_atualizacao: new Date().toISOString() })
+      .eq('motivo_id', motivoId);
+  },
+
+  /** Remove permanentemente um motivo de perda. */
+  async delete(motivoId) {
+    return supabase
+      .from('motivos_perda')
+      .delete()
       .eq('motivo_id', motivoId);
   },
 };

@@ -6,7 +6,7 @@
  *   const panel = new NegocioPanel();
  *   panel.open(negocioId);
  */
-import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas } from '../../js/db.js';
+import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards } from '../../js/db.js';
 import UserStore from '../../js/userStore.js';
 import GanhoModal from './GanhoModal.js';
 
@@ -519,8 +519,33 @@ export default class NegocioPanel {
       const negData = this._negocioData || neg;
       this._ganhoModal.open(
         negData,
-        // onConfirm: cria cliente + atualiza negócio para Ganho
+        // onConfirm: bifurca por tipo_cliente
         async (dados) => {
+
+          // ── OUTROS: cria kanban_card, não cria cliente nem tarefas ──
+          if (dados.tipo_cliente === 'Outros') {
+            const cardPayload = {
+              card_titulo:    dados.nome_cliente || '',
+              card_descricao: dados.outros_descricao || '',
+              tipo_kanban:    'Projetos',
+              coluna_id:      39,
+            };
+            const [cardRes, statusRes] = await Promise.all([
+              KanbanCards.create(cardPayload),
+              Negocios.updateStatus(neg.negocio_id, 'Ganho'),
+            ]);
+            if (cardRes.error)
+              console.error('[NegocioPanel] Erro ao criar kanban_card (Outros):', cardRes.error);
+            if (statusRes.error)
+              console.error('[NegocioPanel] Erro ao marcar como Ganho:', statusRes.error);
+
+            this._atualizarBadgeStatus('Ganho');
+            this._atualizarBotoesStatus('Ganho', neg.negocio_id);
+            setTimeout(() => window.location.reload(), 800);
+            return;
+          }
+
+          // ── ASSESSORIA: fluxo original ────────────────────────────
           // Converte investimento do formato BR "1.500,00" → número
           const invStr = (dados.investimento_midia || '').replace(/\./g, '').replace(',', '.');
           const investimento = parseFloat(invStr) || null;
@@ -529,20 +554,20 @@ export default class NegocioPanel {
           const mensalidade = parseFloat(mensStr) || null;
 
           const clientePayload = {
-            cliente_nome: dados.nome_cliente || '',
-            cliente_telefone: dados.telefone_cliente || null,
-            cliente_email: dados.email_cliente || null,
+            cliente_nome:      dados.nome_cliente || '',
+            cliente_telefone:  dados.telefone_cliente || null,
+            cliente_email:     dados.email_cliente || null,
             investimento_midia: investimento,
             cliente_mensalidade: mensalidade,
-            cliente_contrato: dados.cliente_contrato || false,
-            contrato_duracao: dados.contrato_duracao ?? null,
-            segmento: dados.segmento || null,
-            cliente_origem: dados.origem_cliente || null,
-            contexto_geral: dados.contexto_geral || null,
+            cliente_contrato:  dados.cliente_contrato || false,
+            contrato_duracao:  dados.contrato_duracao ?? null,
+            segmento:          dados.segmento || null,
+            cliente_origem:    dados.origem_cliente || null,
+            contexto_geral:    dados.contexto_geral || null,
             descricao_empresa: dados.descricao_empresa || null,
-            cliente_status: 'Novo Cliente',
-            user_id: dados.responsavel_id ?? null,
-            negocio_id: neg.negocio_id ?? null,
+            cliente_status:    'Novo Cliente',
+            user_id:           dados.responsavel_id ?? null,
+            negocio_id:        neg.negocio_id ?? null,
           };
 
           const tarefasOnboarding = [
@@ -554,8 +579,8 @@ export default class NegocioPanel {
           ].map(titulo => ({
             tarefa_titulo: titulo,
             tarefa_status: false,
-            negocio_id: neg.negocio_id ?? null,
-            vendedor_id: dados.responsavel_id ?? null,
+            negocio_id:   neg.negocio_id ?? null,
+            vendedor_id:  dados.responsavel_id ?? null,
           }));
 
           const [clienteRes, statusRes, , tarefasRes] = await Promise.all([

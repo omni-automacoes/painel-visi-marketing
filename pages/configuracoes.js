@@ -5,7 +5,7 @@
 
 import UserStore    from '../js/userStore.js';
 import { supabase } from '../js/supabase.js';
-import { Pipelines, EtapasPipeline, MotivosPerdas } from '../js/db.js';
+import { Pipelines, EtapasPipeline, MotivosPerdas, Usuarios } from '../js/db.js';
 
 // Bucket de avatares
 const AVATAR_BUCKET = 'visi-marketing';
@@ -33,6 +33,10 @@ export default {
             <button class="config-nav-item" data-section="funil" id="config-nav-funil">
               <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
               Funil
+            </button>
+            <button class="config-nav-item" data-section="usuarios" id="config-nav-usuarios">
+              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Usuários
             </button>` : `
             <div class="config-nav-empty">
               <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -50,8 +54,46 @@ export default {
 
         <div class="config-content" id="config-content">
           ${isAdmin
-            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionMotivosPerdas()
+            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMotivosPerdas()
             : _renderSectionAcessoNegado() + _renderSectionMotivosPerdas()}
+        </div>
+      </div>
+
+      <!-- ══ POPUP DE EDIÇÃO DE USUÁRIO ══════════════════════════════ -->
+      <div class="nu-popup-overlay" id="edit-user-modal" aria-hidden="true">
+        <div class="nu-popup" role="dialog" aria-modal="true" style="text-align: left; max-width: 500px;">
+          <h3 class="nu-popup-title" style="margin-bottom: 20px;">Editar Usuário</h3>
+          <form id="edit-user-form">
+            <input type="hidden" id="edit-user-id" />
+            <div class="config-form-row">
+              <div class="config-field">
+                <label class="config-label">Nome</label>
+                <input type="text" id="edit-user-nome" class="config-input" required />
+              </div>
+              <div class="config-field">
+                <label class="config-label">E-mail</label>
+                <input type="email" id="edit-user-email" class="config-input" required />
+              </div>
+            </div>
+            <div class="config-form-row">
+              <div class="config-field">
+                <label class="config-label">Telefone</label>
+                <input type="tel" id="edit-user-telefone" class="config-input" />
+              </div>
+              <div class="config-field">
+                <label class="config-label">Cargo</label>
+                <select id="edit-user-cargo" class="config-input" required>
+                  <option value="Administrador">Administrador</option>
+                  <option value="Comercial">Comercial</option>
+                  <option value="Operações">Operações</option>
+                </select>
+              </div>
+            </div>
+            <div class="config-form-actions" style="margin-top: 24px; justify-content: flex-end;">
+              <button type="button" class="btn btn-ghost" id="btn-edit-user-cancel">Cancelar</button>
+              <button type="submit" class="btn btn-cyan" id="btn-edit-user-save">Salvar</button>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -370,6 +412,9 @@ function _renderMotivoItem(m) {
             : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
           </svg>
         </button>
+        <button class="funil-action-btn funil-action-btn--del" data-action="mp-delete" data-motivo-id="${m.motivo_id}" data-motivo-desc="${m.motivo_descricao}" title="Excluir motivo">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
       </div>
     </div>`;
 }
@@ -410,6 +455,19 @@ function _bindMotivosActions(motivosArr) {
         item?.outerHTML; // substitui
         item.outerHTML = _renderMotivoItem(motivo);
       }
+    }
+
+    // ── Excluir motivo ──
+    if (action === 'mp-delete') {
+      const desc = btn.dataset.motivoDesc;
+      if (!confirm(`Excluir o motivo "${desc}"? Esta ação não pode ser desfeita.`)) return;
+      const { error } = await MotivosPerdas.delete(mid);
+      if (error) { alert('Erro: ' + error.message); return; }
+      const item = document.getElementById(`mp-item-${mid}`);
+      item?.remove();
+      motivosArr.splice(motivosArr.findIndex(m => m.motivo_id === mid), 1);
+      const listEl2 = document.getElementById('mp-list');
+      if (listEl2 && !motivosArr.length) listEl2.innerHTML = `<div class="mp-empty">Nenhum motivo cadastrado ainda.</div>`;
     }
   });
 
@@ -792,6 +850,7 @@ function _bindEvents() {
       document.getElementById(`section-${section}`)?.classList.add('active');
       if (section === 'funil') _loadFunil();
       if (section === 'motivos-perda') _loadMotivos();
+      if (section === 'usuarios') _loadUsuarios();
     });
   });
 
@@ -1028,4 +1087,188 @@ function _showFeedback(type, msg) {
 function _clearFeedback() {
   const el = document.getElementById('nu-feedback');
   if (el) el.innerHTML = '';
+}
+
+// ── Seção de Usuários ──────────────────────────────────────────────
+
+function _renderSectionUsuarios() {
+  return `
+    <section class="config-section" id="section-usuarios">
+      <div class="config-section-header">
+        <div class="config-section-icon config-section-icon--admin">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div>
+          <h2 class="config-section-title">Gerenciar Usuários</h2>
+          <p class="config-section-desc">Gerencie informações, cargos e redefina a senha dos usuários do CRM.</p>
+        </div>
+        <span class="config-admin-badge">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Somente Administradores
+        </span>
+      </div>
+
+      <div id="usuarios-loading" class="funil-loading">
+        <div class="funil-spinner"></div>
+        Carregando usuários...
+      </div>
+
+      <div class="config-card" id="usuarios-card" style="display:none">
+        <div class="mp-list" id="usuarios-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+    </section>
+  `;
+}
+
+let _usuariosLoaded = false;
+let _usuariosData = [];
+
+async function _loadUsuarios() {
+  if (_usuariosLoaded) return;
+  _usuariosLoaded = true;
+
+  const loading = document.getElementById('usuarios-loading');
+  const card    = document.getElementById('usuarios-card');
+  const listEl  = document.getElementById('usuarios-list');
+
+  const { data: usuarios, error } = await Usuarios.getAll();
+  if (error) {
+    if (loading) loading.textContent = '❌ Erro ao carregar usuários.';
+    return;
+  }
+  _usuariosData = usuarios || [];
+
+  if (loading) loading.style.display = 'none';
+  if (card)   card.style.display = 'block';
+  if (listEl) listEl.innerHTML = _renderUsuariosList(_usuariosData);
+
+  _bindUsuariosActions();
+}
+
+function _renderUsuariosList(usuarios) {
+  if (!usuarios.length) return `<div class="mp-empty">Nenhum usuário cadastrado.</div>`;
+  
+  return usuarios.map(u => `
+    <div class="mp-item" style="display:flex; align-items:center; justify-content:space-between;" data-user-id="${u.user_id}">
+      <div class="mp-item-left" style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+        <span class="mp-item-desc" style="font-weight:600;">${u.user_nome}</span>
+        <span style="font-size:12px; color:var(--text-sec);">${u.user_email} • ${u.user_cargo}</span>
+      </div>
+      <div class="mp-item-actions">
+        <button class="funil-action-btn" data-action="user-edit" data-user-id="${u.user_id}" title="Editar informações">
+          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="funil-action-btn" data-action="user-reset-pwd" data-user-email="${u.user_email}" title="Enviar link de redefinição de senha">
+          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </button>
+        <button class="funil-action-btn funil-action-btn--del" data-action="user-delete" data-user-id="${u.user_id}" data-user-nome="${u.user_nome}" title="Excluir usuário">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function _bindUsuariosActions() {
+  const listEl = document.getElementById('usuarios-list');
+  const modal = document.getElementById('edit-user-modal');
+  const cancelBtn = document.getElementById('btn-edit-user-cancel');
+  const form = document.getElementById('edit-user-form');
+
+  listEl?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    
+    if (action === 'user-edit') {
+      const userId = btn.dataset.userId;
+      const user = _usuariosData.find(u => u.user_id === userId);
+      if (!user) return;
+      
+      document.getElementById('edit-user-id').value = user.user_id;
+      document.getElementById('edit-user-nome').value = user.user_nome;
+      document.getElementById('edit-user-email').value = user.user_email;
+      document.getElementById('edit-user-telefone').value = user.user_telefone || '';
+      document.getElementById('edit-user-cargo').value = user.user_cargo;
+      
+      modal.classList.add('active');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    if (action === 'user-reset-pwd') {
+      const email = btn.dataset.userEmail;
+      if (confirm(`Enviar link de redefinição de senha para ${email}?`)) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + '/redefinir-senha.html'
+        });
+        if (error) {
+          alert('Erro ao enviar e-mail: ' + error.message);
+        } else {
+          alert('Link de redefinição enviado com sucesso!');
+        }
+      }
+    }
+
+    if (action === 'user-delete') {
+      const userId = btn.dataset.userId;
+      const nome   = btn.dataset.userNome;
+      if (!confirm(`Excluir o usuário "${nome}"? Esta ação não pode ser desfeita.`)) return;
+
+      const { error } = await Usuarios.deletar(userId);
+      if (error) {
+        alert('Erro ao excluir usuário: ' + error.message);
+        return;
+      }
+
+      _usuariosData = _usuariosData.filter(u => u.user_id !== userId);
+      const listEl = document.getElementById('usuarios-list');
+      if (listEl) listEl.innerHTML = _renderUsuariosList(_usuariosData);
+    }
+  });
+
+  cancelBtn?.addEventListener('click', () => {
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+  });
+
+  form?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const userId = document.getElementById('edit-user-id').value;
+    const nome = document.getElementById('edit-user-nome').value.trim();
+    const email = document.getElementById('edit-user-email').value.trim();
+    const telefone = document.getElementById('edit-user-telefone').value.trim();
+    const cargo = document.getElementById('edit-user-cargo').value;
+
+    const submitBtn = document.getElementById('btn-edit-user-save');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Salvando...';
+
+    const { error } = await Usuarios.atualizar(userId, {
+      user_nome: nome,
+      user_email: email,
+      user_telefone: telefone,
+      user_cargo: cargo
+    });
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Salvar';
+
+    if (error) {
+      alert('Erro ao atualizar usuário: ' + error.message);
+      return;
+    }
+
+    const idx = _usuariosData.findIndex(u => u.user_id === userId);
+    if (idx !== -1) {
+      _usuariosData[idx].user_nome = nome;
+      _usuariosData[idx].user_email = email;
+      _usuariosData[idx].user_telefone = telefone;
+      _usuariosData[idx].user_cargo = cargo;
+    }
+
+    if (listEl) listEl.innerHTML = _renderUsuariosList(_usuariosData);
+    
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+  });
 }
