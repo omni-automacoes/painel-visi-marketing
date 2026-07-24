@@ -46,39 +46,42 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  overflow: hidden;
-  /* scroll horizontal */
+  /* scroll horizontal e vertical */
   overflow-x: auto;
-  scrollbar-width: thin;
+  overflow-y: auto;
+  max-height: calc(100vh - 220px);
+}
+.pipeline-list-wrap, .kanban-scroll {
+  scrollbar-width: auto; /* changed from thin to make it easier to grab */
   scrollbar-color: rgba(0, 0, 0, 0.25) rgba(0, 0, 0, 0.03);
 }
-[data-theme="dark"] .pipeline-list-wrap {
+[data-theme="dark"] .pipeline-list-wrap, [data-theme="dark"] .kanban-scroll {
   scrollbar-color: rgba(255, 255, 255, 0.25) rgba(255, 255, 255, 0.03);
 }
-.pipeline-list-wrap::-webkit-scrollbar {
-  height: 10px;
+.pipeline-list-wrap::-webkit-scrollbar, .kanban-scroll::-webkit-scrollbar {
+  height: 12px;
 }
-.pipeline-list-wrap::-webkit-scrollbar-track {
+.pipeline-list-wrap::-webkit-scrollbar-track, .kanban-scroll::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.03);
-  border-radius: 5px;
+  border-radius: 6px;
 }
-.pipeline-list-wrap::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 5px;
+.pipeline-list-wrap::-webkit-scrollbar-thumb, .kanban-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.pipeline-list-wrap::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.35);
+.pipeline-list-wrap::-webkit-scrollbar-thumb:hover, .kanban-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
 }
-[data-theme="dark"] .pipeline-list-wrap::-webkit-scrollbar-track {
+[data-theme="dark"] .pipeline-list-wrap::-webkit-scrollbar-track, [data-theme="dark"] .kanban-scroll::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.03);
 }
-[data-theme="dark"] .pipeline-list-wrap::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+[data-theme="dark"] .pipeline-list-wrap::-webkit-scrollbar-thumb, [data-theme="dark"] .kanban-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
 }
-[data-theme="dark"] .pipeline-list-wrap::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+[data-theme="dark"] .pipeline-list-wrap::-webkit-scrollbar-thumb:hover, [data-theme="dark"] .kanban-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .pipeline-list-table {
@@ -91,6 +94,12 @@
 /* Header */
 .pipeline-list-table thead tr {
   border-bottom: 1px solid var(--border-light);
+  background: var(--bg);
+}
+.pipeline-list-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   background: var(--bg);
 }
 .pipeline-list-table th {
@@ -139,14 +148,15 @@
 .col-sticky {
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 4;
   background: var(--white);
   box-shadow: 2px 0 8px rgba(0,0,0,0.06);
 }
 .pipeline-list-table thead th.col-titulo {
   position: sticky;
+  top: 0;
   left: 0;
-  z-index: 3;
+  z-index: 5;
   background: var(--bg);
   box-shadow: 2px 0 8px rgba(0,0,0,0.06);
 }
@@ -617,7 +627,12 @@
 
 
 /* ---- KANBAN BOARD ---- */
-.kanban-scroll { overflow-x: auto; padding-bottom: 8px; }
+.kanban-scroll { 
+  overflow-x: auto; 
+  overflow-y: auto; 
+  max-height: calc(100vh - 220px); 
+  padding-bottom: 12px; 
+}
 
 .kanban-board {
   display: grid;
@@ -639,6 +654,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .kanban-col-title { font-size: 13px; font-weight: 700; color: var(--black); }

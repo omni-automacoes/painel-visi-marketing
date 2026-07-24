@@ -10,6 +10,7 @@
 
 import UserStore from '../js/userStore.js';
 import { supabase } from '../js/supabase.js';
+import { DiaFinalizado, Usuarios } from '../js/db.js';
 
 // ─── Estado local ───────────────────────────────────────────
 let _tabAtual              = 'comercial'; // 'comercial' | 'operacoes' | 'master'
@@ -493,6 +494,35 @@ function _htmlSectionComercial() {
       <!-- Grupo: Pipeline & Tempo -->
       <div class="rel-metric-group-label">Pipeline & Tempo de Ciclo</div>
       ${row3}
+
+      <!-- Grupo: Atividade (Equipe) -->
+      <div class="rel-metric-group-label">Atividade Diária (Equipe)</div>
+      <div class="card card-light" id="rel-atividade-card" style="margin-bottom: 20px;">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="card-title" style="font-size:14px; font-weight:700;">Métricas de Contato</div>
+            <div class="card-subtitle" style="font-size:12px; color:var(--text-secondary);">Acompanhamento por membro</div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <select class="form-input form-select" id="rel-atividade-vendedor" style="width:140px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
+              <option value="">Carregando...</option>
+            </select>
+            <input type="date" class="form-input" id="rel-atividade-inicio" value="${_hoje()}" style="width:115px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
+            <input type="date" class="form-input" id="rel-atividade-fim" value="${_hoje()}" style="width:115px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
+          </div>
+        </div>
+        <div style="display:flex; gap: 30px; align-items:center; justify-content:center; padding: 24px 0;">
+          <div style="text-align:center;">
+            <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="rel-atividade-contatos">0</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Contatos Realizados</div>
+          </div>
+          <div style="width:1px; background:var(--border-light); height:50px;"></div>
+          <div style="text-align:center;">
+            <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="rel-atividade-prospecao">0</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Prospecções</div>
+          </div>
+        </div>
+      </div>
 
       <!-- Grupo: Análise Detalhada -->
       <div class="rel-metric-group-label">Análise Detalhada</div>
@@ -1284,6 +1314,393 @@ function _bindInvestimentoEvents() {
  * @param {string} inicio  'YYYY-MM-DD'
  * @param {string} fim     'YYYY-MM-DD'
  */
+async function _carregarMRR() {
+  const cardEl = document.getElementById('rel-mrr');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+
+  if (valueEl) valueEl.textContent = 'R$ …';
+
+  try {
+    const { data: clientes, error } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade')
+      .eq('cliente_status', 'Ativado');
+
+    if (error) throw error;
+
+    let totalMrr = 0;
+    const qtdAtivos = clientes ? clientes.length : 0;
+    
+    if (clientes && qtdAtivos > 0) {
+      totalMrr = clientes.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0);
+    }
+
+    if (valueEl) {
+      valueEl.textContent = `R$ ${_formatarBRL(totalMrr)}`;
+    }
+    if (subEl) {
+      subEl.textContent = `Soma de ${qtdAtivos} mensalidade${qtdAtivos !== 1 ? 's' : ''} ativa${qtdAtivos !== 1 ? 's' : ''}`;
+    }
+    if (trendEl) {
+      trendEl.textContent = 'Tempo real';
+      trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu';
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar MRR:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Receita Total por Cliente ────────────────────────────────────────────────
+/**
+ * Fórmula: MRR ÷ total de clientes com cliente_status = 'Ativado'
+ */
+async function _carregarReceitaCliente() {
+  const cardEl  = document.getElementById('rel-receita-cliente');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = 'R$ …';
+
+  try {
+    const { data: clientes, error } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade')
+      .eq('cliente_status', 'Ativado');
+
+    if (error) throw error;
+
+    const qtd = clientes?.length ?? 0;
+    const mrr = clientes?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
+    const media = qtd > 0 ? mrr / qtd : 0;
+
+    if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(media)}`;
+    if (subEl)   subEl.textContent   = `MRR R$ ${_formatarBRL(mrr)} ÷ ${qtd} cliente${qtd !== 1 ? 's' : ''} ativo${qtd !== 1 ? 's' : ''}`;
+    if (trendEl) { trendEl.textContent = `${qtd} ativos`; trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu'; }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Receita por Cliente:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Revenue Churn (Financial) ────────────────────────────────────────────────
+/**
+ * Fórmula: Soma de receita_perdida dos clientes que deram churn no período
+ * (data_churn BETWEEN inicio AND fim)
+ */
+async function _carregarRevenueChurn(inicio, fim) {
+  const cardEl  = document.getElementById('rel-revenue-churn');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = 'R$ …';
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    const { data: churns, error } = await supabase
+      .from('clientes')
+      .select('receita_perdida')
+      .eq('cliente_churn', true)
+      .gte('data_churn', inicioISO)
+      .lte('data_churn', fimISO);
+
+    if (error) throw error;
+
+    const qtdChurn = churns?.length ?? 0;
+    const totalPerdido = churns?.reduce((acc, c) => acc + Number(c.receita_perdida || 0), 0) ?? 0;
+
+    if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(totalPerdido)}`;
+    if (subEl)   subEl.textContent   = `${qtdChurn} cancelamento${qtdChurn !== 1 ? 's' : ''} no período`;
+    if (trendEl) {
+      trendEl.textContent  = totalPerdido > 0 ? 'Atenção' : 'Nenhum churn';
+      trendEl.className    = `rel-kpi-trend rel-kpi-trend--${totalPerdido > 0 ? 'down' : 'up'}`;
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Revenue Churn:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Quick Ratio ─────────────────────────────────────────────────────────────
+/**
+ * Fórmula: MRR de novos clientes do período ÷ receita_perdida do período
+ * Mede: cada R$1 perdido em churn, quantos R$ novos entraram
+ * Meta: > 4×
+ */
+async function _carregarQuickRatio(inicio, fim) {
+  const cardEl  = document.getElementById('rel-quick-ratio');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = '…×';
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    // Novos clientes no período → soma de mensalidade
+    const { data: novos, error: novosErr } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade')
+      .gte('criado_em', inicioISO)
+      .lte('criado_em', fimISO);
+
+    if (novosErr) throw novosErr;
+
+    // Churns no período → soma de receita_perdida
+    const { data: churns, error: churnsErr } = await supabase
+      .from('clientes')
+      .select('receita_perdida')
+      .eq('cliente_churn', true)
+      .gte('data_churn', inicioISO)
+      .lte('data_churn', fimISO);
+
+    if (churnsErr) throw churnsErr;
+
+    const mrrNovos    = novos?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
+    const perdaChurn  = churns?.reduce((acc, c) => acc + Number(c.receita_perdida || 0), 0) ?? 0;
+
+    if (perdaChurn === 0) {
+      if (valueEl) valueEl.textContent = mrrNovos > 0 ? '∞×' : '—×';
+      if (subEl)   subEl.textContent   = mrrNovos > 0
+        ? `R$ ${_formatarBRL(mrrNovos)} novos · Sem churn no período`
+        : 'Sem novos clientes nem churn no período';
+      if (trendEl) { trendEl.textContent = 'Sem churn'; trendEl.className = 'rel-kpi-trend rel-kpi-trend--up'; }
+    } else {
+      const ratio = mrrNovos / perdaChurn;
+      const ratioStr = ratio.toFixed(1).replace('.', ',');
+      if (valueEl) valueEl.textContent = `${ratioStr}×`;
+      if (subEl)   subEl.textContent   = `R$ ${_formatarBRL(mrrNovos)} novo ÷ R$ ${_formatarBRL(perdaChurn)} perdido`;
+      const ok = ratio >= 4;
+      if (trendEl) {
+        trendEl.textContent = ok ? '✅ Meta atingida (>4×)' : '⚠️ Abaixo da meta';
+        trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+      }
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Quick Ratio:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Faturamento por Colaborador ──────────────────────────────────────────────
+/**
+ * Fórmula: MRR ÷ número de usuários cadastrados no sistema
+ */
+async function _carregarFaturamentoColaborador() {
+  const cardEl  = document.getElementById('rel-fat-colaborador');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = 'R$ …';
+
+  try {
+    // MRR total
+    const { data: clientes, error: cliErr } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade')
+      .eq('cliente_status', 'Ativado');
+
+    if (cliErr) throw cliErr;
+
+    // Total de colaboradores (usuários cadastrados)
+    const { count: totalUsuarios, error: usuErr } = await supabase
+      .from('usuarios')
+      .select('user_id', { count: 'exact', head: true });
+
+    if (usuErr) throw usuErr;
+
+    const mrr  = clientes?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
+    const qtd  = totalUsuarios ?? 0;
+    const fat  = qtd > 0 ? mrr / qtd : 0;
+
+    if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(fat)}`;
+    if (subEl)   subEl.textContent   = `MRR R$ ${_formatarBRL(mrr)} ÷ ${qtd} colaborador${qtd !== 1 ? 'es' : ''}`;
+    if (trendEl) { trendEl.textContent = `${qtd} colaborador${qtd !== 1 ? 'es' : ''}`; trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu'; }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Faturamento por Colaborador:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── EBITDA Aproximado ────────────────────────────────────────────────────────
+/**
+ * Fórmula: MRR − Σ investimento_midia de todos os clientes ativos
+ * (Aproximação: receita recorrente menos o total investido em mídia dos clientes)
+ */
+async function _carregarEbitda() {
+  const cardEl  = document.getElementById('rel-ebitda');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = 'R$ …';
+
+  try {
+    const { data: clientes, error } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade, investimento_midia')
+      .eq('cliente_status', 'Ativado');
+
+    if (error) throw error;
+
+    const mrr              = clientes?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
+    const totalInvestMidia = clientes?.reduce((acc, c) => acc + Number(c.investimento_midia  || 0), 0) ?? 0;
+    const ebitda           = mrr - totalInvestMidia;
+    const margem           = mrr > 0 ? ((ebitda / mrr) * 100).toFixed(1).replace('.', ',') : '0,0';
+
+    if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(ebitda)}`;
+    if (subEl)   subEl.textContent   = `MRR R$ ${_formatarBRL(mrr)} − Mídia R$ ${_formatarBRL(totalInvestMidia)} · Margem ${margem}%`;
+    if (trendEl) {
+      trendEl.textContent = ebitda >= 0 ? `${margem}% margem` : 'Negativo';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ebitda >= 0 ? 'up' : 'down'}`;
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar EBITDA:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Taxa de Churn de Clientes ────────────────────────────────────────────────
+/**
+ * Fórmula: (clientes com data_churn no período ÷ base de clientes no início do período) × 100
+ */
+async function _carregarChurnClientes(inicio, fim) {
+  const cardEl  = document.getElementById('rel-churn-clientes');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = '…%';
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    // Churns no período
+    const { count: qtdChurn, error: churnErr } = await supabase
+      .from('clientes')
+      .select('cliente_id', { count: 'exact', head: true })
+      .eq('cliente_churn', true)
+      .gte('data_churn', inicioISO)
+      .lte('data_churn', fimISO);
+
+    if (churnErr) throw churnErr;
+
+    // Base de clientes no início do período (criado_em <= inicio)
+    const { count: baseInicio, error: baseErr } = await supabase
+      .from('clientes')
+      .select('cliente_id', { count: 'exact', head: true })
+      .lte('criado_em', inicioISO);
+
+    if (baseErr) throw baseErr;
+
+    const churns = qtdChurn ?? 0;
+    const base   = baseInicio ?? 0;
+    const taxa   = base > 0 ? ((churns / base) * 100) : 0;
+    const taxaStr = taxa.toFixed(1).replace('.', ',');
+
+    if (valueEl) valueEl.textContent = `${taxaStr}%`;
+    if (subEl)   subEl.textContent   = `${churns} cancelamento${churns !== 1 ? 's' : ''} ÷ ${base} clientes na base inicial`;
+    if (trendEl) {
+      const ok = taxa < 3;
+      trendEl.textContent = ok ? '✅ Abaixo de 3%' : taxa < 5 ? '⚠️ Atenção' : '🔴 Crítico';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Churn de Clientes:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── CAC Payback Period ───────────────────────────────────────────────────────
+/**
+ * Fórmula: CAC ÷ (MRR médio por cliente)
+ * = investimento_marketing ÷ novos_clientes ÷ (mrr_total ÷ ativos)
+ * Resultado em meses
+ */
+async function _carregarCacPayback(inicio, fim) {
+  const cardEl  = document.getElementById('rel-cac-payback');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+  if (valueEl) valueEl.textContent = '…';
+
+  try {
+    const userId = UserStore.getUserId();
+
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    // Investimento marketing
+    let investimento = 0;
+    if (userId) {
+      const { data: uData } = await supabase
+        .from('usuarios')
+        .select('investimento_marketing')
+        .eq('user_id', userId)
+        .single();
+      investimento = Number(uData?.investimento_marketing ?? 0);
+    }
+
+    // Novos clientes no período
+    const { count: novos, error: novosErr } = await supabase
+      .from('clientes')
+      .select('cliente_id', { count: 'exact', head: true })
+      .gte('criado_em', inicioISO)
+      .lte('criado_em', fimISO);
+
+    if (novosErr) throw novosErr;
+
+    // MRR médio
+    const { data: ativos, error: ativosErr } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade')
+      .eq('cliente_status', 'Ativado');
+
+    if (ativosErr) throw ativosErr;
+
+    const qtdAtivos = ativos?.length ?? 0;
+    const mrr       = ativos?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
+    const mrrMedio  = qtdAtivos > 0 ? mrr / qtdAtivos : 0;
+    const qtdNovos  = novos ?? 0;
+    const cac       = qtdNovos > 0 && investimento > 0 ? investimento / qtdNovos : 0;
+    const payback   = mrrMedio > 0 && cac > 0 ? cac / mrrMedio : null;
+
+    if (payback === null) {
+      if (valueEl) valueEl.textContent = '— meses';
+      if (subEl)   subEl.textContent   = investimento === 0
+        ? 'Registre o Investimento em Marketing para calcular'
+        : qtdNovos === 0
+          ? 'Sem novos clientes no período'
+          : 'MRR médio zerado';
+      if (trendEl) { trendEl.textContent = 'Dados insuficientes'; trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu'; }
+    } else {
+      const paybackStr = payback.toFixed(1).replace('.', ',');
+      if (valueEl) valueEl.textContent = `${paybackStr} meses`;
+      if (subEl)   subEl.textContent   = `CAC R$ ${_formatarBRL(cac)} ÷ MRR médio R$ ${_formatarBRL(mrrMedio)}`;
+      const ok = payback < 12;
+      if (trendEl) {
+        trendEl.textContent = ok ? '✅ Abaixo de 12 meses' : '⚠️ Acima da meta';
+        trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+      }
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar CAC Payback:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
 async function _carregarCAC(inicio, fim) {
   const cardEl = document.getElementById('rel-cac');
   const valueEl = cardEl?.querySelector('.rel-kpi-value');
@@ -3051,6 +3468,14 @@ function _aplicarPeriodo(inicio, fim, label = null) {
   console.log('[Relatórios] Período aplicado:', _dataInicio, '→', _dataFim);
 
   // ── Métricas filtradas por período ──
+  _carregarMRR();
+  _carregarReceitaCliente();
+  _carregarEbitda();
+  _carregarFaturamentoColaborador();
+  _carregarRevenueChurn(_dataInicio, _dataFim);
+  _carregarQuickRatio(_dataInicio, _dataFim);
+  _carregarChurnClientes(_dataInicio, _dataFim);
+  _carregarCacPayback(_dataInicio, _dataFim);
   _carregarCAC(_dataInicio, _dataFim);
   _carregarCPQ(_dataInicio, _dataFim);
   _carregarTicketMedio(_dataInicio, _dataFim);
@@ -3218,6 +3643,45 @@ function _handleClickFora(e) {
   }
 }
 
+async function _carregarAtividadeAdmin(vendedorId, dataInicio, dataFim) {
+  const elContatos = document.getElementById('rel-atividade-contatos');
+  const elProps    = document.getElementById('rel-atividade-prospecao');
+
+  if (!vendedorId || !dataInicio || !dataFim) {
+    if (elContatos) elContatos.textContent = '—';
+    if (elProps)    elProps.textContent    = '—';
+    return;
+  }
+
+  const res = await DiaFinalizado.getEstatisticasCustom(vendedorId, dataInicio, dataFim);
+  if (res && !res.error) {
+    if (elContatos) elContatos.textContent = res.contatos || 0;
+    if (elProps)    elProps.textContent    = res.prospeccoes || 0;
+  }
+}
+
+function _bindAtividadeAdminEvents() {
+  const selVendedor = document.getElementById('rel-atividade-vendedor');
+  const inputInicio = document.getElementById('rel-atividade-inicio');
+  const inputFim    = document.getElementById('rel-atividade-fim');
+
+  if (!selVendedor || !inputInicio || !inputFim) return;
+
+  const update = () => _carregarAtividadeAdmin(selVendedor.value, inputInicio.value, inputFim.value);
+  
+  selVendedor.addEventListener('change', update);
+  inputInicio.addEventListener('change', update);
+  inputFim.addEventListener('change', update);
+
+  Usuarios.getVendedoresAtivos().then(res => {
+    if (res.error || !res.data) return;
+    selVendedor.innerHTML = res.data.map(v => `<option value="${v.user_id}">${v.user_nome}</option>`).join('');
+    if (res.data.length > 0) {
+      update();
+    }
+  });
+}
+
 // ─── Módulo da página ────────────────────────────────────────
 
 export default {
@@ -3234,6 +3698,7 @@ export default {
     _bindTabEvents();
     _bindPeriodEvents();
     _bindInvestimentoEvents();
+    _bindAtividadeAdminEvents();
     // Carregar valor de investimento salvo primeiro
     await _carregarInvestimento();
     // Aplicar período padrão ao montar (dispara _carregarCAC e demais métricas)

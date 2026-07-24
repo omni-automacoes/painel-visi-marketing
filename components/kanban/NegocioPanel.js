@@ -207,7 +207,16 @@ export default class NegocioPanel {
               <span class="np-sb-label">Segmento</span>
               <span class="np-sb-value">${neg.negocio_segmento}</span>
             </div>` : ''}
-            ${!neg.negocio_telefone && !neg.negocio_email && !neg.negocio_origem && !neg.negocio_segmento
+            ${neg.link_instagram ? `
+            <div class="np-sb-item">
+              <span class="np-sb-label">Instagram</span>
+              <span class="np-sb-value">
+                ${neg.link_instagram.startsWith('http') 
+                  ? `<a href="${neg.link_instagram}" target="_blank" style="color:var(--cyan);text-decoration:none;">Acessar Link</a>` 
+                  : neg.link_instagram}
+              </span>
+            </div>` : ''}
+            ${!neg.negocio_telefone && !neg.negocio_email && !neg.negocio_origem && !neg.negocio_segmento && !neg.link_instagram
               ? '<p class="np-sb-empty">Sem informações de contato.</p>' : ''}
           </div>
 

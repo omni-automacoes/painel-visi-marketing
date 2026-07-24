@@ -123,6 +123,13 @@ export default class NewOppModal {
               </div>
             </div>
 
+            <!-- Link do Instagram -->
+            <div class="form-field">
+              <label class="form-label" for="opp-instagram">Link do Instagram</label>
+              <input class="form-input" id="opp-instagram" name="link_instagram"
+                     type="text" placeholder="Ex: @perfil ou link">
+            </div>
+
             <!-- Valor do Negócio + Faturamento do Cliente -->
             <div class="form-row">
               <div class="form-field">
@@ -224,12 +231,14 @@ export default class NewOppModal {
     const email      = form.negocio_email?.value.trim();
     const origem     = form.negocio_origem?.value.trim();
     const segmento   = form.negocio_segmento?.value.trim();
+    const instagram  = form.link_instagram?.value.trim();
 
     if (etapaId)  payload.etapa_id             = etapaId;
     if (telefone) payload.negocio_telefone      = telefone;
     if (email)    payload.negocio_email         = email;
     if (origem)   payload.negocio_origem        = origem;
     if (segmento) payload.negocio_segmento      = segmento;
+    if (instagram) payload.link_instagram       = instagram;
 
     // Valor do Negócio: converte "1.500,00" → 1500.00
     const valStr = (form.negocio_valor?.value || '').trim().replace(/\./g, '').replace(',', '.');

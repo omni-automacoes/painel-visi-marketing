@@ -25,6 +25,10 @@ let _vendedores   = [];
 let _membroAtual  = '';   // '' = todos
 let _dataAtual    = '';   // yyyy-mm-dd
 
+// Ordem de prioridade (menor índice = mais urgente)
+const PRIORIDADE_ORDEM = { 'Urgente': 0, 'Alta': 1, 'Normal': 2, 'Baixa': 3 };
+const PRIORIDADE_OPCOES = ['Urgente', 'Alta', 'Normal', 'Baixa'];
+
 // Estado de expansão das seções (persistido entre re-renders)
 let _sectionExpanded = {
   'pend-hoje':    true,   // Pendentes · Hoje (aberto por padrão)
@@ -83,6 +87,10 @@ function _htmlSection(id, label, tarefas, sortMode) {
   let sorted = [...tarefas];
   if (sortMode === 'venc-asc') {
     sorted.sort((a, b) => {
+      // Primeiro por prioridade, depois por vencimento
+      const pa = PRIORIDADE_ORDEM[a.tarefa_prioridade] ?? 2;
+      const pb = PRIORIDADE_ORDEM[b.tarefa_prioridade] ?? 2;
+      if (pa !== pb) return pa - pb;
       if (!a.tarefa_vencimento && !b.tarefa_vencimento) return 0;
       if (!a.tarefa_vencimento) return 1;
       if (!b.tarefa_vencimento) return -1;
@@ -298,6 +306,38 @@ function _badgeStatus(tarefa) {
   return `<span class="tf-badge tf-badge--open">Pendente</span>`;
 }
 
+function _badgePrioridade(t) {
+  const p = t.tarefa_prioridade || 'Normal';
+  const classes = {
+    'Urgente': 'tf-prior--urgente',
+    'Alta':    'tf-prior--alta',
+    'Normal':  'tf-prior--normal',
+    'Baixa':   'tf-prior--baixa',
+  };
+  const icons = {
+    'Urgente': '<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    'Alta':    '<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>',
+    'Normal':  '<svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    'Baixa':   '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>',
+  };
+  const cls = classes[p] || classes['Normal'];
+  const icon = icons[p] || icons['Normal'];
+  const opts = PRIORIDADE_OPCOES.map(op =>
+    `<button class="tf-prior-opt ${op === p ? 'active' : ''}" data-prior="${op}" data-tarefa-id="${t.tarefa_id}">${op}</button>`
+  ).join('');
+  return `
+    <div class="tf-prior-wrap">
+      <span class="tf-prior-badge ${cls}" data-tarefa-id="${t.tarefa_id}" title="Alterar prioridade">
+        ${icon}${p}
+        <svg class="tf-prior-caret" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </span>
+      <div class="tf-prior-dropdown" data-tarefa-id="${t.tarefa_id}">
+        ${opts}
+      </div>
+    </div>
+  `;
+}
+
 function _htmlTarefaItem(t) {
   const concluida  = t.tarefa_status;
   const atrasada   = _isAtrasada(t);
@@ -328,14 +368,14 @@ function _htmlTarefaItem(t) {
       tempoHTML = `
         <div class="tf-timing tf-timing--running">
           <span class="tf-timing-dot"></span>
-          Em andamento • <strong id="tf-timer-${t.tarefa_id}">${_formatarTempo(ms)}</strong>
+          Em andamento ▸ <strong id="tf-timer-${t.tarefa_id}">${_formatarTempo(ms)}</strong>
         </div>`;
     } else if (acumulado > 0) {
       // Pausado
       tempoHTML = `
         <div class="tf-timing tf-timing--paused">
           <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-          Pausado • <strong>${_formatarTempo(acumulado)}</strong>
+          Pausado ▸ <strong>${_formatarTempo(acumulado)}</strong>
         </div>`;
     }
   }
@@ -376,8 +416,11 @@ function _htmlTarefaItem(t) {
 
       <div class="tf-item-body">
         <div class="tf-item-header">
-          <span class="tf-item-titulo">${t.tarefa_titulo || 'Sem título'}</span>
+          <span class="tf-item-titulo tf-titulo-editavel"
+                data-tarefa-id="${t.tarefa_id}"
+                title="Clique para editar o título">${t.tarefa_titulo || 'Sem título'}</span>
           ${_badgeStatus(t)}
+          ${!concluida ? _badgePrioridade(t) : ''}
         </div>
         ${descricao ? `<p class="tf-item-desc">${descricao}</p>` : ''}
         ${tempoHTML}
@@ -385,17 +428,17 @@ function _htmlTarefaItem(t) {
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span>Vencimento: ${_formatarData(t.tarefa_vencimento)}</span>
           ${t.data_conclusao ? `
-            <span class="tf-item-negocio-sep">·</span>
+            <span class="tf-item-negocio-sep">•</span>
             <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <span>Conclusão: ${_formatarData(t.data_conclusao)}</span>
           ` : ''}
           ${t.usuarios?.user_nome ? `
-            <span class="tf-item-negocio-sep">·</span>
+            <span class="tf-item-negocio-sep">•</span>
             <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span>Responsável: <strong>${t.usuarios.user_nome}</strong></span>
           ` : ''}
           ${t.negocio_id ? `
-            <span class="tf-item-negocio-sep">·</span>
+            <span class="tf-item-negocio-sep">•</span>
             <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
             <span>Negócio #${t.negocio_id}</span>
           ` : ''}
@@ -736,6 +779,96 @@ function _bindEvents() {
       _atualizarLista();
     }
   });
+
+  // ─ Edição de Prioridade ─
+  document.getElementById('tf-list-area')?.addEventListener('click', async e => {
+    // Clique no badge de prioridade → abre/fecha dropdown
+    const badgeEl = e.target.closest('.tf-prior-badge');
+    if (badgeEl) {
+      e.stopPropagation();
+      const tarefaId = badgeEl.dataset.tarefaId;
+      const dropdown = document.querySelector(`.tf-prior-dropdown[data-tarefa-id="${tarefaId}"]`);
+      // Fecha outros dropdowns abertos
+      document.querySelectorAll('.tf-prior-dropdown.open').forEach(d => {
+        if (d !== dropdown) {
+          d.classList.remove('open');
+          const pItem = d.closest('.tf-item');
+          if (pItem) pItem.style.zIndex = '';
+        }
+      });
+      const isOpen = dropdown?.classList.toggle('open');
+      const itemEl = dropdown?.closest('.tf-item');
+      if (itemEl) {
+        itemEl.style.zIndex = isOpen ? '999' : '';
+        itemEl.style.position = isOpen ? 'relative' : '';
+      }
+      return;
+    }
+
+    // Clique em uma opção de prioridade
+    const optEl = e.target.closest('.tf-prior-opt');
+    if (optEl) {
+      e.stopPropagation();
+      const novaPrioridade = optEl.dataset.prior;
+      const tarefaId = Number(optEl.dataset.tarefaId);
+      const idx = _tarefas.findIndex(t => t.tarefa_id === tarefaId);
+      if (idx !== -1) {
+        _tarefas[idx] = { ..._tarefas[idx], tarefa_prioridade: novaPrioridade };
+        _atualizarLista();
+        await Tarefas.atualizarPrioridade(tarefaId, novaPrioridade);
+      }
+      return;
+    }
+  }, true); // capture phase para garantir ordem
+
+  // Fecha dropdowns ao clicar fora
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.tf-prior-dropdown.open').forEach(d => {
+      d.classList.remove('open');
+      const itemEl = d.closest('.tf-item');
+      if (itemEl) itemEl.style.zIndex = '';
+    });
+  });
+
+  // ─ Edição inline do Título ─
+  document.getElementById('tf-list-area')?.addEventListener('click', e => {
+    const tituloEl = e.target.closest('.tf-titulo-editavel');
+    if (!tituloEl) return;
+    if (tituloEl.querySelector('input')) return; // já está editando
+
+    const tarefaId = Number(tituloEl.dataset.tarefaId);
+    const tituloAtual = tituloEl.textContent.trim();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = tituloAtual;
+    input.className = 'tf-titulo-input';
+
+    tituloEl.textContent = '';
+    tituloEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    const salvar = async () => {
+      const novoTitulo = input.value.trim();
+      if (!novoTitulo || novoTitulo === tituloAtual) {
+        tituloEl.textContent = tituloAtual;
+        return;
+      }
+      const idx = _tarefas.findIndex(t => t.tarefa_id === tarefaId);
+      if (idx !== -1) {
+        _tarefas[idx] = { ..._tarefas[idx], tarefa_titulo: novoTitulo };
+        tituloEl.textContent = novoTitulo;
+        await Tarefas.atualizarTitulo(tarefaId, novoTitulo);
+      }
+    };
+
+    input.addEventListener('keydown', async e => {
+      if (e.key === 'Enter') { e.preventDefault(); await salvar(); }
+      if (e.key === 'Escape') { tituloEl.textContent = tituloAtual; }
+    });
+    input.addEventListener('blur', salvar);
+  });
 }
 
 function _bindEventsList() {
@@ -912,6 +1045,7 @@ function _bindNewTaskModal() {
 
     const descricao  = document.getElementById('tf-inp-desc')?.value.trim() || null;
     const vencimento = document.getElementById('tf-inp-venc')?.value || null;
+    const prioridade = document.getElementById('tf-inp-prioridade')?.value || 'Normal';
     
     let vendedorId = UserStore.getUserId();
     if (UserStore.isAdmin()) {
@@ -950,6 +1084,7 @@ function _bindNewTaskModal() {
         tarefa_vencimento: new Date(iso + 'T12:00:00').toISOString(),
         tarefa_status:     false,
         vendedor_id:       vendedorId,
+        tarefa_prioridade: prioridade,
         negocio_id:        null,
       }));
 
@@ -963,6 +1098,7 @@ function _bindNewTaskModal() {
         tarefa_vencimento: vencimento ? new Date(vencimento).toISOString() : null,
         tarefa_status:     false,
         vendedor_id:       vendedorId,
+        tarefa_prioridade: prioridade,
         negocio_id:        null,
       };
 
@@ -1146,6 +1282,69 @@ export default {
           background: rgba(100,116,139,.15); color: #94a3b8;
         }
 
+        /* ─ Prioridade ─ */
+        .tf-prior-wrap {
+          position: relative; display: inline-flex; align-items: center;
+        }
+        .tf-prior-badge {
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 3px 8px 3px 6px; border-radius: 20px;
+          font-size: 11px; font-weight: 700; cursor: pointer;
+          border: 1.5px solid transparent; transition: opacity .15s, transform .1s;
+          white-space: nowrap; user-select: none;
+        }
+        .tf-prior-badge:hover { opacity: .85; transform: scale(1.04); }
+        .tf-prior-badge svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 2.5; fill: none; flex-shrink: 0; }
+        .tf-prior-caret { margin-left: 2px; transition: transform .15s; }
+        .tf-prior--urgente { background: rgba(239,68,68,.12); color: #dc2626; border-color: rgba(239,68,68,.3); }
+        .tf-prior--alta    { background: rgba(245,158,11,.12); color: #d97706; border-color: rgba(245,158,11,.3); }
+        .tf-prior--normal  { background: rgba(59,130,246,.10); color: #3B82F6; border-color: rgba(59,130,246,.25); }
+        .tf-prior--baixa   { background: rgba(100,116,139,.1); color: #64748b; border-color: rgba(100,116,139,.25); }
+        .tf-prior-dropdown {
+          position: absolute; top: calc(100% + 6px); left: 0; z-index: 500;
+          background: var(--card-bg, #fff); border: 1.5px solid var(--border-light);
+          border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+          padding: 6px; display: none; flex-direction: column; gap: 3px; min-width: 120px;
+          animation: tf-fade-in .14s ease;
+        }
+        .tf-prior-dropdown.open { display: flex; }
+        .tf-prior-opt {
+          padding: 7px 12px; border-radius: 8px; border: none;
+          font-size: 12px; font-weight: 600; cursor: pointer; text-align: left;
+          background: transparent; font-family: inherit; color: var(--text-primary);
+          transition: background .12s;
+        }
+        .tf-prior-opt:hover { background: var(--bg, #f3f4f6); }
+        .tf-prior-opt.active { background: linear-gradient(135deg, #06B6D4, #3B82F6); color: #fff; }
+        [data-theme="dark"] .tf-prior-dropdown {
+          background: #1e2433; border-color: #334155;
+          box-shadow: 0 8px 24px rgba(0,0,0,.4);
+        }
+        [data-theme="dark"] .tf-prior-opt:hover { background: #2d3548; }
+        [data-theme="dark"] .tf-prior--urgente { background: rgba(239,68,68,.15); color: #f87171; }
+        [data-theme="dark"] .tf-prior--alta    { background: rgba(245,158,11,.15); color: #fbbf24; }
+        [data-theme="dark"] .tf-prior--normal  { background: rgba(59,130,246,.15); color: #60a5fa; }
+        [data-theme="dark"] .tf-prior--baixa   { background: rgba(100,116,139,.15); color: #94a3b8; }
+
+        /* ─ Edição inline de título ─ */
+        .tf-titulo-editavel {
+          cursor: text; border-radius: 6px; padding: 1px 4px; margin-left: -4px;
+          transition: background .15s;
+        }
+        .tf-titulo-editavel:hover { background: rgba(59,130,246,.08); }
+        .tf-titulo-input {
+          border: 1.5px solid #3B82F6; border-radius: 7px;
+          padding: 2px 8px; font-size: 14px; font-weight: 600;
+          font-family: inherit; color: var(--text-primary);
+          background: var(--card-bg, #fff); outline: none;
+          width: 100%; min-width: 180px; max-width: 340px;
+          box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+        [data-theme="dark"] .tf-titulo-input {
+          background: #141824; color: #f1f5f9; border-color: #3B82F6;
+        }
+
+
         /* ── Dark mode ── */
         [data-theme="dark"] .tf-modal {
           background: #1e2433;
@@ -1297,6 +1496,17 @@ export default {
               <input id="tf-inp-venc" class="tf-modal-input" type="datetime-local">
             </div>
 
+
+            <!-- Campo de Prioridade -->
+            <div class="tf-modal-field">
+              <label class="tf-modal-label" for="tf-inp-prioridade">Prioridade</label>
+              <select id="tf-inp-prioridade" class="tf-modal-input">
+                <option value="Normal" selected>Normal</option>
+                <option value="Urgente">Urgente</option>
+                <option value="Alta">Alta</option>
+                <option value="Baixa">Baixa</option>
+              </select>
+            </div>
             <!-- Checkbox de Repetição -->
             <div class="tf-modal-field" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: 14px; user-select: none;">
               <input id="tf-inp-repetir" type="checkbox" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
@@ -1425,3 +1635,4 @@ export default {
     };
   },
 };
+

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * db.js — Camada de acesso a dados do CRM Visi Marketing
  *
  * Centraliza todas as queries ao Supabase.
@@ -586,7 +586,7 @@ export const Tarefas = {
   },
 
   async create(payload) {
-    return supabase.from('tarefas').insert(payload).select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)').single();
+    return supabase.from('tarefas').insert(payload).select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)').single();
   },
 
   /**
@@ -594,7 +594,7 @@ export const Tarefas = {
    * @param {Array<Object>} payloads - Array de objetos com os dados de cada tarefa
    */
   async createBulk(payloads) {
-    return supabase.from('tarefas').insert(payloads).select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)');
+    return supabase.from('tarefas').insert(payloads).select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, vendedor_id, usuarios(user_nome)');
   },
 
 
@@ -701,7 +701,7 @@ export const Tarefas = {
   async getAllPorVendedor(vendedorId) {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
       .eq('vendedor_id', vendedorId)
       .order('tarefa_vencimento', { ascending: true });
   },
@@ -712,7 +712,7 @@ export const Tarefas = {
   async getAllAdmin() {
     return supabase
       .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
+      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
       .order('tarefa_vencimento', { ascending: true });
   },
 
@@ -765,6 +765,30 @@ export const Tarefas = {
       .delete()
       .eq('tarefa_id', tarefaId);
   },
+
+  /**
+   * Atualiza a prioridade de uma tarefa.
+   * @param {number} tarefaId
+   * @param {string} novaPrioridade
+   */
+  async atualizarPrioridade(tarefaId, novaPrioridade) {
+    return supabase
+      .from('tarefas')
+      .update({ tarefa_prioridade: novaPrioridade })
+      .eq('tarefa_id', tarefaId);
+  },
+
+  /**
+   * Atualiza o título de uma tarefa.
+   * @param {number} tarefaId
+   * @param {string} novoTitulo
+   */
+  async atualizarTitulo(tarefaId, novoTitulo) {
+    return supabase
+      .from('tarefas')
+      .update({ tarefa_titulo: novoTitulo })
+      .eq('tarefa_id', tarefaId);
+  }
 };
 
 
@@ -1911,6 +1935,102 @@ export const DiaFinalizado = {
         quantidade_prospecao:           qtdProspeccao,
       });
   },
+
+  /**
+   * Busca o registro de dia finalizado de HOJE para um usuário.
+   * Mantido para compatibilidade, mas o getEstatisticas é mais completo.
+   * @param {string} userId
+   */
+  async getHoje(userId) {
+    const agora = new Date();
+    const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString();
+    const fimDia    = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59, 999).toISOString();
+
+    return supabase
+      .from('dia_finalizado')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('criado_em', inicioDia)
+      .lte('criado_em', fimDia)
+      .order('criado_em', { ascending: false })
+      .limit(1);
+  },
+
+  /**
+   * Busca as métricas consolidadas (soma) de um período (hoje, semana, mes).
+   * @param {string} userId
+   * @param {string} periodo - 'hoje', 'semana', 'mes'
+   */
+  async getEstatisticas(userId, periodo = 'hoje') {
+    const agora = new Date();
+    let inicio, fim;
+
+    if (periodo === 'hoje') {
+      inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0);
+      fim    = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59, 999);
+    } else if (periodo === 'semana') {
+      const diaDaSemana = agora.getDay(); // 0 = Domingo, 1 = Segunda...
+      // Vamos assumir que a semana começa na Segunda-feira (1)
+      const diffParaSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1;
+      inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - diffParaSegunda, 0, 0, 0);
+      fim    = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 6, 23, 59, 59, 999);
+    } else if (periodo === 'mes') {
+      inicio = new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0);
+      fim    = new Date(agora.getFullYear(), agora.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const { data, error } = await supabase
+      .from('dia_finalizado')
+      .select('quantidade_contatos_realizados, quantidade_prospecao')
+      .eq('user_id', userId)
+      .gte('criado_em', inicio.toISOString())
+      .lte('criado_em', fim.toISOString());
+
+    if (error) return { error, contatos: 0, prospeccoes: 0 };
+
+    let contatos = 0;
+    let prospeccoes = 0;
+
+    (data || []).forEach(row => {
+      contatos += (Number(row.quantidade_contatos_realizados) || 0);
+      prospeccoes += (Number(row.quantidade_prospecao) || 0);
+    });
+
+    return { error: null, contatos, prospeccoes };
+  },
+
+  /**
+   * Busca as métricas consolidadas (soma) de um período customizado (data de início a data de fim).
+   * @param {string} userId
+   * @param {string} dataInicio - 'YYYY-MM-DD'
+   * @param {string} dataFim - 'YYYY-MM-DD'
+   */
+  async getEstatisticasCustom(userId, dataInicio, dataFim) {
+    if (!dataInicio || !dataFim) return { error: 'Datas inválidas', contatos: 0, prospeccoes: 0 };
+
+    // Adiciona o timezone zero (UTC) se vier só yyyy-mm-dd
+    const inicio = new Date(`${dataInicio}T00:00:00`);
+    const fim    = new Date(`${dataFim}T23:59:59.999`);
+
+    const { data, error } = await supabase
+      .from('dia_finalizado')
+      .select('quantidade_contatos_realizados, quantidade_prospecao')
+      .eq('user_id', userId)
+      .gte('criado_em', inicio.toISOString())
+      .lte('criado_em', fim.toISOString());
+
+    if (error) return { error, contatos: 0, prospeccoes: 0 };
+
+    let contatos = 0;
+    let prospeccoes = 0;
+
+    (data || []).forEach(row => {
+      contatos += (Number(row.quantidade_contatos_realizados) || 0);
+      prospeccoes += (Number(row.quantidade_prospecao) || 0);
+    });
+
+    return { error: null, contatos, prospeccoes };
+  },
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -2005,3 +2125,4 @@ export const KanbanArquivos = {
     return supabase.from('kanban_arquivos').delete().eq('arquivo_id', id);
   },
 };
+

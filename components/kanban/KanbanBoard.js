@@ -225,8 +225,15 @@ export default class KanbanBoard {
       ? this._allNegocios.filter(n => n.vendedor_id === this._vendedorFilter)
       : [...this._allNegocios];
 
-    listGanho = listGanho.filter(n => n.negocio_status === 'Ganho');
+    const agora = new Date();
+    const mesAtual = agora.getMonth();
+    const anoAtual = agora.getFullYear();
 
+    listGanho = listGanho.filter(n => {
+      if (n.negocio_status !== 'Ganho' || !n.data_fechamento) return false;
+      const dataF = new Date(n.data_fechamento);
+      return dataF.getMonth() === mesAtual && dataF.getFullYear() === anoAtual;
+    });
     if (this._origemFilter)
       listGanho = listGanho.filter(n => n.negocio_origem === this._origemFilter);
 

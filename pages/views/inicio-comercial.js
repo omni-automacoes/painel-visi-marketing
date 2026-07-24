@@ -16,7 +16,7 @@ import BarChart             from '../../charts/BarChart.js';
 import LineChart            from '../../charts/LineChart.js';
 import GaugeChart           from '../../charts/GaugeChart.js';
 import { staggerAnimation, formatCurrency } from '../../js/utils.js';
-import { Negocios, Metas, Tarefas, Usuarios } from '../../js/db.js';
+import { Negocios, Metas, Tarefas, Usuarios, DiaFinalizado } from '../../js/db.js';
 import UserStore            from '../../js/userStore.js';
 
 const MESES_ABREV  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -237,7 +237,7 @@ async function _carregarDados() {
 
   const [
     resAbertos, resFechados, resAnterior, resAno,
-    resMeta, resTarefas, resMetasAno, resGanhosTodos, resVendedores, resReunioes,
+    resMeta, resTarefas, resMetasAno, resGanhosTodos, resVendedores, resReunioes, resAtividade
   ] = await Promise.all([
     Negocios.getAbertosPorVendedor(vendedorId),
     Negocios.getFechadosMesAtual(vendedorId),
@@ -249,6 +249,7 @@ async function _carregarDados() {
     Negocios.getGanhosMesAtualTodos(),
     Usuarios.getVendedoresAtivos(),
     Negocios.getReunioesMesAtual(vendedorId),
+    DiaFinalizado.getEstatisticas(vendedorId, 'hoje'),
   ]);
 
   // ── KPIs ──
@@ -327,6 +328,29 @@ async function _carregarDados() {
   if (!resVendedores.error && !resGanhosTodos.error) {
     _atualizarRanking(resVendedores.data || [], resGanhosTodos.data || []);
   }
+
+  // ── Dia Finalizado (Atividade) ──
+  _renderizarAtividade(resAtividade);
+}
+
+function _renderizarAtividade(resAtividade) {
+  if (resAtividade && !resAtividade.error) {
+    const elContatos = document.getElementById('card-novo-contatos');
+    const elProps    = document.getElementById('card-novo-prospecao');
+
+    if (elContatos) elContatos.textContent = resAtividade.contatos || 0;
+    if (elProps)    elProps.textContent    = resAtividade.prospeccoes || 0;
+  }
+}
+
+async function _recarregarAtividade() {
+  const vendedorId = UserStore.getUserId();
+  const select = document.getElementById('atividade-periodo');
+  if (!vendedorId || !select) return;
+
+  const periodo = select.value;
+  const res = await DiaFinalizado.getEstatisticas(vendedorId, periodo);
+  _renderizarAtividade(res);
 }
 
 // ── HTML ──────────────────────────────────────────────────────────
@@ -395,6 +419,32 @@ export default {
 
           <div style="position:relative; height:150px; margin-top:8px;">
             <canvas id="barChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Novo Card (dinâmico) -->
+        <div class="card card-light card-top-right" id="card-novo">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Métricas de Contato</div>
+              <div class="card-subtitle">Atividades realizadas</div>
+            </div>
+            <select class="form-input form-select" id="atividade-periodo" style="width:120px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
+              <option value="hoje">Hoje</option>
+              <option value="semana">Nesta Semana</option>
+              <option value="mes">Neste Mês</option>
+            </select>
+          </div>
+          <div style="flex:1; display:flex; gap: 30px; align-items:center; justify-content:center; padding: 16px 0;">
+            <div style="text-align:center;">
+              <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="card-novo-contatos">0</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Contatos Realizados</div>
+            </div>
+            <div style="width:1px; background:var(--border-light); height:50px;"></div>
+            <div style="text-align:center;">
+              <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="card-novo-prospecao">0</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Prospecções</div>
+            </div>
           </div>
         </div>
 
@@ -503,6 +553,12 @@ export default {
   },
 
   async onMount() {
+
+    const select = document.getElementById('atividade-periodo');
+    if (select) {
+      select.addEventListener('change', _recarregarAtividade);
+    }
+
     barChart   = new BarChart('barChart');
     lineChart  = new LineChart('lineChart');
     gaugeChart = new GaugeChart('gaugeArc', 75);
