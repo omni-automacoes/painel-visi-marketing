@@ -23,9 +23,9 @@ export default {
 
       <div class="config-layout">
         <aside class="config-nav" id="config-nav">
+          ${isAdmin ? `
           <div class="config-nav-group">
             <span class="config-nav-label">Administração</span>
-            ${isAdmin ? `
             <button class="config-nav-item active" data-section="novo-usuario" id="config-nav-novo-usuario">
               <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
               Novo Usuário
@@ -37,14 +37,15 @@ export default {
             <button class="config-nav-item" data-section="usuarios" id="config-nav-usuarios">
               <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               Usuários
-            </button>` : `
-            <div class="config-nav-empty">
-              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              Sem permissão
-            </div>`}
+            </button>
           </div>
+          ` : ''}
           <div class="config-nav-group">
             <span class="config-nav-label">Geral</span>
+            <button class="config-nav-item${!isAdmin ? ' active' : ''}" data-section="meu-perfil" id="config-nav-meu-perfil">
+              <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Meu Perfil
+            </button>
             <button class="config-nav-item" data-section="motivos-perda" id="config-nav-motivos-perda">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               Motivos de Perda
@@ -54,8 +55,8 @@ export default {
 
         <div class="config-content" id="config-content">
           ${isAdmin
-            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMotivosPerdas()
-            : _renderSectionAcessoNegado() + _renderSectionMotivosPerdas()}
+            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMeuPerfil(false) + _renderSectionMotivosPerdas(false)
+            : _renderSectionMeuPerfil(true) + _renderSectionMotivosPerdas(false)}
         </div>
       </div>
 
@@ -113,6 +114,9 @@ export default {
 
   onMount() {
     _bindEvents();
+    if (!UserStore.isAdmin()) {
+      _loadMotivos();
+    }
   },
 
   onDestroy() {},
@@ -330,9 +334,9 @@ function _renderSectionFunil() {
 
 // ── Motivos de Perda ──────────────────────────────────────────────
 
-function _renderSectionMotivosPerdas() {
+function _renderSectionMotivosPerdas(isActive = false) {
   return `
-    <section class="config-section" id="section-motivos-perda">
+    <section class="config-section${isActive ? ' active' : ''}" id="section-motivos-perda">
       <div class="config-section-header">
         <div class="config-section-icon" style="background:#FEF3C7">
           <svg viewBox="0 0 24 24" style="stroke:#D97706"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -925,6 +929,8 @@ function _bindEvents() {
   const overlay  = document.getElementById('nu-popup-overlay');
   if (closeBtn) closeBtn.addEventListener('click', _closePopup);
   if (overlay)  overlay.addEventListener('click', e => { if (e.target === overlay) _closePopup(); });
+
+  _bindMeuPerfilEvents();
 }
 
 // ── Lógica principal: criar usuário ───────────────────────────────
@@ -1271,4 +1277,287 @@ function _bindUsuariosActions() {
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
   });
+}
+
+// ── Meu Perfil (Edição pelo Próprio Usuário) ───────────────────────────
+
+function _renderSectionMeuPerfil(isActive = false) {
+  const user = UserStore.getUser();
+  const avatarUrl = user?.user_avatar || '';
+  const formattedTel = _formatPhoneNumber(user?.user_telefone || '');
+
+  return `
+    <section class="config-section${isActive ? ' active' : ''}" id="section-meu-perfil">
+      <div class="config-section-header">
+        <div class="config-section-icon" style="background: rgba(26, 206, 238, 0.1); color: var(--cyan);">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <div>
+          <h2 class="config-section-title">Meu Perfil</h2>
+          <p class="config-section-desc">Visualize e edite as suas informações pessoais de cadastro no CRM.</p>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <form class="config-form" id="form-meu-perfil" novalidate>
+          <!-- Row 1: Avatar -->
+          <div class="config-form-row">
+            <div class="config-field" style="flex: 1;">
+              <label class="config-label">Foto de Perfil</label>
+              <label class="config-file-label" id="mp-avatar-label" for="mp-avatar">
+                <div class="config-file-preview" id="mp-avatar-preview">
+                  ${avatarUrl 
+                    ? `<img src="${avatarUrl}" alt="Avatar" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />`
+                    : `<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`
+                  }
+                </div>
+                <div class="config-file-info">
+                  <span class="config-file-name" id="mp-avatar-name">${avatarUrl ? 'Alterar foto de perfil' : 'Clique para selecionar'}</span>
+                  <span class="config-file-sub">ou arraste uma imagem aqui</span>
+                </div>
+                <input type="file" id="mp-avatar" name="user_avatar" accept="image/jpeg,image/png,image/webp,image/gif" class="config-file-input" />
+              </label>
+            </div>
+          </div>
+
+          <!-- Row 2: Nome + Email -->
+          <div class="config-form-row">
+            <div class="config-field">
+              <label class="config-label" for="mp-nome">Nome Completo <span class="config-required">*</span></label>
+              <div class="config-input-wrap">
+                <svg class="config-input-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="mp-nome" class="config-input" value="${_esc(user?.user_nome)}" placeholder="Ex: João da Silva" required />
+              </div>
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="mp-email">E-mail</label>
+              <div class="config-input-wrap" style="opacity: 0.65; cursor: not-allowed;">
+                <svg class="config-input-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <input type="email" id="mp-email" class="config-input" value="${_esc(user?.user_email)}" readonly style="cursor: not-allowed;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Telefone + Cargo + Status -->
+          <div class="config-form-row">
+            <div class="config-field">
+              <label class="config-label" for="mp-telefone">Telefone</label>
+              <div class="config-input-wrap">
+                <svg class="config-input-icon" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.56 3.44 2 2 0 0 1 3.53 1.25h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.74a16 16 0 0 0 6 6l.88-.87a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.5 16.92z"/></svg>
+                <input type="tel" id="mp-telefone" class="config-input" value="${formattedTel}" placeholder="(11) 99999-9999" />
+              </div>
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="mp-cargo">Cargo</label>
+              <div class="config-input-wrap" style="opacity: 0.65; cursor: not-allowed;">
+                <svg class="config-input-icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                <input type="text" id="mp-cargo" class="config-input" value="${_esc(user?.user_cargo)}" readonly style="cursor: not-allowed;" />
+              </div>
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="mp-status">Status</label>
+              <div class="config-input-wrap" style="opacity: 0.65; cursor: not-allowed;">
+                <svg class="config-input-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <input type="text" id="mp-status" class="config-input" value="${_esc(user?.user_status)}" readonly style="cursor: not-allowed;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Feedback -->
+          <div class="config-form-feedback" id="mp-feedback" aria-live="polite"></div>
+
+          <!-- Actions -->
+          <div class="config-form-actions" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-cyan" id="btn-mp-salvar" style="min-width: 140px;">
+              Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function _bindMeuPerfilEvents() {
+  const mpTelefone = document.getElementById('mp-telefone');
+  if (mpTelefone) {
+    mpTelefone.addEventListener('input', (e) => {
+      e.target.value = _formatPhoneNumber(e.target.value);
+    });
+  }
+
+  // Preview do avatar de meu perfil
+  const mpAvatarInput = document.getElementById('mp-avatar');
+  if (mpAvatarInput) {
+    mpAvatarInput.addEventListener('change', () => {
+      const file = mpAvatarInput.files?.[0];
+      const nameEl    = document.getElementById('mp-avatar-name');
+      const previewEl = document.getElementById('mp-avatar-preview');
+      if (!file) return;
+      if (nameEl) nameEl.textContent = file.name;
+      if (previewEl) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          previewEl.innerHTML = `<img src="${e.target.result}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />`;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  // Drag-and-drop no label do avatar de meu perfil
+  const mpAvatarLabel = document.getElementById('mp-avatar-label');
+  if (mpAvatarLabel) {
+    mpAvatarLabel.addEventListener('dragover', e => { e.preventDefault(); mpAvatarLabel.classList.add('config-file-drag'); });
+    mpAvatarLabel.addEventListener('dragleave', () => mpAvatarLabel.classList.remove('config-file-drag'));
+    mpAvatarLabel.addEventListener('drop', e => {
+      e.preventDefault();
+      mpAvatarLabel.classList.remove('config-file-drag');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      if (mpAvatarInput) {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        mpAvatarInput.files = dataTransfer.files;
+        // Trigger change event manually
+        mpAvatarInput.dispatchEvent(new Event('change'));
+      }
+    });
+  }
+
+  // Submit do formulário de perfil
+  const formMeuPerfil = document.getElementById('form-meu-perfil');
+  formMeuPerfil?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    _clearMpFeedback();
+
+    const user = UserStore.getUser();
+    if (!user) return;
+
+    const nome = document.getElementById('mp-nome')?.value.trim();
+    const telRaw = document.getElementById('mp-telefone')?.value || '';
+    let telefone = telRaw.replace(/\D/g, ""); // apenas números
+    if (telefone && !telefone.startsWith("55")) {
+      telefone = "55" + telefone;
+    }
+
+    if (!nome) {
+      _showMpFeedback('error', 'O nome completo é obrigatório.');
+      return;
+    }
+
+    _setMpLoading(true);
+
+    try {
+      let avatarUrl = user.user_avatar;
+      const avatarFile = mpAvatarInput?.files?.[0];
+
+      if (avatarFile) {
+        const ext = avatarFile.name.split('.').pop();
+        const filePath = `avatars/${user.user_id}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from(AVATAR_BUCKET)
+          .upload(filePath, avatarFile, { upsert: true, contentType: avatarFile.type });
+
+        if (uploadError) {
+          console.warn('[Configurações] Erro no upload do avatar:', uploadError.message);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from(AVATAR_BUCKET)
+            .getPublicUrl(filePath);
+          avatarUrl = urlData?.publicUrl ?? null;
+        }
+      }
+
+      const now = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T') + '-03:00';
+      const { error: dbError } = await supabase
+        .from('usuarios')
+        .update({
+          user_nome: nome,
+          user_telefone: (telefone && telefone !== "55") ? telefone : null,
+          user_avatar: avatarUrl,
+          ultima_atualizacao: now,
+        })
+        .eq('user_id', user.user_id);
+
+      if (dbError) throw dbError;
+
+      // Sucesso! Atualiza UserStore e Sidebar
+      const updatedUser = {
+        ...user,
+        user_nome: nome,
+        user_telefone: (telefone && telefone !== "55") ? telefone : null,
+        user_avatar: avatarUrl,
+        ultima_atualizacao: now
+      };
+
+      UserStore.setUser(updatedUser);
+      
+      // Envia evento global para atualizar a barra lateral
+      window.dispatchEvent(new CustomEvent('profile-updated', { detail: updatedUser }));
+
+      _showMpFeedback('success', 'Perfil atualizado com sucesso!');
+    } catch (err) {
+      console.error('[Configurações] Erro ao atualizar perfil:', err);
+      _showMpFeedback('error', err.message || 'Erro ao atualizar perfil.');
+    } finally {
+      _setMpLoading(false);
+    }
+  });
+}
+
+function _setMpLoading(on) {
+  const btn = document.getElementById('btn-mp-salvar');
+  if (!btn) return;
+  btn.disabled = on;
+  btn.textContent = on ? 'Salvando...' : 'Salvar Alterações';
+}
+
+function _showMpFeedback(type, msg) {
+  const el = document.getElementById('mp-feedback');
+  if (!el) return;
+  const icons = {
+    success: `<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>`,
+    error:   `<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`,
+  };
+  el.innerHTML = `
+    <div class="config-feedback config-feedback--${type}" style="margin-top: 16px;">
+      <svg viewBox="0 0 24 24">${icons[type] || icons.success}</svg>
+      <span>${msg}</span>
+    </div>`;
+}
+
+function _clearMpFeedback() {
+  const el = document.getElementById('mp-feedback');
+  if (el) el.innerHTML = '';
+}
+
+function _formatPhoneNumber(value) {
+  if (!value) return "+55 ";
+  let numbers = value.replace(/\D/g, "");
+  if (numbers.startsWith("55")) {
+    numbers = numbers.slice(2);
+  }
+  let formatted = "+55 ";
+  if (numbers.length > 0) {
+    if (numbers.length <= 2) {
+      formatted += `(${numbers}`;
+    } else if (numbers.length <= 6) {
+      formatted += `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    } else if (numbers.length <= 10) {
+      formatted += `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+    } else {
+      formatted += `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+    }
+  }
+  return formatted;
+}
+
+function _esc(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

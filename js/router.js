@@ -18,6 +18,7 @@ const ROUTES = {
   'email-marketing': () => import('../pages/email-marketing.js'),
   configuracoes:     () => import('../pages/configuracoes.js'),
   projetos:          () => import('../pages/projetos.js'),
+  financeiro:        () => import('../pages/financeiro.js'),
 };
 
 const DEFAULT_ROUTE = 'inicio';

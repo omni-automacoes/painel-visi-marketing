@@ -69,11 +69,11 @@ export const Leads = {
 
 export const Clientes = {
   async getAll() {
-    return supabase.from('clientes').select('*').order('nome');
+    return supabase.from('clientes').select('*').order('cliente_nome');
   },
 
   async getById(id) {
-    return supabase.from('clientes').select('*').eq('id', id).single();
+    return supabase.from('clientes').select('*').eq('cliente_id', id).single();
   },
 
   async create(payload) {
@@ -2125,4 +2125,41 @@ export const KanbanArquivos = {
     return supabase.from('kanban_arquivos').delete().eq('arquivo_id', id);
   },
 };
+
+export const FinanceiroReceitas = {
+  async getAll() {
+    return supabase.from('financeiro_receitas').select('*').order('criado_em', { ascending: false });
+  },
+  async create(payload) {
+    return supabase.from('financeiro_receitas').insert(payload).select().single();
+  },
+  async createMany(payloads) {
+    return supabase.from('financeiro_receitas').insert(payloads);
+  },
+  async update(id, payload) {
+    return supabase.from('financeiro_receitas').update(payload).eq('receita_id', id).select().single();
+  },
+  async delete(id) {
+    return supabase.from('financeiro_receitas').delete().eq('receita_id', id);
+  }
+};
+
+export const FinanceiroDespesas = {
+  async getAll() {
+    return supabase.from('financeiro_despesas').select('*').order('criado_em', { ascending: false });
+  },
+  async create(payload) {
+    return supabase.from('financeiro_despesas').insert(payload).select().single();
+  },
+  async createMany(payloads) {
+    return supabase.from('financeiro_despesas').insert(payloads);
+  },
+  async update(id, payload) {
+    return supabase.from('financeiro_despesas').update(payload).eq('despesa_id', id).select().single();
+  },
+  async delete(id) {
+    return supabase.from('financeiro_despesas').delete().eq('despesa_id', id);
+  }
+};
+
 

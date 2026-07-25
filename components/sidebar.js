@@ -24,6 +24,11 @@ export default class Sidebar {
     // Alertas dinâmicos gerados por lógica client-side (sem salvar no Supabase)
     // Cada item: { _id, notificacao_titulo, notificacao_descricao, notificacao_leitura, _critico }
     this._alertasDinamicos = [];
+
+    // Escuta evento global de atualização de perfil
+    window.addEventListener('profile-updated', (e) => {
+      this.updateUser(e.detail);
+    });
   }
 
   render() {
@@ -46,52 +51,43 @@ export default class Sidebar {
   }
 
   _html() {
-    const navItems = [
-      {
-        section: 'Principal',
-        links: [
-          { route: 'inicio',   label: 'Início',    badge: null,
-            icon: `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>` },
-          { route: 'pipeline', label: 'Funil',     badge: '24',
-            icon: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>` },
-        ]
-      },
-      {
-        section: 'Comercial',
-        links: [
-          { route: 'clientes',   label: 'Clientes',    badge: null,
-            icon: `<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>` },
-          { route: 'tarefas',    label: 'Tarefas',     badge: null,
-            icon: `<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>` },
-          { route: 'projetos',   label: 'Projetos',    badge: null,
-            icon: `<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="4" rx="1"/><rect x="13" y="11" width="8" height="8" rx="1"/><rect x="3" y="15" width="8" height="4" rx="1"/>` },
-          { route: 'relatorios', label: 'Relatórios',  badge: null,
-            icon: `<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>` },
-          { route: 'email-marketing', label: 'E-mail Mkt', badge: null,
-            icon: `<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>` },
-        ]
-      },
-      {
-        section: 'Config.',
-        links: [
-          { route: 'configuracoes', label: 'Configurações', badge: null,
-            icon: `<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14M19.07 19.07a10 10 0 0 0 0-14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>` },
-        ]
-      }
+    const links = [
+      { route: 'inicio',   label: 'Início',    badge: null, adminOnly: false,
+        icon: `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>` },
+      { route: 'pipeline', label: 'Funil',     badge: '24', adminOnly: false,
+        icon: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>` },
+      { route: 'clientes',   label: 'Clientes',    badge: null, adminOnly: false,
+        icon: `<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>` },
+      { route: 'tarefas',    label: 'Tarefas',     badge: null, adminOnly: false,
+        icon: `<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>` },
+      { route: 'projetos',   label: 'Projetos',    badge: null, adminOnly: false,
+        icon: `<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="4" rx="1"/><rect x="13" y="11" width="8" height="8" rx="1"/><rect x="3" y="15" width="8" height="4" rx="1"/>` },
+      { route: 'email-marketing', label: 'Email Marketing', badge: null, adminOnly: false,
+        icon: `<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>` },
+      { route: 'financeiro', label: 'Financeiro', badge: null, adminOnly: true,
+        icon: `<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>` },
+      { route: 'relatorios', label: 'Relatórios',  badge: null, adminOnly: true,
+        icon: `<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>` },
+      { route: 'configuracoes', label: 'Configurações', badge: null, adminOnly: false,
+        icon: `<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14M19.07 19.07a10 10 0 0 0 0-14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>` },
     ];
 
-    const sectionsHTML = navItems.map(({ section, links }) => `
-      <div class="sidebar-section-label">${section}</div>
-      ${links.map(link => `
-        <a href="${link.route ? '#' + link.route : '#'}"
-           class="nav-link${link.route === this._activeRoute ? ' active' : ''}"
-           ${link.route ? `data-route="${link.route}"` : ''}
-           id="nav-${link.route || link.label.toLowerCase()}">
-          <svg viewBox="0 0 24 24">${link.icon}</svg>
-          <span>${link.label}</span>
-          ${link.badge ? `<span class="nav-badge">${link.badge}</span>` : ''}
-        </a>
-      `).join('')}
+    const linksPermitidos = links.filter(link => {
+      if (link.adminOnly) {
+        return UserStore.isAdmin();
+      }
+      return true;
+    });
+
+    const linksHTML = linksPermitidos.map(link => `
+      <a href="${link.route ? '#' + link.route : '#'}"
+         class="nav-link${link.route === this._activeRoute ? ' active' : ''}"
+         ${link.route ? `data-route="${link.route}"` : ''}
+         id="nav-${link.route || link.label.toLowerCase()}">
+        <svg viewBox="0 0 24 24">${link.icon}</svg>
+        <span>${link.label}</span>
+        ${link.badge ? `<span class="nav-badge">${link.badge}</span>` : ''}
+      </a>
     `).join('');
 
     return `
@@ -106,7 +102,7 @@ export default class Sidebar {
         </div>
       </div>
 
-      ${sectionsHTML}
+      ${linksHTML}
 
       <div class="sidebar-divider"></div>
 

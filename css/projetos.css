@@ -214,7 +214,7 @@
   background: var(--white);
   border: 1.5px solid var(--border-light);
   border-radius: 12px;
-  padding: 12px;
+  padding: 12px 12px 12px 28px; /* Espaço na esquerda para o handle de drag absoluto */
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
@@ -228,8 +228,9 @@
 .pj-card-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-bottom: 8px;
+  padding-right: 20px; /* Evita sobreposição com o botão de excluir absoluto */
 }
 
 .pj-priority {
@@ -251,7 +252,11 @@
 .pj-pri--baixa { background: #DCFCE7; color: #14532D; }
 
 .pj-card-menu {
-  width: 24px; height: 24px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -262,6 +267,7 @@
   color: var(--text-secondary);
   opacity: 0;
   transition: all 0.13s ease;
+  z-index: 2;
 }
 .pj-card:hover .pj-card-menu { opacity: 1; }
 .pj-card-menu:hover { background: #FEE2E2; color: #DC2626; }
@@ -1101,17 +1107,19 @@
 
 /* Grip handle do card */
 .pj-card-drag-handle {
+  position: absolute;
+  left: 6px;
+  top: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 16px;
-  height: 16px;
+  height: 20px;
   cursor: grab;
   color: var(--text-secondary);
   opacity: 0;
   transition: opacity 0.15s ease;
-  flex-shrink: 0;
-  margin-right: 2px;
+  z-index: 2;
 }
 .pj-card-drag-handle svg {
   width: 16px;
