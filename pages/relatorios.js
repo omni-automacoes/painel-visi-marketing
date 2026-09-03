@@ -230,14 +230,17 @@ function _showKpiPopover(cardEl, data) {
     left = window.innerWidth - popoverWidth - 16;
   }
 
+  _popoverEl.style.left = `${left}px`;
+  _popoverEl.style.top = `-9999px`;
+  _popoverEl.classList.add('visible');
+
+  const popoverHeight = _popoverEl.offsetHeight || 260;
   let top = rect.bottom + 8;
-  if (top + 280 > window.innerHeight && rect.top > 280) {
-    top = rect.top - 280;
+  if (top + popoverHeight > window.innerHeight - 16 && rect.top > popoverHeight + 16) {
+    top = rect.top - popoverHeight - 8;
   }
 
-  _popoverEl.style.left = `${left}px`;
   _popoverEl.style.top = `${top}px`;
-  _popoverEl.classList.add('visible');
 }
 
 function _hideKpiPopover() {
