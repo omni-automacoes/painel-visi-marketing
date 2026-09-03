@@ -925,6 +925,88 @@ function _abrirModalEdicaoDespesa(d) {
 }
 
 
+// Sincroniza mensalidades recorrentes de todos os clientes ativos para o período informado
+async function _sincronizarMensalidadesPeriodo(periodStr, silencioso = false) {
+  try {
+    const monthMap = {
+      "Janeiro": 0, "Fevereiro": 1, "Março": 2, "Abril": 3, "Maio": 4, "Junho": 5,
+      "Julho": 6, "Agosto": 7, "Setembro": 8, "Outubro": 9, "Novembro": 10, "Dezembro": 11
+    };
+    const parts = (periodStr || '').split(' ');
+    if (parts.length < 2) return 0;
+    const targetMonthName = parts[0];
+    const targetYear = parseInt(parts[1], 10);
+    const targetMonthIdx = monthMap[targetMonthName];
+    if (targetMonthIdx === undefined || isNaN(targetYear)) return 0;
+
+    // Clientes ativos sem churn
+    const clientesAtivos = (_state.clientes || []).filter(c => c.cliente_status === 'Ativado' && !c.cliente_churn);
+    if (clientesAtivos.length === 0) return 0;
+
+    // Data de vencimento padrão para o período (dia 10)
+    const dataVenc = _getDefaultDueDateForPeriod(periodStr);
+
+    // Mapeamento de receitas já existentes para o cliente no período alvo
+    const jaCadastrados = new Set();
+    (_state.receitas || []).forEach(r => {
+      if (!r.cliente_id || !r.data_vencimento) return;
+      const d = new Date(r.data_vencimento);
+      if (d.getUTCFullYear() === targetYear && d.getUTCMonth() === targetMonthIdx) {
+        jaCadastrados.add(Number(r.cliente_id));
+      }
+    });
+
+    // Mapeamento das últimas mensalidades para fallback caso cliente_mensalidade seja null/0
+    const ultimaMensalidadeMap = {};
+    (_state.receitas || []).forEach(r => {
+      if (r.cliente_id && Number(r.receita_valor || 0) > 0) {
+        if (!ultimaMensalidadeMap[r.cliente_id]) {
+          ultimaMensalidadeMap[r.cliente_id] = Number(r.receita_valor);
+        }
+      }
+    });
+
+    const novosLancamentos = [];
+    clientesAtivos.forEach(c => {
+      if (jaCadastrados.has(Number(c.cliente_id))) return;
+
+      const valor = Number(c.cliente_mensalidade || ultimaMensalidadeMap[c.cliente_id] || 0);
+
+      novosLancamentos.push({
+        cliente_id: c.cliente_id,
+        receita_nome: c.cliente_nome,
+        receita_descricao: 'Mensalidade',
+        receita_tipo: 'Recorrente',
+        receita_valor: valor,
+        data_vencimento: dataVenc,
+        data_recebimento: null,
+        receita_status: 'Pendente'
+      });
+    });
+
+    if (novosLancamentos.length === 0) {
+      if (!silencioso) _showToast('Todas as mensalidades deste mês já estão sincronizadas!');
+      return 0;
+    }
+
+    const { data: inseridos, error: insErr } = await FinanceiroReceitas.createMany(novosLancamentos);
+    if (insErr) throw insErr;
+
+    // Recarrega lista de receitas do banco para manter sincronizado
+    const { data: recsAtualizadas } = await FinanceiroReceitas.getAll();
+    if (recsAtualizadas) {
+      _state.receitas = recsAtualizadas;
+    }
+
+    _showToast(`✨ ${novosLancamentos.length} mensalidade${novosLancamentos.length > 1 ? 's' : ''} gerada${novosLancamentos.length > 1 ? 's' : ''} para ${periodStr}!`);
+    return novosLancamentos.length;
+  } catch (err) {
+    console.error('[Financeiro] Erro ao sincronizar mensalidades:', err);
+    if (!silencioso) _showToast('Erro ao sincronizar mensalidades.');
+    return 0;
+  }
+}
+
 // Carregamento de dados dinâmico e atualização da UI
 async function _loadData() {
   // Mostra loading nos KPIs e tabelas
@@ -944,6 +1026,9 @@ async function _loadData() {
   _state.receitas = recs || [];
   _state.despesas = desps || [];
   _state.clientes = clis || [];
+
+  // Sincroniza automaticamente as mensalidades dos clientes ativos para o mês selecionado
+  await _sincronizarMensalidadesPeriodo(_state.selectedPeriod, true);
 
   // Remove animação de loading e atualiza a view
   document.getElementById('kpi-receitas')?.classList.remove('smc-loading');
@@ -1013,7 +1098,16 @@ function _renderAll() {
             <td class="fin-value-cell">${_fmtBRL(r.receita_valor)}</td>
             <td class="fin-date-cell">${_formatISODate(r.data_vencimento)}</td>
             <td class="fin-date-cell">${_formatISODate(r.data_recebimento)}</td>
-            <td><span class="fin-status-badge ${badgeStatusClass}">${statusVal}</span></td>
+            <td>
+              <div class="fin-status-select-wrap" onclick="event.stopPropagation();">
+                <select class="fin-status-inline-select fin-status-${statusClean}" data-id="${r.receita_id}" data-type="receita" title="Alterar status de pagamento">
+                  <option value="Pendente" ${statusClean === 'pendente' ? 'selected' : ''}>Pendente</option>
+                  <option value="Pago" ${statusClean === 'pago' ? 'selected' : ''}>Pago</option>
+                  <option value="Atrasado" ${statusClean === 'atrasado' ? 'selected' : ''}>Atrasado</option>
+                  <option value="Cancelado" ${statusClean === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+                </select>
+              </div>
+            </td>
             <td style="text-align: right; width: 40px; padding-right: 20px;">
               <button class="fin-btn-delete-row" data-id="${r.receita_id}" data-type="receita" title="Excluir" style="background: transparent; border: none; color: #EF4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.5; transition: opacity 0.2s;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -1049,7 +1143,15 @@ function _renderAll() {
             <td class="fin-value-cell" style="color:#EF4444;">${_fmtBRL(d.despesa_valor)}</td>
             <td class="fin-date-cell">${_formatISODate(d.data_vencimento)}</td>
             <td class="fin-date-cell">${_formatISODate(d.data_pagamento)}</td>
-            <td><span class="fin-status-badge ${badgeStatusClass}">${statusVal}</span></td>
+            <td>
+              <div class="fin-status-select-wrap" onclick="event.stopPropagation();">
+                <select class="fin-status-inline-select fin-status-${statusClean}" data-id="${d.despesa_id}" data-type="despesa" title="Alterar status de pagamento">
+                  <option value="Pendente" ${statusClean === 'pendente' ? 'selected' : ''}>Pendente</option>
+                  <option value="Pago" ${statusClean === 'pago' ? 'selected' : ''}>Pago</option>
+                  <option value="Atrasado" ${statusClean === 'atrasado' ? 'selected' : ''}>Atrasado</option>
+                </select>
+              </div>
+            </td>
             <td style="text-align: right; width: 40px; padding-right: 20px;">
               <button class="fin-btn-delete-row" data-id="${d.despesa_id}" data-type="despesa" title="Excluir" style="background: transparent; border: none; color: #EF4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.5; transition: opacity 0.2s;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -1064,8 +1166,8 @@ function _renderAll() {
   // Registra eventos de clique para edição
   document.querySelectorAll('.fin-row-clickable').forEach(row => {
     row.addEventListener('click', (e) => {
-      // Impede abrir o modal caso clique na lixeira de exclusão direta
-      if (e.target.closest('.fin-btn-delete-row')) return;
+      // Impede abrir o modal caso clique na lixeira ou no seletor inline de status
+      if (e.target.closest('.fin-btn-delete-row') || e.target.closest('.fin-status-select-wrap')) return;
 
       const id = parseInt(row.dataset.id, 10);
       const type = row.dataset.type;
@@ -1075,6 +1177,66 @@ function _renderAll() {
       } else {
         const d = _state.despesas.find(x => x.despesa_id === id);
         if (d) _abrirModalEdicaoDespesa(d);
+      }
+    });
+  });
+
+  // Registra eventos de alteração inline de status (1 clique sem abrir modal)
+  document.querySelectorAll('.fin-status-inline-select').forEach(select => {
+    select.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      const id = parseInt(select.dataset.id, 10);
+      const type = select.dataset.type;
+      const novoStatus = select.value;
+      const statusClean = novoStatus.toLowerCase();
+
+      select.className = `fin-status-inline-select fin-status-${statusClean}`;
+
+      if (type === 'receita') {
+        const item = _state.receitas.find(x => x.receita_id === id);
+        const clienteNome = item ? (clientMap[item.cliente_id] || item.receita_nome || 'Cliente') : 'Cliente';
+        const dataRecebimento = novoStatus === 'Pago' ? new Date().toISOString() : null;
+
+        if (item) {
+          item.receita_status = novoStatus;
+          item.data_recebimento = dataRecebimento;
+        }
+        _renderAll();
+
+        const { error } = await FinanceiroReceitas.update(id, {
+          receita_status: novoStatus,
+          data_recebimento: dataRecebimento
+        });
+
+        if (error) {
+          console.error('[Financeiro] Erro ao atualizar status da receita:', error);
+          _showToast('Erro ao atualizar status.');
+          _loadData();
+        } else {
+          _showToast(`Status de ${clienteNome}: ${novoStatus}!`);
+        }
+      } else {
+        const item = _state.despesas.find(x => x.despesa_id === id);
+        const dataPagamento = novoStatus === 'Pago' ? new Date().toISOString() : null;
+
+        if (item) {
+          item.despesa_status = novoStatus;
+          item.data_pagamento = dataPagamento;
+        }
+        _renderAll();
+
+        const { error } = await FinanceiroDespesas.update(id, {
+          despesa_status: novoStatus,
+          data_pagamento: dataPagamento
+        });
+
+        if (error) {
+          console.error('[Financeiro] Erro ao atualizar status da despesa:', error);
+          _showToast('Erro ao atualizar status.');
+          _loadData();
+        } else {
+          _showToast(`Despesa atualizada: ${novoStatus}!`);
+        }
       }
     });
   });
@@ -1160,6 +1322,11 @@ export default {
               ${periodsHTML}
             </div>
           </div>
+          <!-- Botão Sincronizar Mensalidades -->
+          <button class="btn btn-ghost" id="btn-sincronizar-mensalidades" title="Sincroniza automaticamente as mensalidades dos clientes ativos para este mês" style="gap: 8px;">
+            <svg viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Sincronizar Mensalidades
+          </button>
           <!-- Botão Primário Ciano -->
           <button class="btn btn-cyan" id="btn-nova-movimentacao">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1296,7 +1463,7 @@ export default {
 
       // Escolher período
       periodDropdown.querySelectorAll('.fin-dropdown-item').forEach(item => {
-        item.addEventListener('click', (e) => {
+        item.addEventListener('click', async (e) => {
           e.stopPropagation();
           const selected = item.dataset.period;
           _state.selectedPeriod = selected;
@@ -1309,6 +1476,8 @@ export default {
           periodDropdown.classList.remove('show');
 
           _showToast(`Filtro aplicado: ${selected}`);
+          // Sincroniza faturas automaticamente ao navegar para o período
+          await _sincronizarMensalidadesPeriodo(selected, true);
           _renderAll();
         });
       });
@@ -1335,6 +1504,19 @@ export default {
 
       });
     });
+
+    // Botão Sincronizar Mensalidades
+    const btnSinc = document.getElementById('btn-sincronizar-mensalidades');
+    if (btnSinc) {
+      btnSinc.addEventListener('click', async () => {
+        btnSinc.classList.add('smc-loading');
+        btnSinc.disabled = true;
+        await _sincronizarMensalidadesPeriodo(_state.selectedPeriod, false);
+        btnSinc.classList.remove('smc-loading');
+        btnSinc.disabled = false;
+        _renderAll();
+      });
+    }
 
     // Botão "+ Nova Movimentação"
     const btnNova = document.getElementById('btn-nova-movimentacao');
