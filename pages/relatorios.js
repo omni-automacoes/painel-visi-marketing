@@ -17,7 +17,7 @@ let _tabAtual              = 'comercial'; // 'comercial' | 'operacoes' | 'master
 let _dataInicio            = '';          // 'YYYY-MM-DD'
 let _dataFim               = '';          // 'YYYY-MM-DD'
 let _periodLabel           = '';          // texto exibido no badge
-let _investimentoMarketing = 0;           // numeric salvo em usuarios.investimento_marketing
+let _investimentoMarketing = 0;           // numeric alocado por mês em relatorios_investimentos
 
 // ─── Helpers de data ────────────────────────────────────────
 
@@ -336,7 +336,7 @@ function _htmlSectionComercial() {
         accentColor: 'cyan',
         value: 'R$ —',
         label: 'CAC — Custo de Aquisição de Clientes',
-        sub: 'Fórmula: Total Investido em Marketing & Vendas ÷ Total de Novos Clientes conquistados no período. Investimento vem de usuarios.investimento_marketing; novos clientes contam registros de clientes.criado_em dentro do período selecionado.',
+        sub: 'Fórmula: Orçamento de Marketing do Mês ÷ Total de Novos Clientes conquistados no período. Investimento fixo por mês salvo em relatorios_investimentos.',
         trend: 'neu',
         trendLabel: 'Período atual',
       })}
@@ -360,7 +360,7 @@ function _htmlSectionComercial() {
         accentColor: 'blue',
         value: 'R$ —',
         label: 'CPQ — Custo por Lead Qualificado',
-        sub: 'Fórmula: Total Investido em Marketing & Vendas ÷ Total de SQLs (negócios com reunião realizada no período). Investimento vem de usuarios.investimento_marketing; SQLs contam negocios com reuniao_realizada = TRUE e criado_em dentro do período selecionado.',
+        sub: 'Fórmula: Orçamento de Marketing do Mês ÷ Total de SQLs (reuniões realizadas). Investimento fixo por mês salvo em relatorios_investimentos.',
         trend: 'neu',
         trendLabel: 'Período atual',
       })}
