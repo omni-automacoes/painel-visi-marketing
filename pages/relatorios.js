@@ -535,11 +535,20 @@ function _htmlSectionComercial() {
           <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg>
         </div>
         <div class="rel-investimento-card-info">
-          <span class="rel-investimento-card-title">Investimento em Marketing & Vendas</span>
-          <span class="rel-investimento-card-sub">Valor total investido no período</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="rel-investimento-card-title">Investimento em Marketing & Vendas</span>
+            <span class="rel-section-badge rel-section-badge--comercial" id="rel-investimento-badge-mes">Fixo por Mês</span>
+          </div>
+          <span class="rel-investimento-card-sub" id="rel-investimento-periodo-label">Carregando mês...</span>
         </div>
       </div>
       <div class="rel-investimento-card-right">
+
+        <!-- Botão Gerenciar Todos os Meses -->
+        <button class="rel-investimento-btn rel-investimento-btn--outline" id="rel-investimento-todos-meses-btn" title="Defina o orçamento fixo de qualquer mês do ano" style="display:inline-flex; align-items:center; gap:6px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Todos os Meses
+        </button>
 
         <!-- Valor exibido (modo visualização) -->
         <span class="rel-investimento-val-display" id="rel-investimento-val-display" style="display:none"></span>
@@ -1362,15 +1371,30 @@ function _modoEditInvestimento() {
   }
 }
 
-/**
- * Carrega o investimento_marketing para o período selecionado
- * com busca prioritária na tabela `relatorios_investimentos` e fallback em `usuarios`.
- */
-async function _carregarInvestimento() {
-  const userId = UserStore.getUserId();
-  const periodoKey = _dataInicio ? _dataInicio.substring(0, 7) : 'padrao';
-  let valor = 0;
+function _formatarNomeMes(periodoKey) {
+  if (!periodoKey || !periodoKey.includes('-')) return 'Período Atual';
+  const [ano, mes] = periodoKey.split('-');
+  const meses = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+  const idx = parseInt(mes, 10) - 1;
+  return `${meses[idx] || mes} de ${ano}`;
+}
 
+/**
+ * Carrega o investimento fixo estritamente para o mês do período selecionado.
+ * Isolamento total por chave de mês ('YYYY-MM').
+ */
+async function _carregarInvestimento(dataInicio = _dataInicio) {
+  const periodoKey = dataInicio ? dataInicio.substring(0, 7) : (_dataInicio ? _dataInicio.substring(0, 7) : new Date().toISOString().substring(0, 7));
+
+  const labelEl = document.getElementById('rel-investimento-periodo-label');
+  if (labelEl) {
+    labelEl.textContent = `Orçamento Fixo: ${_formatarNomeMes(periodoKey)}`;
+  }
+
+  let valor = 0;
   try {
     const { data: invData, error: invError } = await supabase
       .from('relatorios_investimentos')
@@ -1380,16 +1404,9 @@ async function _carregarInvestimento() {
 
     if (!invError && invData?.valor !== undefined && invData?.valor !== null) {
       valor = Number(invData.valor);
-    } else if (userId) {
-      const { data: uData } = await supabase
-        .from('usuarios')
-        .select('investimento_marketing')
-        .eq('user_id', userId)
-        .single();
-      valor = Number(uData?.investimento_marketing ?? 0);
     }
   } catch (err) {
-    console.warn('[Relatórios] Erro ao carregar investimento:', err);
+    console.warn('[Relatórios] Erro ao carregar investimento do mês:', err);
   }
 
   _investimentoMarketing = valor;
@@ -1401,15 +1418,16 @@ async function _carregarInvestimento() {
     if (inputEl) inputEl.value = '';
     _modoEditInvestimento();
   }
+
+  return valor;
 }
 
 /**
- * Salva o investimento_marketing digitado para o período atual na tabela
- * `relatorios_investimentos` e sincroniza com `usuarios`.
+ * Salva o orçamento fixo do mês em relatorios_investimentos.
+ * Totalmente isolado por mês.
  */
 async function _salvarInvestimento() {
-  const userId = UserStore.getUserId();
-  const periodoKey = _dataInicio ? _dataInicio.substring(0, 7) : 'padrao';
+  const periodoKey = _dataInicio ? _dataInicio.substring(0, 7) : new Date().toISOString().substring(0, 7);
 
   const input  = document.getElementById('rel-investimento-input');
   const status = document.getElementById('rel-investimento-status');
@@ -1421,7 +1439,6 @@ async function _salvarInvestimento() {
   if (status) { status.textContent = 'Salvando…'; status.className = 'rel-investimento-status rel-investimento-status--saving'; }
 
   try {
-    // 1. Salva na tabela dedicada por período
     const { error: invErr } = await supabase
       .from('relatorios_investimentos')
       .upsert({
@@ -1432,17 +1449,9 @@ async function _salvarInvestimento() {
 
     if (invErr) throw invErr;
 
-    // 2. Sincroniza em usuarios (fallback de compatibilidade)
-    if (userId) {
-      await supabase
-        .from('usuarios')
-        .update({ investimento_marketing: valor })
-        .eq('user_id', userId);
-    }
-
     _investimentoMarketing = valor;
 
-    if (status) { status.textContent = 'Salvo!'; status.className = 'rel-investimento-status rel-investimento-status--ok'; }
+    if (status) { status.textContent = 'Orçamento Salvo!'; status.className = 'rel-investimento-status rel-investimento-status--ok'; }
     _modoViewInvestimento();
 
     setTimeout(() => {
@@ -1455,11 +1464,174 @@ async function _salvarInvestimento() {
     _carregarCAC(_dataInicio, _dataFim);
     _carregarCPQ(_dataInicio, _dataFim);
     _carregarLtvMetrics(_dataInicio, _dataFim);
+    _carregarCacPayback(_dataInicio, _dataFim);
 
   } catch (error) {
     console.error('[Relatórios] Erro ao salvar investimento:', error.message);
     if (status) { status.textContent = 'Erro ao salvar'; status.className = 'rel-investimento-status rel-investimento-status--error'; }
     if (btn) btn.disabled = false;
+  }
+}
+
+/**
+ * Modal para visualizar e definir o orçamento de cada mês do ano de forma transparente.
+ */
+async function _abrirModalMesesInvestimento() {
+  let modalOverlay = document.getElementById('rel-invest-modal-overlay');
+  if (!modalOverlay) {
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = 'rel-invest-modal-overlay';
+    modalOverlay.className = 'rel-invest-modal-overlay';
+    modalOverlay.innerHTML = `
+      <div class="rel-invest-modal">
+        <div class="rel-invest-modal-header">
+          <div>
+            <div class="rel-invest-modal-title">Orçamento Mensal em Marketing & Vendas</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+              Defina o valor fixo investido em cada mês para cálculo exato de CAC e CPQ
+            </div>
+          </div>
+          <button class="rel-invest-modal-close" id="rel-invest-modal-close">&times;</button>
+        </div>
+        <div class="rel-invest-modal-body" id="rel-invest-modal-body">
+          <div style="text-align:center; padding:24px; color:var(--text-secondary);">Carregando meses...</div>
+        </div>
+        <div class="rel-invest-modal-footer">
+          <button class="btn btn-secondary" id="rel-invest-modal-fechar-btn" style="height:34px; font-size:12.5px;">Fechar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modalOverlay);
+
+    const fechar = () => modalOverlay.classList.remove('open');
+    modalOverlay.querySelector('#rel-invest-modal-close')?.addEventListener('click', fechar);
+    modalOverlay.querySelector('#rel-invest-modal-fechar-btn')?.addEventListener('click', fechar);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) fechar();
+    });
+  }
+
+  modalOverlay.classList.add('open');
+  const bodyEl = document.getElementById('rel-invest-modal-body');
+  if (!bodyEl) return;
+
+  const anoAtual = _dataInicio ? parseInt(_dataInicio.substring(0, 4), 10) : new Date().getFullYear();
+  const mesAtualKey = _dataInicio ? _dataInicio.substring(0, 7) : new Date().toISOString().substring(0, 7);
+
+  try {
+    const { data: rows, error } = await supabase
+      .from('relatorios_investimentos')
+      .select('periodo, valor')
+      .like('periodo', `${anoAtual}-%`);
+
+    const invMap = {};
+    (rows || []).forEach(r => {
+      invMap[r.periodo] = Number(r.valor || 0);
+    });
+
+    const meses = [
+      { num: '01', nome: 'Janeiro' },
+      { num: '02', nome: 'Fevereiro' },
+      { num: '03', nome: 'Março' },
+      { num: '04', nome: 'Abril' },
+      { num: '05', nome: 'Maio' },
+      { num: '06', nome: 'Junho' },
+      { num: '07', nome: 'Julho' },
+      { num: '08', nome: 'Agosto' },
+      { num: '09', nome: 'Setembro' },
+      { num: '10', nome: 'Outubro' },
+      { num: '11', nome: 'Novembro' },
+      { num: '12', nome: 'Dezembro' }
+    ];
+
+    bodyEl.innerHTML = meses.map(m => {
+      const pKey = `${anoAtual}-${m.num}`;
+      const valor = invMap[pKey] || 0;
+      const isActive = pKey === mesAtualKey;
+
+      return `
+        <div class="rel-invest-month-row ${isActive ? 'active-month' : ''}" data-periodo="${pKey}">
+          <div class="rel-invest-month-info">
+            <div class="rel-invest-month-name">
+              ${m.nome} / ${anoAtual}
+              ${isActive ? '<span class="rel-invest-month-tag">Mês Ativo</span>' : ''}
+            </div>
+            <span style="font-size:11px; color:var(--text-secondary);">
+              ${valor > 0 ? `R$ ${_formatarBRL(valor)} alocado` : 'Sem orçamento definido'}
+            </span>
+          </div>
+          <div class="rel-invest-month-actions">
+            <div class="rel-invest-month-input-wrap">
+              <span style="font-size:11px; color:var(--text-secondary); margin-right:4px;">R$</span>
+              <input type="text" inputmode="numeric" class="rel-invest-month-input" value="${_formatarBRL(valor)}" placeholder="0,00" />
+            </div>
+            <button class="rel-invest-month-save-btn" data-save-periodo="${pKey}">Salvar</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Aplica máscara BRL e evento salvar em cada linha
+    bodyEl.querySelectorAll('.rel-invest-month-row').forEach(row => {
+      const input = row.querySelector('.rel-invest-month-input');
+      const btn = row.querySelector('.rel-invest-month-save-btn');
+      const pKey = row.dataset.periodo;
+
+      if (input) {
+        input.addEventListener('input', () => _maskBRL(input));
+      }
+
+      if (btn && input) {
+        btn.addEventListener('click', async () => {
+          const val = _parseBRL(input.value);
+          btn.disabled = true;
+          btn.textContent = '…';
+
+          try {
+            const { error: saveErr } = await supabase
+              .from('relatorios_investimentos')
+              .upsert({
+                periodo: pKey,
+                valor: val,
+                atualizado_em: new Date().toISOString()
+              });
+
+            if (saveErr) throw saveErr;
+
+            btn.textContent = '✓';
+            setTimeout(() => {
+              btn.textContent = 'Salvar';
+              btn.disabled = false;
+            }, 1200);
+
+            const sub = row.querySelector('.rel-invest-month-info span');
+            if (sub) {
+              sub.textContent = val > 0 ? `R$ ${_formatarBRL(val)} alocado` : 'Sem orçamento definido';
+            }
+
+            // Se for o mês ativo na tela, sincroniza o card principal e recalcula métricas
+            if (pKey === mesAtualKey) {
+              _investimentoMarketing = val;
+              const cardInput = document.getElementById('rel-investimento-input');
+              if (cardInput) cardInput.value = _formatarBRL(val);
+              if (val > 0) _modoViewInvestimento(); else _modoEditInvestimento();
+              _carregarCAC(_dataInicio, _dataFim);
+              _carregarCPQ(_dataInicio, _dataFim);
+              _carregarLtvMetrics(_dataInicio, _dataFim);
+              _carregarCacPayback(_dataInicio, _dataFim);
+            }
+          } catch (e) {
+            console.error('Erro ao salvar mês:', e);
+            btn.textContent = 'Erro';
+            btn.disabled = false;
+          }
+        });
+      }
+    });
+
+  } catch (err) {
+    console.error('Erro ao listar meses:', err);
+    bodyEl.innerHTML = `<div style="text-align:center; padding:24px; color:var(--red);">Erro ao carregar meses.</div>`;
   }
 }
 
@@ -1474,6 +1646,9 @@ function _bindInvestimentoEvents() {
 
   // Editar: volta ao modo edição
   document.getElementById('rel-investimento-edit')?.addEventListener('click', _modoEditInvestimento);
+
+  // Abrir Modal Gerenciador de Todos os Meses
+  document.getElementById('rel-investimento-todos-meses-btn')?.addEventListener('click', _abrirModalMesesInvestimento);
 
   // Salvar com Enter
   inputEl?.addEventListener('keydown', (e) => {
@@ -1820,16 +1995,14 @@ async function _carregarCacPayback(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Investimento marketing
-    let investimento = 0;
-    if (userId) {
-      const { data: uData } = await supabase
-        .from('usuarios')
-        .select('investimento_marketing')
-        .eq('user_id', userId)
-        .single();
-      investimento = Number(uData?.investimento_marketing ?? 0);
-    }
+    // Investimento marketing fixo do mês
+    const periodoKey = inicio.substring(0, 7);
+    const { data: invData } = await supabase
+      .from('relatorios_investimentos')
+      .select('valor')
+      .eq('periodo', periodoKey)
+      .maybeSingle();
+    const investimento = Number(invData?.valor ?? 0);
 
     // Novos clientes no período
     const { count: novos, error: novosErr } = await supabase
@@ -1887,28 +2060,16 @@ async function _carregarCAC(inicio, fim) {
   if (valueEl) valueEl.textContent = 'R$ …';
 
   try {
-    const userId = UserStore.getUserId();
     const periodoKey = inicio.substring(0, 7);
 
-    // 1. Busca investimento para o período na tabela relatorios_investimentos ou usuarios
-    let investimento = 0;
+    // 1. Busca investimento fixo específico deste mês
     const { data: invData } = await supabase
       .from('relatorios_investimentos')
       .select('valor')
       .eq('periodo', periodoKey)
       .maybeSingle();
 
-    if (invData?.valor !== undefined && invData?.valor !== null) {
-      investimento = Number(invData.valor);
-    } else if (userId) {
-      const { data: userData } = await supabase
-        .from('usuarios')
-        .select('investimento_marketing')
-        .eq('user_id', userId)
-        .single();
-      investimento = Number(userData?.investimento_marketing ?? 0);
-    }
-
+    const investimento = Number(invData?.valor ?? 0);
     _investimentoMarketing = investimento;
 
     // 2. Busca todos os novos clientes conquistados no período
@@ -1994,29 +2155,16 @@ async function _carregarCPQ(inicio, fim) {
   if (valueEl) valueEl.textContent = 'R$ …';
 
   try {
-    const userId = UserStore.getUserId();
     const periodoKey = inicio.substring(0, 7);
 
-    // 1. Busca investimento
-    let investimento = _investimentoMarketing || 0;
-    if (!investimento) {
-      const { data: invData } = await supabase
-        .from('relatorios_investimentos')
-        .select('valor')
-        .eq('periodo', periodoKey)
-        .maybeSingle();
+    // 1. Busca investimento fixo específico deste mês
+    const { data: invData } = await supabase
+      .from('relatorios_investimentos')
+      .select('valor')
+      .eq('periodo', periodoKey)
+      .maybeSingle();
 
-      if (invData?.valor !== undefined && invData?.valor !== null) {
-        investimento = Number(invData.valor);
-      } else if (userId) {
-        const { data: userData } = await supabase
-          .from('usuarios')
-          .select('investimento_marketing')
-          .eq('user_id', userId)
-          .single();
-        investimento = Number(userData?.investimento_marketing ?? 0);
-      }
-    }
+    const investimento = Number(invData?.valor ?? 0);
 
     // 2. Busca negócios com reuniao_realizada = TRUE no período com join de vendedor
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
@@ -2935,20 +3083,15 @@ async function _carregarLtvMetrics(inicio, fim) {
     const nAtivos  = clientesAtivos ?? 0;
     const ltvTotal = ltvMedio * nAtivos;
 
-    // 3. CAC do período: investimento / novos clientes
+    // 3. CAC do período: investimento fixo do mês / novos clientes
     const periodoKey = inicio.substring(0, 7);
-    let investimento = _investimentoMarketing || 0;
-    if (!investimento) {
-      const { data: invData } = await supabase
-        .from('relatorios_investimentos')
-        .select('valor')
-        .eq('periodo', periodoKey)
-        .maybeSingle();
+    const { data: invData } = await supabase
+      .from('relatorios_investimentos')
+      .select('valor')
+      .eq('periodo', periodoKey)
+      .maybeSingle();
 
-      if (invData?.valor !== undefined && invData?.valor !== null) {
-        investimento = Number(invData.valor);
-      }
-    }
+    const investimento = Number(invData?.valor ?? 0);
 
     const { count: novosClientes } = await supabase
       .from('clientes')
@@ -3708,7 +3851,7 @@ async function _carregarNPSDetalhado(inicio, fim) {
  * Chamada sempre que o período muda.
  * Atualiza o badge, fecha o picker e recarrega as métricas do período.
  */
-function _aplicarPeriodo(inicio, fim, label = null) {
+async function _aplicarPeriodo(inicio, fim, label = null) {
   _dataInicio = inicio;
   _dataFim    = fim;
   _periodLabel = label ||
@@ -3728,6 +3871,9 @@ function _aplicarPeriodo(inicio, fim, label = null) {
   if (inputFim)    inputFim.value    = _dataFim;
 
   console.log('[Relatórios] Período aplicado:', _dataInicio, '→', _dataFim);
+
+  // ── Atualiza orçamento fixo do mês selecionado antes de calcular CAC e CPQ ──
+  await _carregarInvestimento(_dataInicio);
 
   // ── Métricas filtradas por período ──
   _carregarMRR();
@@ -4142,5 +4288,7 @@ export default {
       _popoverEl.remove();
       _popoverEl = null;
     }
+    const modal = document.getElementById('rel-invest-modal-overlay');
+    if (modal) modal.remove();
   },
 };

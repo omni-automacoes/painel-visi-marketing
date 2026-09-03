@@ -1932,5 +1932,218 @@
   }
 }
 
+/* ============================================================
+   MODAL DE GERENCIAMENTO DE ORÇAMENTOS MENSAIS
+   ============================================================ */
+
+.rel-invest-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.rel-invest-modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.rel-invest-modal {
+  background: #18181C;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+  transform: scale(0.96);
+  transition: transform 0.2s ease;
+  overflow: hidden;
+}
+
+.rel-invest-modal-overlay.open .rel-invest-modal {
+  transform: scale(1);
+}
+
+[data-theme="light"] .rel-invest-modal {
+  background: #FFFFFF;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15);
+}
+
+.rel-invest-modal-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rel-invest-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+[data-theme="dark"] .rel-invest-modal-title {
+  color: #FFFFFF;
+}
+
+.rel-invest-modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.rel-invest-modal-close:hover {
+  color: var(--black);
+  background: rgba(125, 125, 125, 0.15);
+}
+
+[data-theme="dark"] .rel-invest-modal-close:hover {
+  color: #FFFFFF;
+}
+
+.rel-invest-modal-body {
+  padding: 16px 22px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rel-invest-month-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(125, 125, 125, 0.05);
+  border: 1px solid var(--border-light);
+  transition: border-color 0.2s;
+}
+
+[data-theme="dark"] .rel-invest-month-row {
+  background: #141416;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.rel-invest-month-row.active-month {
+  border-color: var(--cyan);
+  background: rgba(26, 206, 238, 0.06);
+}
+
+.rel-invest-month-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rel-invest-month-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--black);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-theme="dark"] .rel-invest-month-name {
+  color: #FFFFFF;
+}
+
+.rel-invest-month-tag {
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.rel-invest-month-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rel-invest-month-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 0 8px;
+  height: 32px;
+  width: 130px;
+}
+
+.rel-invest-month-input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--black);
+  outline: none;
+  text-align: right;
+}
+
+[data-theme="dark"] .rel-invest-month-input {
+  color: #FFFFFF;
+}
+
+.rel-invest-month-save-btn {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  background: var(--cyan);
+  color: #000000;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: opacity 0.15s;
+}
+
+.rel-invest-month-save-btn:hover {
+  opacity: 0.9;
+}
+
+.rel-invest-month-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rel-invest-modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  justify-content: flex-end;
+}
+
+
 
 
