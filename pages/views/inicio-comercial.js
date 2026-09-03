@@ -76,16 +76,16 @@ function _processarReceitaMensal(negocios = []) {
   return receita;
 }
 
-/** Mapeia metas por nome do mês para array de 12 posições */
+/** Mapeia metas por data do mês para array de 12 posições */
 function _processarMetaMensal(metas = []) {
-  const indice = {
-    'Janeiro':1,'Fevereiro':2,'Março':3,'Abril':4,'Maio':5,'Junho':6,
-    'Julho':7,'Agosto':8,'Setembro':9,'Outubro':10,'Novembro':11,'Dezembro':12,
-  };
   const meta = Array(12).fill(0);
   metas.forEach(m => {
-    const idx = (indice[m.meta_mes] ?? 0) - 1;
-    if (idx >= 0) meta[idx] = Number(m.meta_principal) || 0;
+    if (m.meta_data) {
+      const idx = new Date(m.meta_data).getUTCMonth();
+      if (idx >= 0 && idx < 12) {
+        meta[idx] = Number(m.meta_valor) || 0;
+      }
+    }
   });
   return meta;
 }
@@ -193,12 +193,26 @@ function _atualizarRanking(vendedores = [], ganhos = []) {
     return;
   }
 
-  // Agrupa ganhos por vendedor_id
+  // Agrupa ganhos por vendedor_id e por co-responsáveis
   const stats = {};
   ganhos.forEach(n => {
-    if (!stats[n.vendedor_id]) stats[n.vendedor_id] = { count: 0, receita: 0 };
-    stats[n.vendedor_id].count++;
-    stats[n.vendedor_id].receita += Number(n.negocio_valor) || 0;
+    // Principal
+    if (n.vendedor_id) {
+      if (!stats[n.vendedor_id]) stats[n.vendedor_id] = { count: 0, receita: 0 };
+      stats[n.vendedor_id].count++;
+      stats[n.vendedor_id].receita += Number(n.negocio_valor) || 0;
+    }
+    // Adicionais (co-responsáveis)
+    if (n.negocios_responsaveis && n.negocios_responsaveis.length > 0) {
+      n.negocios_responsaveis.forEach(r => {
+        const uid = r.usuario_id;
+        if (uid) {
+          if (!stats[uid]) stats[uid] = { count: 0, receita: 0 };
+          stats[uid].count++;
+          stats[uid].receita += Number(n.negocio_valor) || 0;
+        }
+      });
+    }
   });
 
   // Junta com nomes e ordena por receita decrescente
@@ -222,8 +236,8 @@ function _atualizarRanking(vendedores = [], ganhos = []) {
         <td style="font-weight:800;${isTop ? 'color:#1ACEEE;' : ''}">${rankIcon}</td>
         <td class="td-name" style="${isTop ? 'color:#1ACEEE;font-weight:700;' : ''}">${v.nome}</td>
         <td>${v.fechamentos}</td>
-        <td class="td-value">${formatCurrency(v.receita, true)}</td>
-        <td style="color:var(--text-secondary);font-size:11px;">${v.ticket > 0 ? formatCurrency(v.ticket, true) : '—'}</td>
+        <td class="td-value">${formatCurrency(v.receita)}</td>
+        <td style="color:var(--text-secondary);font-size:11px;">${v.ticket > 0 ? formatCurrency(v.ticket) : '—'}</td>
       </tr>
     `;
   }).join('');
@@ -235,38 +249,56 @@ async function _carregarDados() {
   const vendedorId = UserStore.getUserId();
   if (!vendedorId) return;
 
+  const isAdmin = UserStore.getCargo() === 'Administrador';
+  const vendedorIdBusca = isAdmin ? null : vendedorId;
+
   const [
     resAbertos, resFechados, resAnterior, resAno,
     resMeta, resTarefas, resMetasAno, resGanhosTodos, resVendedores, resReunioes, resAtividade
   ] = await Promise.all([
-    Negocios.getAbertosPorVendedor(vendedorId),
-    Negocios.getFechadosMesAtual(vendedorId),
-    Negocios.getFechadosMesAnterior(vendedorId),
-    Negocios.getAnoAtualPorVendedor(vendedorId),
+    Negocios.getAbertosPorVendedor(vendedorIdBusca),
+    Negocios.getFechadosMesAtual(vendedorIdBusca),
+    Negocios.getFechadosMesAnterior(vendedorIdBusca),
+    Negocios.getAnoAtualPorVendedor(vendedorIdBusca),
     Metas.getMesAtual(),
-    Tarefas.getRecentesPorVendedor(vendedorId),
+    Tarefas.getRecentesPorVendedor(vendedorIdBusca),
     Metas.getAnoAtual(),
     Negocios.getGanhosMesAtualTodos(),
     Usuarios.getVendedoresAtivos(),
-    Negocios.getReunioesMesAtual(vendedorId),
-    DiaFinalizado.getEstatisticas(vendedorId, 'hoje'),
+    Negocios.getReunioesMesAtual(vendedorIdBusca),
+    DiaFinalizado.getEstatisticas(vendedorIdBusca, 'mes'),
   ]);
+
+  // Filtra negócios em JS para incluir aqueles onde o usuário logado é principal ou co-responsável
+  const filterByVendedor = (list) => {
+    if (isAdmin) return list ?? [];
+    return (list ?? []).filter(n =>
+      n.vendedor_id === vendedorId ||
+      (n.negocios_responsaveis && n.negocios_responsaveis.some(r => r.usuario_id === vendedorId))
+    );
+  };
+
+  const abertos  = filterByVendedor(resAbertos.data);
+  const fechados = filterByVendedor(resFechados.data);
+  const anterior = filterByVendedor(resAnterior.data);
+  const ano      = filterByVendedor(resAno.data);
+  const reunioes = filterByVendedor(resReunioes.data);
 
   // ── KPIs ──
   if (!resAbertos.error) {
     _atualizarCard('smc-abertos',
-      (resAbertos.data?.length ?? 0).toLocaleString('pt-BR'),
+      abertos.length.toLocaleString('pt-BR'),
       'em aberto hoje'
     );
   }
 
   if (!resFechados.error) {
-    const totalReunioes = resReunioes.error ? 0 : (resReunioes.data?.length ?? 0);
+    const totalReunioes = resReunioes.error ? 0 : reunioes.length;
 
-    const kpi = _calcularFechados(resFechados.data || [], totalReunioes);
+    const kpi = _calcularFechados(fechados, totalReunioes);
 
     // Calcula variação % vs. mês anterior
-    const totalAnterior = resAnterior.error ? 0 : (resAnterior.data?.length ?? 0);
+    const totalAnterior = anterior.length;
     const variacaoPct = totalAnterior > 0
       ? Math.round(((kpi.totalGanhos - totalAnterior) / totalAnterior) * 100)
       : null;
@@ -294,12 +326,15 @@ async function _carregarDados() {
     _atualizarCard('smc-ticket',  formatCurrency(kpi.ticketMedio, true),  'média dos negócios ganhos');
     _atualizarCard('smc-receita', formatCurrency(kpi.receitaTotal, true), 'negócios ganhos no mês');
 
-    // ── Funil: atualiza com receita real + meta do mês ──
+    // ── Funil: atualiza com receita real GERAL + meta do mês ──
     const metaValor = resMeta.error || !resMeta.data
       ? 0
-      : Number(resMeta.data.meta_principal) || 0;
+      : Number(resMeta.data.meta_valor) || 0;
 
-    _atualizarFunil(kpi.receitaTotal, metaValor);
+    const globalGanhos = resGanhosTodos.data || [];
+    const globalReceitaTotal = globalGanhos.reduce((acc, n) => acc + (Number(n.negocio_valor) || 0), 0);
+
+    _atualizarFunil(globalReceitaTotal, metaValor);
   }
 
   // ── Tarefas Recentes ──
@@ -309,7 +344,7 @@ async function _carregarDados() {
 
   // ── Gráfico de barras (Ganho x Perdido por mês) ──
   if (!resAno.error && barChart) {
-    const grafico = _processarGrafico(resAno.data || []);
+    const grafico = _processarGrafico(ano);
     barChart.destroy();
     barChart = new BarChart('barChart');
     barChart.init(grafico);
@@ -317,7 +352,7 @@ async function _carregarDados() {
 
   // ── Gráfico de linha (Receita Gerada x Meta por mês) ──
   if (lineChart) {
-    const receitaPorMes = _processarReceitaMensal(resAno.data || []);
+    const receitaPorMes = _processarReceitaMensal(ano);
     const metaPorMes   = _processarMetaMensal(resMetasAno.data || []);
     lineChart.destroy();
     lineChart = new LineChart('lineChart');
@@ -331,15 +366,134 @@ async function _carregarDados() {
 
   // ── Dia Finalizado (Atividade) ──
   _renderizarAtividade(resAtividade);
+
+  const intervaloEl = document.getElementById('atividade-periodo-intervalo');
+  if (intervaloEl) {
+    intervaloEl.textContent = _obterIntervaloTexto('mes');
+  }
+}
+
+function _obterIntervaloTexto(periodo) {
+  const agora = new Date();
+  const formatarData = (d) => {
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dia}/${mes}`;
+  };
+
+  if (periodo === 'hoje') {
+    return formatarData(agora);
+  }
+
+  if (periodo === 'semana') {
+    const diaDaSemana = agora.getDay();
+    const diffParaSegunda = diaDaSemana === 0 ? 6 : diaDaSemana - 1;
+    const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - diffParaSegunda);
+    const fim = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 6);
+    return `${formatarData(inicio)} a ${formatarData(fim)}`;
+  }
+
+  if (periodo === 'mes') {
+    const inicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const fim = new Date(agora.getFullYear(), agora.getMonth() + 1, 0);
+    return `${formatarData(inicio)} a ${formatarData(fim)}`;
+  }
+
+  return '';
 }
 
 function _renderizarAtividade(resAtividade) {
-  if (resAtividade && !resAtividade.error) {
-    const elContatos = document.getElementById('card-novo-contatos');
-    const elProps    = document.getElementById('card-novo-prospecao');
+  const bodyEl = document.getElementById('card-novo-body');
+  if (!bodyEl) return;
 
-    if (elContatos) elContatos.textContent = resAtividade.contatos || 0;
-    if (elProps)    elProps.textContent    = resAtividade.prospeccoes || 0;
+  if (resAtividade && !resAtividade.error) {
+    const isAdmin = UserStore.getCargo() === 'Administrador';
+
+    if (!isAdmin) {
+      // Exibe layout padrão para vendedor comum (Contatos vs Prospecções)
+      bodyEl.innerHTML = `
+        <div style="display:flex; gap: 30px; align-items:center; justify-content:center; padding: 16px 0;">
+          <div style="text-align:center;">
+            <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;">${resAtividade.contatos || 0}</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Contatos Realizados</div>
+          </div>
+          <div style="width:1px; background:var(--border-light); height:50px;"></div>
+          <div style="text-align:center;">
+            <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;">${resAtividade.prospeccoes || 0}</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Prospecções</div>
+          </div>
+        </div>
+      `;
+    } else {
+      // Exibe lista agrupada por usuário/responsável para administrador
+      const agrupado = {};
+      (resAtividade.rows || []).forEach(row => {
+        const uid = row.user_id;
+        if (!uid) return;
+
+        const nome = row.usuarios?.user_nome || 'Desconhecido';
+        const avatar = row.usuarios?.user_avatar || '';
+
+        if (!agrupado[uid]) {
+          agrupado[uid] = {
+            nome,
+            avatar,
+            contatos: 0,
+            prospeccoes: 0
+          };
+        }
+
+        agrupado[uid].contatos += Number(row.quantidade_contatos_realizados) || 0;
+        agrupado[uid].prospeccoes += Number(row.quantidade_prospecao) || 0;
+      });
+
+      const lista = Object.values(agrupado).sort((a, b) => b.contatos - a.contatos);
+
+      if (lista.length === 0) {
+        bodyEl.innerHTML = `
+          <div style="text-align:center; color:var(--text-muted); font-size:13px; padding: 24px 0;">
+            Nenhum contato realizado.
+          </div>
+        `;
+        return;
+      }
+
+      const itemsHTML = lista.map(item => {
+        const iniciais = item.nome
+          .split(' ')
+          .map(n => n[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase();
+
+        return `
+          <div class="activity-item" style="padding: 8px 12px; gap: 10px; margin-bottom: 4px;">
+            <div class="activity-avatar" style="width: 28px; height: 28px; font-size: 10px; border-width: 1px; flex-shrink: 0; background: var(--black); color: var(--cyan);">
+              ${iniciais}
+            </div>
+            <div class="activity-text" style="min-width: 0;">
+              <div class="activity-title" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.nome}</div>
+            </div>
+            <div style="text-align: right; flex-shrink: 0; line-height: 1.2;">
+              <div style="font-weight: 700; color: var(--cyan); font-size: 12px;">${item.contatos} contatos</div>
+              <div style="color: var(--text-secondary); font-size: 10px;">${item.prospeccoes} prosp.</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      bodyEl.innerHTML = `
+        <div class="activities-list" style="max-height: 160px; overflow-y: auto; padding: 4px 8px 4px 0;">
+          ${itemsHTML}
+        </div>
+      `;
+    }
+  } else {
+    bodyEl.innerHTML = `
+      <div style="text-align:center; color:var(--text-muted); font-size:13px; padding: 24px 0;">
+        Erro ao carregar dados.
+      </div>
+    `;
   }
 }
 
@@ -349,8 +503,14 @@ async function _recarregarAtividade() {
   if (!vendedorId || !select) return;
 
   const periodo = select.value;
-  const res = await DiaFinalizado.getEstatisticas(vendedorId, periodo);
+  const isAdmin = UserStore.getCargo() === 'Administrador';
+  const res = await DiaFinalizado.getEstatisticas(isAdmin ? null : vendedorId, periodo);
   _renderizarAtividade(res);
+
+  const intervaloEl = document.getElementById('atividade-periodo-intervalo');
+  if (intervaloEl) {
+    intervaloEl.textContent = _obterIntervaloTexto(periodo);
+  }
 }
 
 // ── HTML ──────────────────────────────────────────────────────────
@@ -427,24 +587,19 @@ export default {
           <div class="card-header">
             <div>
               <div class="card-title">Métricas de Contato</div>
-              <div class="card-subtitle">Atividades realizadas</div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="card-subtitle" style="margin: 0;">Atividades realizadas</div>
+                <span id="atividade-periodo-intervalo" style="font-size: 10px; color: var(--text-muted); background: var(--bg); padding: 1px 6px; border-radius: 4px; font-weight: 500;"></span>
+              </div>
             </div>
             <select class="form-input form-select" id="atividade-periodo" style="width:120px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
               <option value="hoje">Hoje</option>
               <option value="semana">Nesta Semana</option>
-              <option value="mes">Neste Mês</option>
+              <option value="mes" selected>Neste Mês</option>
             </select>
           </div>
-          <div style="flex:1; display:flex; gap: 30px; align-items:center; justify-content:center; padding: 16px 0;">
-            <div style="text-align:center;">
-              <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="card-novo-contatos">0</div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Contatos Realizados</div>
-            </div>
-            <div style="width:1px; background:var(--border-light); height:50px;"></div>
-            <div style="text-align:center;">
-              <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="card-novo-prospecao">0</div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Prospecções</div>
-            </div>
+          <div id="card-novo-body" style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+            <div style="text-align:center; color:var(--text-muted); font-size:13px;">Carregando...</div>
           </div>
         </div>
 

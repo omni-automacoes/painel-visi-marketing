@@ -324,6 +324,7 @@
 .config-select {
   cursor: pointer;
   padding-right: 36px;
+  padding-left: 14px;
 }
 
 .config-select-arrow {

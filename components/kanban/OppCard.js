@@ -80,13 +80,13 @@ export default class OppCard {
     let label = '';
     if (dDay < today) {
       mod   = 'opp-recontado--overdue';
-      label = `⚠ Recontato: ${this._formatData(raw)}`;
+      label = `⚠ ${this._formatData(raw)}`;
     } else if (dDay.getTime() === today.getTime()) {
       mod   = 'opp-recontado--today';
-      label = `🔔 Recontato: Hoje`;
+      label = `🔔 Hoje`;
     } else {
       mod   = 'opp-recontado--future';
-      label = `📅 Recontato: ${this._formatData(raw)}`;
+      label = `📅 ${this._formatData(raw)}`;
     }
 
     return `<span class="opp-recontado ${mod}" title="Data de recontato: ${this._formatData(raw)}">${label}</span>`;
@@ -103,27 +103,25 @@ export default class OppCard {
                     : isLost ? 'border:1.5px solid rgba(255,80,80,0.25);'
                     : '';
     const valueStyle  = isWon ? 'color:#1ACEEE;' : isLost ? 'color:#aaa;' : '';
-    const stepStyle   = isWon ? 'color:#1ACEEE;font-weight:700;' : isLost ? 'color:#f66;font-weight:700;' : '';
-    const stepLabel   = isWon ? 'Fechado 🎉' : isLost ? 'Perdido' : this._label;
     const displayDate = isWon || isLost ? this._formatData(data_fechamento) : this._formatData(criado_em);
     const recontadoBadge = this._recontadoBadge();
 
     return `
       <div class="opp-card" id="opp-${negocio_id}" draggable="true" style="${cardStyle}">
-        <div class="opp-card-top">
-          <div>
-            <div class="opp-client">${negocio_titulo || '(sem título)'}</div>
-            <div class="opp-industry">${displayDate}</div>
-          </div>
-        </div>
-        <div class="opp-value" style="${valueStyle}">${this._formatValor(negocio_valor)}</div>
-        <div class="opp-status-row">
-          <span class="opp-tag ${tagCls}">${tagLabel}</span>
-          ${this._taskBadge()}
-        </div>
-        ${recontadoBadge ? `<div class="opp-recontado-row">${recontadoBadge}</div>` : ''}
-        <div class="opp-bottom">
+        <div class="opp-card-header">
+          <div class="opp-client" title="${negocio_titulo || '(sem título)'}">${negocio_titulo || '(sem título)'}</div>
           <div class="opp-avatars">${this._vendedorAvatar()}</div>
+        </div>
+        <div class="opp-card-body">
+          <div class="opp-value" style="${valueStyle}">${this._formatValor(negocio_valor)}</div>
+          <div class="opp-date">${displayDate}</div>
+        </div>
+        <div class="opp-card-footer">
+          <div class="opp-badges-wrap">
+            <span class="opp-tag ${tagCls}">${tagLabel}</span>
+            ${this._taskBadge()}
+            ${recontadoBadge}
+          </div>
         </div>
       </div>
     `;

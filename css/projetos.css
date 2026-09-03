@@ -208,53 +208,130 @@
 .pj-cards-list::-webkit-scrollbar { width: 4px; }
 .pj-cards-list::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
 
-/* ── Card ────────────────────────────────────────────────────────── */
+/* ── Card Moderno ────────────────────────────────────────────────── */
 
 .pj-card {
   background: var(--white);
   border: 1.5px solid var(--border-light);
-  border-radius: 12px;
-  padding: 12px 12px 12px 28px; /* Espaço na esquerda para o handle de drag absoluto */
+  border-radius: 14px;
+  padding: 14px;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-}
-.pj-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.09);
-  border-color: rgba(0,0,0,0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
+.pj-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+  border-color: rgba(26, 206, 238, 0.4);
+}
+
+/* Top Header Bar */
 .pj-card-top {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  padding-right: 20px; /* Evita sobreposição com o botão de excluir absoluto */
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 
-.pj-priority {
+.pj-card-tag-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Etiqueta em grande destaque (Tag Highlight) */
+.pj-card-tag-highlight {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pj-card-tag-highlight svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.pj-card-tag-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
   padding: 3px 8px;
   border-radius: 20px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border-light);
 }
+
+.pj-card-tag-default svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
+/* Top Right Section (Prioridade discreta + menu) */
+.pj-card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Prioridade sutil (discreta) */
+.pj-priority-subtle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--text-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
 .pj-pri-dot {
-  width: 6px; height: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.pj-pri--alta  { background: #FEE2E2; color: #991B1B; }
-.pj-pri--media { background: #FEF9EC; color: #92400E; }
-.pj-pri--baixa { background: #DCFCE7; color: #14532D; }
 
+.pj-pri-text {
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Menu de Ações (Deletar) */
 .pj-card-menu {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   width: 24px;
   height: 24px;
   border-radius: 6px;
@@ -264,53 +341,126 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   opacity: 0;
-  transition: all 0.13s ease;
-  z-index: 2;
-}
-.pj-card:hover .pj-card-menu { opacity: 1; }
-.pj-card-menu:hover { background: #FEE2E2; color: #DC2626; }
-.pj-card-menu svg {
-  width: 12px; height: 12px;
-  stroke: currentColor; fill: none;
-  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: all 0.15s ease;
 }
 
+.pj-card:hover .pj-card-menu {
+  opacity: 1;
+}
+
+.pj-card-menu:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+
+.pj-card-menu svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Título e Descrição */
 .pj-card-title {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--black);
-  margin: 0 0 5px;
+  margin: 2px 0 0;
   line-height: 1.4;
+  letter-spacing: -0.2px;
 }
+
 .pj-card-desc {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
-  margin: 0 0 8px;
+  margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.pj-card-footer { margin-top: 4px; }
+/* Rodapé do Card */
+.pj-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.pj-card-footer-left,
+.pj-card-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
 .pj-due {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
+  gap: 5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg);
 }
+
 .pj-due svg {
-  width: 11px; height: 11px;
-  stroke: currentColor; fill: none;
-  stroke-width: 2; stroke-linecap: round;
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
 }
-.pj-due--overdue { color: #DC2626; }
+
+.pj-due--overdue {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.pj-due--overdue svg {
+  stroke: #dc2626;
+}
+
+/* Badges Metadados (Comentários e Arquivos) */
+.pj-card-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+  transition: color 0.15s ease;
+}
+
+.pj-card-meta-badge svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.pj-card:hover .pj-card-meta-badge {
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.04);
+}
 
 /* ── Botão adicionar card ─────────────────────────────────────────── */
 
@@ -725,6 +875,23 @@
   background: var(--bg);
   border: 1.5px solid var(--border-light);
 }
+.pjp-file-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.15s ease;
+}
+.pjp-file-link:hover {
+  opacity: 0.9;
+}
+.pjp-file-link:hover .pjp-file-name {
+  color: #6366F1;
+  text-decoration: underline;
+}
 .pjp-file-icon {
   width: 30px; height: 30px;
   border-radius: 7px;
@@ -760,6 +927,8 @@
   transition: all 0.13s ease;
   flex-shrink: 0;
   text-decoration: none;
+  padding: 0;
+  outline: none;
 }
 .pjp-file-dl svg, .pjp-file-del svg {
   width: 12px; height: 12px;
@@ -982,6 +1151,49 @@
   border-color: rgba(255,255,255,0.1);
   color: #fff;
 }
+/* ---- DARK MODE — CARDS DOS PROJETOS ---- */
+[data-theme="dark"] .pj-card {
+  background: #141414;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .pj-card:hover {
+  background: #181818;
+  border-color: rgba(26, 206, 238, 0.4);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .pj-card-title {
+  color: rgba(255, 255, 255, 0.92);
+}
+[data-theme="dark"] .pj-card-desc {
+  color: rgba(255, 255, 255, 0.55);
+}
+[data-theme="dark"] .pj-priority-subtle {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+[data-theme="dark"] .pj-due {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+}
+[data-theme="dark"] .pj-due--overdue {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+}
+[data-theme="dark"] .pj-card-tag-default {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .pj-card-meta-badge {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+}
+[data-theme="dark"] .pj-card:hover .pj-card-meta-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
 [data-theme="dark"] .pjp-select-wrap .config-input option {
   background: #1A1A1A;
   color: #fff;
@@ -1030,6 +1242,7 @@
   border-color: rgba(255,255,255,0.08);
 }
 [data-theme="dark"] .pjp-file-name { color: #e0e0e0; }
+[data-theme="dark"] .pjp-file-link:hover .pjp-file-name { color: #818cf8; }
 [data-theme="dark"] .pjp-file-icon { background: rgba(99,102,241,0.2); color: #A5B4FC; }
 [data-theme="dark"] .pjp-file-dl, [data-theme="dark"] .pjp-file-del {
   background: rgba(255,255,255,0.06);

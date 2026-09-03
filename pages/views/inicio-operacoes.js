@@ -60,19 +60,22 @@ async function _carregarKPIs() {
   const userId = UserStore.getUserId();
   if (!userId) return;
 
+  const isAdmin = UserStore.getCargo() === 'Administrador';
+  const userIdBusca = isAdmin ? null : userId;
+
   const [resOnboarding, resAtivos, resOtimizar, resSaude, resChurn, resNovos, resTarefas] = await Promise.all([
-    Negocios.getOnboarding(userId),
-    Clientes.getAtivos(userId),
-    Clientes.getParaOtimizar(userId),
-    Clientes.getSaudeMedia(userId),
-    Clientes.getChurnAnoAtual(userId),
-    Clientes.getNovosAnoAtual(userId),
-    Tarefas.getRecentesPorVendedor(userId),
+    Negocios.getOnboarding(userIdBusca),
+    Clientes.getAtivos(userIdBusca),
+    Clientes.getParaOtimizar(userIdBusca),
+    Clientes.getSaudeMedia(userIdBusca),
+    Clientes.getChurnAnoAtual(userIdBusca),
+    Clientes.getNovosAnoAtual(userIdBusca),
+    Tarefas.getRecentesPorVendedor(userIdBusca),
   ]);
 
   // 1. Clientes na Etapa de Onboarding
   if (!resOnboarding.error) {
-    _atualizarCard('ops-onboarding', (resOnboarding.data?.length ?? 0).toLocaleString('pt-BR'), 'pipeline ativo');
+    _atualizarCard('ops-onboarding', (resOnboarding.data?.length ?? 0).toLocaleString('pt-BR'), 'status ativo');
   }
 
   // 2. Saúde Média
@@ -338,7 +341,7 @@ export default {
           </div>
           <div class="smc-label">Clientes em Onboarding</div>
           <div class="smc-value smc-loading">—</div>
-          <div class="smc-delta">pipeline ativo</div>
+          <div class="smc-delta">status ativo</div>
         </div>
 
         <!-- 2. Saúde Média -->
@@ -400,7 +403,7 @@ export default {
         </div>
 
         <!-- Card Satisfação do Cliente (dinâmico) -->
-        <div class="card card-light card-funnel-overview" id="card-funnel">
+        <div class="card card-light card-funnel-overview card-funnel-ops" id="card-funnel">
           <div class="card-header">
             <div>
               <div class="card-title">Satisfação do Cliente</div>

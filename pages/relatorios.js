@@ -156,6 +156,113 @@ function _miniBar(pct, color = 'cyan', label = null) {
   `;
 }
 
+// ─── Cache de Detalhamento Analítico para Hover Cards ────────
+const _kpiBreakdowns = {};
+let _popoverEl = null;
+let _popoverHideTimeout = null;
+
+function _initFloatingPopover() {
+  if (document.getElementById('rel-floating-popover')) {
+    _popoverEl = document.getElementById('rel-floating-popover');
+    return;
+  }
+  _popoverEl = document.createElement('div');
+  _popoverEl.id = 'rel-floating-popover';
+  _popoverEl.className = 'rel-floating-popover';
+  document.body.appendChild(_popoverEl);
+
+  _popoverEl.addEventListener('mouseenter', () => {
+    if (_popoverHideTimeout) clearTimeout(_popoverHideTimeout);
+  });
+
+  _popoverEl.addEventListener('mouseleave', () => {
+    _hideKpiPopover();
+  });
+}
+
+function _showKpiPopover(cardEl, data) {
+  if (!_popoverEl) _initFloatingPopover();
+  if (_popoverHideTimeout) clearTimeout(_popoverHideTimeout);
+  if (!data) return;
+
+  const { title, badge, items, formula, footer } = data;
+
+  const itemsHtml = (items && items.length > 0)
+    ? items.map(it => `
+        <div class="rel-popover-item">
+          <div class="rel-popover-item-main">
+            <span class="rel-popover-item-name" title="${it.name}">${it.name}</span>
+            ${it.sub ? `<span class="rel-popover-item-sub">${it.sub}</span>` : ''}
+          </div>
+          ${it.val ? `<span class="rel-popover-item-val">${it.val}</span>` : ''}
+        </div>
+      `).join('')
+    : `<div class="rel-popover-empty">Nenhum registro individual encontrado no período.</div>`;
+
+  _popoverEl.innerHTML = `
+    <div class="rel-popover-header">
+      <div class="rel-popover-title">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        ${title || 'Detalhamento'}
+      </div>
+      ${badge ? `<span class="rel-popover-badge">${badge}</span>` : ''}
+    </div>
+    <div class="rel-popover-body">
+      <div class="rel-popover-list">
+        ${itemsHtml}
+      </div>
+    </div>
+    ${(formula || footer) ? `
+      <div class="rel-popover-footer">
+        ${footer ? `<div>${footer}</div>` : ''}
+        ${formula ? `<span class="rel-popover-formula">${formula}</span>` : ''}
+      </div>
+    ` : ''}
+  `;
+
+  // Posicionamento inteligente (viewport bounds)
+  const rect = cardEl.getBoundingClientRect();
+  const popoverWidth = 320;
+  
+  let left = rect.left + (rect.width / 2) - (popoverWidth / 2);
+  if (left < 16) left = 16;
+  if (left + popoverWidth > window.innerWidth - 16) {
+    left = window.innerWidth - popoverWidth - 16;
+  }
+
+  let top = rect.bottom + 8;
+  if (top + 280 > window.innerHeight && rect.top > 280) {
+    top = rect.top - 280;
+  }
+
+  _popoverEl.style.left = `${left}px`;
+  _popoverEl.style.top = `${top}px`;
+  _popoverEl.classList.add('visible');
+}
+
+function _hideKpiPopover() {
+  if (_popoverHideTimeout) clearTimeout(_popoverHideTimeout);
+  _popoverHideTimeout = setTimeout(() => {
+    if (_popoverEl) {
+      _popoverEl.classList.remove('visible');
+    }
+  }, 120);
+}
+
+function _bindKpiHover(cardId, dataProvider) {
+  const cardEl = document.getElementById(cardId);
+  if (!cardEl) return;
+
+  cardEl.onmouseenter = () => {
+    const data = typeof dataProvider === 'function' ? dataProvider() : _kpiBreakdowns[cardId];
+    if (data) _showKpiPopover(cardEl, data);
+  };
+
+  cardEl.onmouseleave = () => {
+    _hideKpiPopover();
+  };
+}
+
 // ─── Seção Acesso Negado ─────────────────────────────────────
 
 function _htmlAccessDenied() {
@@ -1216,42 +1323,53 @@ function _modoEditInvestimento() {
 }
 
 /**
- * Carrega o investimento_marketing do usuário logado a partir da
- * tabela `usuarios` e atualiza o campo de input.
+ * Carrega o investimento_marketing para o período selecionado
+ * com busca prioritária na tabela `relatorios_investimentos` e fallback em `usuarios`.
  */
 async function _carregarInvestimento() {
   const userId = UserStore.getUserId();
-  if (!userId) return;
+  const periodoKey = _dataInicio ? _dataInicio.substring(0, 7) : 'padrao';
+  let valor = 0;
 
-  const { data, error } = await supabase
-    .from('usuarios')
-    .select('investimento_marketing')
-    .eq('user_id', userId)
-    .single();
+  try {
+    const { data: invData, error: invError } = await supabase
+      .from('relatorios_investimentos')
+      .select('valor')
+      .eq('periodo', periodoKey)
+      .maybeSingle();
 
-  if (error) {
-    console.warn('[Relatórios] Erro ao carregar investimento_marketing:', error.message);
-    return;
+    if (!invError && invData?.valor !== undefined && invData?.valor !== null) {
+      valor = Number(invData.valor);
+    } else if (userId) {
+      const { data: uData } = await supabase
+        .from('usuarios')
+        .select('investimento_marketing')
+        .eq('user_id', userId)
+        .single();
+      valor = Number(uData?.investimento_marketing ?? 0);
+    }
+  } catch (err) {
+    console.warn('[Relatórios] Erro ao carregar investimento:', err);
   }
 
-  const valor = data?.investimento_marketing ?? 0;
   _investimentoMarketing = valor;
 
-  // Se já há valor salvo, entra em modo visualização
   if (valor > 0) {
     _modoViewInvestimento();
   } else {
     const inputEl = document.getElementById('rel-investimento-input');
     if (inputEl) inputEl.value = '';
+    _modoEditInvestimento();
   }
 }
 
 /**
- * Salva o investimento_marketing digitado na tabela `usuarios`.
+ * Salva o investimento_marketing digitado para o período atual na tabela
+ * `relatorios_investimentos` e sincroniza com `usuarios`.
  */
 async function _salvarInvestimento() {
   const userId = UserStore.getUserId();
-  if (!userId) return;
+  const periodoKey = _dataInicio ? _dataInicio.substring(0, 7) : 'padrao';
 
   const input  = document.getElementById('rel-investimento-input');
   const status = document.getElementById('rel-investimento-status');
@@ -1259,28 +1377,48 @@ async function _salvarInvestimento() {
 
   const valor = _parseBRL(input?.value);
 
-  // Feedback visual: salvando
   if (btn)    btn.disabled = true;
   if (status) { status.textContent = 'Salvando…'; status.className = 'rel-investimento-status rel-investimento-status--saving'; }
 
-  const { error } = await supabase
-    .from('usuarios')
-    .update({ investimento_marketing: valor })
-    .eq('user_id', userId);
+  try {
+    // 1. Salva na tabela dedicada por período
+    const { error: invErr } = await supabase
+      .from('relatorios_investimentos')
+      .upsert({
+        periodo: periodoKey,
+        valor: valor,
+        atualizado_em: new Date().toISOString()
+      });
 
-  if (error) {
-    console.error('[Relatórios] Erro ao salvar investimento_marketing:', error.message);
-    if (status) { status.textContent = 'Erro ao salvar'; status.className = 'rel-investimento-status rel-investimento-status--error'; }
-    if (btn) btn.disabled = false;
-  } else {
+    if (invErr) throw invErr;
+
+    // 2. Sincroniza em usuarios (fallback de compatibilidade)
+    if (userId) {
+      await supabase
+        .from('usuarios')
+        .update({ investimento_marketing: valor })
+        .eq('user_id', userId);
+    }
+
     _investimentoMarketing = valor;
+
     if (status) { status.textContent = 'Salvo!'; status.className = 'rel-investimento-status rel-investimento-status--ok'; }
-    // Entra em modo visualização após salvar
     _modoViewInvestimento();
-    // Limpa feedback após 2s
+
     setTimeout(() => {
       if (status) { status.textContent = ''; status.className = 'rel-investimento-status'; }
     }, 2000);
+
+    if (btn) btn.disabled = false;
+
+    // Recalcula imediatamente as métricas que dependem do investimento
+    _carregarCAC(_dataInicio, _dataFim);
+    _carregarCPQ(_dataInicio, _dataFim);
+    _carregarLtvMetrics(_dataInicio, _dataFim);
+
+  } catch (error) {
+    console.error('[Relatórios] Erro ao salvar investimento:', error.message);
+    if (status) { status.textContent = 'Erro ao salvar'; status.className = 'rel-investimento-status rel-investimento-status--error'; }
     if (btn) btn.disabled = false;
   }
 }
@@ -1706,45 +1844,54 @@ async function _carregarCAC(inicio, fim) {
   const valueEl = cardEl?.querySelector('.rel-kpi-value');
   const trendEl = cardEl?.querySelector('.rel-kpi-trend');
 
-  // Estado de carregamento
   if (valueEl) valueEl.textContent = 'R$ …';
 
   try {
     const userId = UserStore.getUserId();
-    if (!userId) throw new Error('Usuário não identificado');
+    const periodoKey = inicio.substring(0, 7);
 
-    // 1. Busca o investimento_marketing do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('investimento_marketing')
-      .eq('user_id', userId)
-      .single();
+    // 1. Busca investimento para o período na tabela relatorios_investimentos ou usuarios
+    let investimento = 0;
+    const { data: invData } = await supabase
+      .from('relatorios_investimentos')
+      .select('valor')
+      .eq('periodo', periodoKey)
+      .maybeSingle();
 
-    if (userError) throw userError;
+    if (invData?.valor !== undefined && invData?.valor !== null) {
+      investimento = Number(invData.valor);
+    } else if (userId) {
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('investimento_marketing')
+        .eq('user_id', userId)
+        .single();
+      investimento = Number(userData?.investimento_marketing ?? 0);
+    }
 
-    const investimento = Number(userData?.investimento_marketing ?? 0);
+    _investimentoMarketing = investimento;
 
-    // 2. Conta novos clientes no período (criado_em é timestamptz)
-    //    Constrói os timestamps via Date.UTC para formato ISO válido,
-    //    seguindo o mesmo padrão de db.js (getNovosAnoAtual / getNovosAnoTodos)
+    // 2. Busca todos os novos clientes conquistados no período
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    const { count, error: clientError } = await supabase
+    const { data: clientes, error: clientError } = await supabase
       .from('clientes')
-      .select('cliente_id', { count: 'exact', head: true })
+      .select('cliente_id, cliente_nome, cliente_mensalidade, criado_em, cliente_status')
       .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+      .lte('criado_em', fimISO)
+      .order('criado_em', { ascending: false });
 
     if (clientError) throw clientError;
 
-    const novosClientes = count ?? 0;
+    const novosClientes = clientes?.length ?? 0;
 
     // 3. Calcula o CAC
-    let cacFormatado;
-    let subInfo;
+    let cac = 0;
+    let cacFormatado = 'R$ —';
+    let subInfo = '';
 
     if (novosClientes === 0) {
       cacFormatado = 'R$ —';
@@ -1755,32 +1902,35 @@ async function _carregarCAC(inicio, fim) {
       cacFormatado = 'R$ 0,00';
       subInfo = `${novosClientes} novo${novosClientes > 1 ? 's' : ''} cliente${novosClientes > 1 ? 's' : ''} · Investimento: R$ 0,00`;
     } else {
-      const cac = investimento / novosClientes;
+      cac = investimento / novosClientes;
       cacFormatado = `R$ ${_formatarBRL(cac)}`;
       subInfo = `Investimento: R$ ${_formatarBRL(investimento)} ÷ ${novosClientes} cliente${novosClientes > 1 ? 's' : ''}`;
     }
 
-    // 4. Atualiza o card no DOM
     if (valueEl) valueEl.textContent = cacFormatado;
 
-    // Atualiza o sub-texto (tooltip + texto exibido)
     const subEl = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: Total Investido ÷ Novos Clientes\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver o detalhamento analítico`;
 
-    // Atualiza o trend label com contagem de clientes
     if (trendEl) {
-      trendEl.querySelector('svg')?.remove();
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('viewBox', '0 0 24 24');
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', '5'); line.setAttribute('y1', '12');
-      line.setAttribute('x2', '19'); line.setAttribute('y2', '12');
-      svg.appendChild(line);
-      trendEl.prepend(svg);
       trendEl.lastChild.textContent = `${novosClientes} novo${novosClientes !== 1 ? 's' : ''} cliente${novosClientes !== 1 ? 's' : ''}`;
     }
+
+    // 4. Popula o Hover Card do CAC
+    _kpiBreakdowns['rel-cac'] = {
+      title: 'Custo de Aquisição de Clientes (CAC)',
+      badge: `${novosClientes} Novo${novosClientes !== 1 ? 's' : ''}`,
+      items: (clientes ?? []).map(c => ({
+        name: c.cliente_nome || 'Cliente sem nome',
+        sub: `Cadastrado em ${_formatarExibicao(c.criado_em?.substring(0, 10))} · Status: ${c.cliente_status || 'Ativo'}`,
+        val: c.cliente_mensalidade ? `R$ ${_formatarBRL(c.cliente_mensalidade)}/mês` : '—'
+      })),
+      footer: `Investimento: <b>R$ ${_formatarBRL(investimento)}</b> ÷ <b>${novosClientes}</b> novos clientes conquistados`,
+      formula: `CAC = R$ ${_formatarBRL(cac)} por cliente`
+    };
+    _bindKpiHover('rel-cac');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular CAC:', err.message);
@@ -1794,11 +1944,7 @@ async function _carregarCAC(inicio, fim) {
  * Calcula e exibe o CPQ no período selecionado.
  *
  * Fórmula:
- *   CPQ = investimento_marketing (usuarios) ÷ SQLs
- *   onde SQL = negócio com reuniao_realizada = TRUE e criado_em no período
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ *   CPQ = investimento_marketing ÷ SQLs (negócios com reunião realizada no período)
  */
 async function _carregarCPQ(inicio, fim) {
   const cardEl  = document.getElementById('rel-cpq');
@@ -1809,37 +1955,49 @@ async function _carregarCPQ(inicio, fim) {
 
   try {
     const userId = UserStore.getUserId();
-    if (!userId) throw new Error('Usuário não identificado');
+    const periodoKey = inicio.substring(0, 7);
 
-    // 1. Busca o investimento_marketing do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('investimento_marketing')
-      .eq('user_id', userId)
-      .single();
+    // 1. Busca investimento
+    let investimento = _investimentoMarketing || 0;
+    if (!investimento) {
+      const { data: invData } = await supabase
+        .from('relatorios_investimentos')
+        .select('valor')
+        .eq('periodo', periodoKey)
+        .maybeSingle();
 
-    if (userError) throw userError;
+      if (invData?.valor !== undefined && invData?.valor !== null) {
+        investimento = Number(invData.valor);
+      } else if (userId) {
+        const { data: userData } = await supabase
+          .from('usuarios')
+          .select('investimento_marketing')
+          .eq('user_id', userId)
+          .single();
+        investimento = Number(userData?.investimento_marketing ?? 0);
+      }
+    }
 
-    const investimento = Number(userData?.investimento_marketing ?? 0);
-
-    // 2. Conta negócios com reuniao_realizada = TRUE no período (criado_em timestamptz)
+    // 2. Busca negócios com reuniao_realizada = TRUE no período com join de vendedor
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    const { count, error: negError } = await supabase
+    const { data: sqls, error: negError } = await supabase
       .from('negocios')
-      .select('negocio_id', { count: 'exact', head: true })
+      .select('negocio_id, negocio_titulo, criado_em, vendedor_id, usuarios(user_nome)')
       .eq('reuniao_realizada', true)
       .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+      .lte('criado_em', fimISO)
+      .order('criado_em', { ascending: false });
 
     if (negError) throw negError;
 
-    const totalSQLs = count ?? 0;
+    const totalSQLs = sqls?.length ?? 0;
 
     // 3. Calcula o CPQ
+    let cpq = 0;
     let cpqFormatado;
     let subInfo;
 
@@ -1847,30 +2005,41 @@ async function _carregarCPQ(inicio, fim) {
       cpqFormatado = 'R$ 0,00';
       subInfo = 'Nenhum investimento ou SQL registrado no período';
     } else if (totalSQLs === 0 && investimento > 0) {
-      // Investimento existiu mas não gerou nenhum SQL — custo total sem retorno
       cpqFormatado = `R$ ${_formatarBRL(investimento)}`;
       subInfo = `Investimento: R$ ${_formatarBRL(investimento)} · 0 SQLs — custo sem retorno`;
     } else if (investimento === 0) {
       cpqFormatado = 'R$ 0,00';
       subInfo = `${totalSQLs} SQL${totalSQLs > 1 ? 's' : ''} · Investimento: R$ 0,00`;
     } else {
-      const cpq = investimento / totalSQLs;
+      cpq = investimento / totalSQLs;
       cpqFormatado = `R$ ${_formatarBRL(cpq)}`;
       subInfo = `Investimento: R$ ${_formatarBRL(investimento)} ÷ ${totalSQLs} SQL${totalSQLs > 1 ? 's' : ''}`;
     }
 
-    // 4. Atualiza o card no DOM
     if (valueEl) valueEl.textContent = cpqFormatado;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: Total Investido ÷ SQLs (reuniões realizadas)\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver os leads qualificados`;
 
-    // Atualiza trend label
     if (trendEl) {
       trendEl.lastChild.textContent = `${totalSQLs} SQL${totalSQLs !== 1 ? 's' : ''} no período`;
     }
+
+    // 4. Popula o Hover Card do CPQ
+    _kpiBreakdowns['rel-cpq'] = {
+      title: 'Custo por Lead Qualificado (CPQ)',
+      badge: `${totalSQLs} SQL${totalSQLs !== 1 ? 's' : ''}`,
+      items: (sqls ?? []).map(s => ({
+        name: s.negocio_titulo || 'Oportunidade',
+        sub: `Vendedor: ${s.usuarios?.user_nome || 'Equipe'} · Reunião em ${_formatarExibicao(s.criado_em?.substring(0, 10))}`,
+        val: 'Qualificado 🎯'
+      })),
+      footer: `Investimento: <b>R$ ${_formatarBRL(investimento)}</b> ÷ <b>${totalSQLs}</b> reuniões realizadas`,
+      formula: `CPQ = R$ ${_formatarBRL(cpq)} por SQL`
+    };
+    _bindKpiHover('rel-cpq');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular CPQ:', err.message);
@@ -1884,12 +2053,7 @@ async function _carregarCPQ(inicio, fim) {
  * Calcula e exibe o Ticket Médio de Novos Contratos no período.
  *
  * Fórmula:
- *   Ticket Médio = Σ negocio_valor (negocios Ganhos) ÷ total de negocios Ganhos
- *   Filtro: negocio_status = 'Ganho' e data_fechamento dentro do período
- *   (data_fechamento é preenchida automaticamente ao marcar como Ganho)
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ *   Ticket Médio = Σ negocio_valor (negocios Ganhos) ÷ total de contratos Ganhos
  */
 async function _carregarTicketMedio(inicio, fim) {
   const cardEl  = document.getElementById('rel-ticket-medio');
@@ -1899,48 +2063,55 @@ async function _carregarTicketMedio(inicio, fim) {
   if (valueEl) valueEl.textContent = 'R$ …';
 
   try {
-    // Constrói timestamps ISO via Date.UTC
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Busca negocios Ganhos com data_fechamento no período
+    // Busca negócios Ganhos com dados completos para o Hover Card
     const { data: negocios, error } = await supabase
       .from('negocios')
-      .select('negocio_valor')
+      .select('negocio_id, negocio_titulo, negocio_valor, data_fechamento, criado_em')
       .eq('negocio_status', 'Ganho')
       .gte('data_fechamento', inicioISO)
-      .lte('data_fechamento', fimISO);
+      .lte('data_fechamento', fimISO)
+      .order('data_fechamento', { ascending: false });
 
     if (error) throw error;
 
     const total = negocios?.length ?? 0;
+    const somaValor = (negocios ?? []).reduce((acc, n) => acc + Number(n.negocio_valor ?? 0), 0);
+    const ticket    = total > 0 ? somaValor / total : 0;
 
-    let ticketFormatado;
-    let subInfo;
+    let ticketFormatado = total === 0 ? 'R$ 0,00' : `R$ ${_formatarBRL(ticket)}`;
+    let subInfo = total === 0
+      ? 'Nenhum contrato ganho no período'
+      : `Soma: R$ ${_formatarBRL(somaValor)} ÷ ${total} contrato${total > 1 ? 's' : ''} ganho${total > 1 ? 's' : ''}`;
 
-    if (total === 0) {
-      ticketFormatado = 'R$ 0,00';
-      subInfo = 'Nenhum contrato ganho no período';
-    } else {
-      const somaValor = negocios.reduce((acc, n) => acc + Number(n.negocio_valor ?? 0), 0);
-      const ticket    = somaValor / total;
-      ticketFormatado = `R$ ${_formatarBRL(ticket)}`;
-      subInfo = `Soma: R$ ${_formatarBRL(somaValor)} ÷ ${total} contrato${total > 1 ? 's' : ''} ganho${total > 1 ? 's' : ''}`;
-    }
-
-    // Atualiza o card no DOM
     if (valueEl) valueEl.textContent = ticketFormatado;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: Σ Valor dos Contratos Ganhos ÷ Quantidade\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver a lista de contratos e valores`;
 
     if (trendEl) {
       trendEl.lastChild.textContent = `${total} contrato${total !== 1 ? 's' : ''} ganho${total !== 1 ? 's' : ''}`;
     }
+
+    // Popula o Hover Card do Ticket Médio com lista de clientes e valores
+    _kpiBreakdowns['rel-ticket-medio'] = {
+      title: 'Ticket Médio de Novos Contratos',
+      badge: `${total} Contrato${total !== 1 ? 's' : ''}`,
+      items: (negocios ?? []).map(n => ({
+        name: n.negocio_titulo || 'Contrato Ganho',
+        sub: `Fechado em ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}`,
+        val: `R$ ${_formatarBRL(n.negocio_valor)}`
+      })),
+      footer: `Soma Total: <b>R$ ${_formatarBRL(somaValor)}</b> ÷ <b>${total}</b> contratos ganhos`,
+      formula: `Ticket Médio = R$ ${_formatarBRL(ticket)}`
+    };
+    _bindKpiHover('rel-ticket-medio');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Ticket Médio:', err.message);
@@ -1951,16 +2122,11 @@ async function _carregarTicketMedio(inicio, fim) {
 // ─── Taxa de Conversão ────────────────────────────────────
 
 /**
- * Calcula e exibe a Taxa de Conversão no período.
+ * Calcula e exibe a Taxa de Conversão no período (Win Rate de Fechamentos).
  *
  * Fórmula:
- *   Taxa = (Negócios Ganhos ÷ SQLs) × 100
- *
- *   Ganhos = negocios com negocio_status = 'Ganho' e data_fechamento no período
- *   SQLs   = negocios com reuniao_realizada = TRUE  e criado_em      no período
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ *   Taxa de Conversão = (Negócios Ganhos ÷ Total de Negócios Decididos) × 100
+ *   onde Decididos = Ganhos + Perdidos no período selecionado
  */
 async function _carregarTaxaConversao(inicio, fim) {
   const cardEl  = document.getElementById('rel-taxa-conversao');
@@ -1975,57 +2141,53 @@ async function _carregarTaxaConversao(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. Total de Negócios Ganhos no período (data_fechamento)
-    const { count: totalGanhos, error: ganhoError } = await supabase
+    // 1. Busca negócios fechados (Ganho ou Perdido) no período
+    const { data: fechados, error: fechadosError } = await supabase
       .from('negocios')
-      .select('negocio_id', { count: 'exact', head: true })
-      .eq('negocio_status', 'Ganho')
+      .select('negocio_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento')
+      .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicioISO)
-      .lte('data_fechamento', fimISO);
+      .lte('data_fechamento', fimISO)
+      .order('data_fechamento', { ascending: false });
 
-    if (ganhoError) throw ganhoError;
+    if (fechadosError) throw fechadosError;
 
-    // 2. Total de SQLs no período (criado_em)
-    const { count: totalSQLs, error: sqlError } = await supabase
-      .from('negocios')
-      .select('negocio_id', { count: 'exact', head: true })
-      .eq('reuniao_realizada', true)
-      .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+    const lista = fechados ?? [];
+    const ganhos = lista.filter(n => n.negocio_status === 'Ganho');
+    const perdidos = lista.filter(n => n.negocio_status === 'Perdido');
+    const totalDecididos = lista.length;
 
-    if (sqlError) throw sqlError;
+    // 2. Calcula a taxa de vitória real (Win Rate)
+    const taxa = totalDecididos > 0 ? (ganhos.length / totalDecididos) * 100 : 0;
+    const taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
+    const subInfo = totalDecididos === 0
+      ? 'Nenhum fechamento (ganho ou perdido) no período'
+      : `${ganhos.length} ganho${ganhos.length !== 1 ? 's' : ''} de ${totalDecididos} decidido${totalDecididos !== 1 ? 's' : ''} (${perdidos.length} perdido${perdidos.length !== 1 ? 's' : ''})`;
 
-    const ganhos = totalGanhos ?? 0;
-    const sqls   = totalSQLs   ?? 0;
-
-    // 3. Calcula a taxa
-    let taxaFormatada;
-    let subInfo;
-
-    if (sqls === 0 && ganhos === 0) {
-      taxaFormatada = '0%';
-      subInfo = 'Nenhum SQL ou negócio ganho no período';
-    } else if (sqls === 0) {
-      // Ganhos sem SQLs registrados — taxa indefinida, exibe 100% por convenção
-      taxaFormatada = '100%';
-      subInfo = `${ganhos} ganho${ganhos > 1 ? 's' : ''} · 0 SQLs registrados`;
-    } else {
-      const taxa = (ganhos / sqls) * 100;
-      taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
-      subInfo = `${ganhos} ganho${ganhos !== 1 ? 's' : ''} ÷ ${sqls} SQL${sqls !== 1 ? 's' : ''}`;
-    }
-
-    // 4. Atualiza o card no DOM
     if (valueEl) valueEl.textContent = taxaFormatada;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: (Negócios Ganhos ÷ SQLs) × 100\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver o funil de decisões`;
 
     if (trendEl) {
-      trendEl.lastChild.textContent = `${ganhos} ganho${ganhos !== 1 ? 's' : ''} / ${sqls} SQL${sqls !== 1 ? 's' : ''}`;
+      trendEl.lastChild.textContent = `${ganhos.length} ganhos / ${totalDecididos} fechados`;
     }
+
+    // 3. Popula o Hover Card da Taxa de Conversão
+    _kpiBreakdowns['rel-taxa-conversao'] = {
+      title: 'Taxa de Conversão (Win Rate)',
+      badge: taxaFormatada,
+      items: lista.slice(0, 15).map(n => ({
+        name: n.negocio_titulo || 'Oportunidade',
+        sub: `${n.negocio_status === 'Ganho' ? '✅ Ganho' : '❌ Perdido'} · ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}`,
+        val: n.negocio_status === 'Ganho' ? `R$ ${_formatarBRL(n.negocio_valor)}` : 'Perdido'
+      })),
+      footer: `<b>${ganhos.length}</b> Ganhos ÷ <b>${totalDecididos}</b> Negócios Fechados (${perdidos.length} Perdidos)`,
+      formula: `Taxa de Conversão = ${taxaFormatada}`
+    };
+    _bindKpiHover('rel-taxa-conversao');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Taxa de Conversão:', err.message);
@@ -2041,13 +2203,8 @@ async function _carregarTaxaConversao(inicio, fim) {
  * Fórmula:
  *   Ratio = (SQLs ÷ MQLs) × 100
  *
- *   MQL = total de negócios criados no período (criado_em)
- *         (todo lead que entrou no sistema = Marketing Qualified Lead)
- *   SQL = negócios com reuniao_realizada = TRUE criados no período
- *         (lead que chegou à etapa de reunião comercial = Sales Qualified Lead)
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ *   MQL = total de oportunidades/leads criados no período (criado_em)
+ *   SQL = negócios com reunião realizada criados no mesmo período
  */
 async function _carregarMqlSql(inicio, fim) {
   const cardEl  = document.getElementById('rel-mql-sql');
@@ -2062,52 +2219,54 @@ async function _carregarMqlSql(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. MQL: total de negócios criados no período
-    const { count: totalMQL, error: mqlError } = await supabase
+    // 1. Busca todos os negócios criados no período
+    const { data: leads, error: mqlError } = await supabase
       .from('negocios')
-      .select('negocio_id', { count: 'exact', head: true })
+      .select('negocio_id, negocio_titulo, reuniao_realizada, criado_em, negocio_origem')
       .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+      .lte('criado_em', fimISO)
+      .order('criado_em', { ascending: false });
 
     if (mqlError) throw mqlError;
 
-    // 2. SQL: negócios com reuniao_realizada = TRUE criados no mesmo período
-    const { count: totalSQL, error: sqlError } = await supabase
-      .from('negocios')
-      .select('negocio_id', { count: 'exact', head: true })
-      .eq('reuniao_realizada', true)
-      .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+    const lista = leads ?? [];
+    const totalMQL = lista.length;
+    const sqls = lista.filter(l => l.reuniao_realizada === true);
+    const totalSQL = sqls.length;
 
-    if (sqlError) throw sqlError;
+    // 2. Calcula o ratio
+    const ratio = totalMQL > 0 ? (totalSQL / totalMQL) * 100 : 0;
+    const ratioFormatado = `${ratio.toFixed(1).replace('.', ',')}%`;
+    const subInfo = totalMQL === 0
+      ? 'Nenhum MQL (lead) registrado no período'
+      : `${totalSQL} SQL${totalSQL !== 1 ? 's' : ''} ÷ ${totalMQL} MQL${totalMQL !== 1 ? 's' : ''}`;
 
-    const mqls = totalMQL ?? 0;
-    const sqls = totalSQL ?? 0;
-
-    // 3. Calcula o ratio
-    let ratioFormatado;
-    let subInfo;
-
-    if (mqls === 0) {
-      ratioFormatado = '0%';
-      subInfo = 'Nenhum MQL (lead) registrado no período';
-    } else {
-      const ratio = (sqls / mqls) * 100;
-      ratioFormatado = `${ratio.toFixed(1).replace('.', ',')}%`;
-      subInfo = `${sqls} SQL${sqls !== 1 ? 's' : ''} ÷ ${mqls} MQL${mqls !== 1 ? 's' : ''}`;
-    }
-
-    // 4. Atualiza o card no DOM
     if (valueEl) valueEl.textContent = ratioFormatado;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: (SQLs ÷ MQLs) × 100\nMQL = todos leads do período\nSQL = leads com reunião realizada\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver a eficiência de qualificação`;
 
     if (trendEl) {
-      trendEl.lastChild.textContent = `${sqls} SQLs / ${mqls} MQLs`;
+      trendEl.lastChild.textContent = `${totalSQL} SQLs / ${totalMQL} MQLs`;
     }
+
+    // 3. Popula o Hover Card de MQL para SQL
+    _kpiBreakdowns['rel-mql-sql'] = {
+      title: 'MQL para SQL Ratio (Qualificação)',
+      badge: ratioFormatado,
+      items: (sqls.length > 0 ? sqls : lista).slice(0, 15).map(l => ({
+        name: l.negocio_titulo || 'Lead',
+        sub: l.reuniao_realizada
+          ? `🎯 Reunião de Qualificação Realizada · ${_formatarExibicao(l.criado_em?.substring(0, 10))}`
+          : `Lead Criado no Período · Origem: ${l.negocio_origem || 'Não informada'}`,
+        val: l.reuniao_realizada ? 'SQL ✅' : 'MQL'
+      })),
+      footer: `<b>${totalSQL}</b> SQLs qualificados ÷ <b>${totalMQL}</b> MQLs que entraram no período`,
+      formula: `Eficiência de Qualificação = ${ratioFormatado}`
+    };
+    _bindKpiHover('rel-mql-sql');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular MQL→SQL Ratio:', err.message);
@@ -2121,14 +2280,7 @@ async function _carregarMqlSql(inicio, fim) {
  * Calcula e exibe a Taxa de Churn Comercial no período.
  *
  * Fórmula:
- *   Churn Comercial = (churns ÷ novos clientes) × 100
- *
- *   Novos clientes = clientes com criado_em dentro do período
- *   Churns         = desses novos clientes, os que têm cliente_churn = TRUE
- *                    e data_churn ≤ fim do período (cancelaram antes de completar o ciclo)
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ *   (Clientes Cancelados no período ÷ Novos Clientes do período) × 100
  */
 async function _carregarChurnComercial(inicio, fim) {
   const cardEl  = document.getElementById('rel-churn-comercial');
@@ -2142,50 +2294,60 @@ async function _carregarChurnComercial(inicio, fim) {
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
-    const fimDate   = new Date(fimISO);
 
-    // Busca todos os novos clientes do período com os campos necessários
-    const { data, error } = await supabase
+    // 1. Busca clientes cancelados no período
+    const { data: cancelados, error: cancelError } = await supabase
       .from('clientes')
-      .select('cliente_id, criado_em, cliente_churn, data_churn')
+      .select('cliente_id, cliente_nome, criado_em, cliente_churn, data_churn, cliente_mensalidade')
+      .eq('cliente_churn', true)
+      .gte('data_churn', inicioISO)
+      .lte('data_churn', fimISO)
+      .order('data_churn', { ascending: false });
+
+    if (cancelError) throw cancelError;
+
+    // 2. Busca novos clientes do período para referência comparativa
+    const { count: novosCount, error: novosErr } = await supabase
+      .from('clientes')
+      .select('cliente_id', { count: 'exact', head: true })
       .gte('criado_em', inicioISO)
       .lte('criado_em', fimISO);
 
-    if (error) throw error;
+    if (novosErr) throw novosErr;
 
-    const novosClientes = data?.length ?? 0;
+    const churns = cancelados?.length ?? 0;
+    const novosClientes = novosCount ?? 0;
 
-    // Filtra churns: cliente_churn = true E data_churn <= fim do período
-    const churns = (data ?? []).filter(c => {
-      if (!c.cliente_churn) return false;
-      if (!c.data_churn)    return false;
-      return new Date(c.data_churn) <= fimDate;
-    }).length;
+    const taxa = novosClientes > 0 ? (churns / novosClientes) * 100 : 0;
+    const taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
+    const subInfo = churns === 0
+      ? 'Nenhum cancelamento registrado no período'
+      : `${churns} cancelamento${churns !== 1 ? 's' : ''} no período (${novosClientes} novo${novosClientes !== 1 ? 's' : ''} cliente${novosClientes !== 1 ? 's' : ''})`;
 
-    // Calcula a taxa
-    let churnFormatado;
-    let subInfo;
-
-    if (novosClientes === 0) {
-      churnFormatado = '0%';
-      subInfo = 'Nenhum novo cliente no período';
-    } else {
-      const taxa = (churns / novosClientes) * 100;
-      churnFormatado = `${taxa.toFixed(1).replace('.', ',')}%`;
-      subInfo = `${churns} churn${churns !== 1 ? 's' : ''} ÷ ${novosClientes} novo${novosClientes !== 1 ? 's' : ''} cliente${novosClientes !== 1 ? 's' : ''}`;
-    }
-
-    // Atualiza o card no DOM
-    if (valueEl) valueEl.textContent = churnFormatado;
+    if (valueEl) valueEl.textContent = taxaFormatada;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: (Churns ÷ Novos Clientes) × 100\nChurn = cliente_churn = TRUE e data_churn ≤ fim do período\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver os cancelamentos`;
 
     if (trendEl) {
       trendEl.lastChild.textContent = `${churns} churn${churns !== 1 ? 's' : ''} de ${novosClientes} cliente${novosClientes !== 1 ? 's' : ''}`;
     }
+
+    // 3. Popula o Hover Card do Churn Comercial
+    _kpiBreakdowns['rel-churn-comercial'] = {
+      title: 'Churn Comercial (Cancelamentos)',
+      badge: `${churns} Cancelamento${churns !== 1 ? 's' : ''}`,
+      items: (cancelados ?? []).map(c => ({
+        name: c.cliente_nome || 'Cliente',
+        sub: `Cancelou em ${_formatarExibicao(c.data_churn?.substring(0, 10))}`,
+        val: c.cliente_mensalidade ? `- R$ ${_formatarBRL(c.cliente_mensalidade)}` : 'Cancelado ⚠️'
+      })),
+      footer: `<b>${churns}</b> cancelamento${churns !== 1 ? 's' : ''} ÷ <b>${novosClientes}</b> novos clientes conquistados no período`,
+      formula: `Taxa de Churn = ${taxaFormatada}`
+    };
+    _bindKpiHover('rel-churn-comercial');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Churn Comercial:', err.message);
@@ -2200,10 +2362,6 @@ async function _carregarChurnComercial(inicio, fim) {
  *
  * Fórmula:
  *   Ciclo Médio = Média de (data_fechamento − criado_em) em dias
- *   Filtro: negocio_status = 'Ganho' e data_fechamento dentro do período
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
  */
 async function _carregarCicloVendas(inicio, fim) {
   const cardEl  = document.getElementById('rel-ciclo-vendas');
@@ -2218,10 +2376,10 @@ async function _carregarCicloVendas(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Busca negócios Ganhos no período com criado_em e data_fechamento
+    // Busca negócios Ganhos no período com dados completos para o breakdown
     const { data, error } = await supabase
       .from('negocios')
-      .select('criado_em, data_fechamento')
+      .select('negocio_id, negocio_titulo, negocio_valor, criado_em, data_fechamento')
       .eq('negocio_status', 'Ganho')
       .gte('data_fechamento', inicioISO)
       .lte('data_fechamento', fimISO)
@@ -2230,55 +2388,47 @@ async function _carregarCicloVendas(inicio, fim) {
 
     if (error) throw error;
 
-    const negocios = data ?? [];
+    const MS_POR_DIA = 1000 * 60 * 60 * 24;
+    const validos = (data ?? []).map(n => {
+      const diffMs = new Date(n.data_fechamento).getTime() - new Date(n.criado_em).getTime();
+      const dias = Math.max(1, Math.round(diffMs / MS_POR_DIA));
+      return { ...n, dias };
+    }).sort((a, b) => a.dias - b.dias);
 
-    // Exclui registros com datas invertidas (data_fechamento < criado_em).
-    // Zerá-los distorceria a média — é mais correto descartá-los.
-    const MS_POR_DIA  = 1000 * 60 * 60 * 24;
-    const validos     = negocios.filter(n =>
-      new Date(n.data_fechamento).getTime() - new Date(n.criado_em).getTime() > 0
-    );
-    const descartados = negocios.length - validos.length;
-    const total       = validos.length;
+    const total = validos.length;
+    const somaDias = validos.reduce((acc, n) => acc + n.dias, 0);
+    const mediaDias = total > 0 ? somaDias / total : 0;
+    const diasStr = Math.round(mediaDias).toString();
 
-    let cicloFormatado;
-    let subInfo;
+    const cicloFormatado = total === 0 ? '0 dias' : `${diasStr} dias`;
+    const subInfo = total === 0
+      ? 'Nenhum negócio ganho no período'
+      : `Média de ${total} contrato${total !== 1 ? 's' : ''} ganho${total !== 1 ? 's' : ''}`;
 
-    if (total === 0) {
-      cicloFormatado = '0 dias';
-      subInfo = negocios.length === 0
-        ? 'Nenhum negócio ganho no período'
-        : `${negocios.length} negócio${negocios.length !== 1 ? 's' : ''} com datas inválidas (descartados)`;
-    } else {
-      const somaDias = validos.reduce((acc, n) => {
-        const diff = new Date(n.data_fechamento).getTime() - new Date(n.criado_em).getTime();
-        return acc + diff / MS_POR_DIA;
-      }, 0);
-
-      const mediaDias = somaDias / total;
-
-      // Formata: inteiro se número redondo, 1 casa decimal se não
-      const diasStr = Number.isInteger(Math.round(mediaDias * 10) / 10)
-        ? `${Math.round(mediaDias)}`
-        : `${mediaDias.toFixed(1).replace('.', ',')}`;
-
-      cicloFormatado = `${diasStr} dias`;
-      subInfo = descartados > 0
-        ? `Média de ${total} contrato${total !== 1 ? 's' : ''} · ${descartados} descartado${descartados !== 1 ? 's' : ''} (datas inválidas)`
-        : `Média de ${total} contrato${total !== 1 ? 's' : ''} ganho${total !== 1 ? 's' : ''}`;
-    }
-
-    // Atualiza o card no DOM
     if (valueEl) valueEl.textContent = cicloFormatado;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: Média de (data_fechamento − criado_em) em dias\nFiltro: negocio_status = Ganho + data_fechamento no período\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver os tempos individuais de fechamento`;
 
     if (trendEl) {
       trendEl.lastChild.textContent = `${total} negócio${total !== 1 ? 's' : ''} analisado${total !== 1 ? 's' : ''}`;
     }
+
+    // Popula o Hover Card do Ciclo de Vendas
+    _kpiBreakdowns['rel-ciclo-vendas'] = {
+      title: 'Ciclo Médio de Vendas (Dias)',
+      badge: `${diasStr} Dias Média`,
+      items: validos.map(n => ({
+        name: n.negocio_titulo || 'Contrato Ganho',
+        sub: `Criado: ${_formatarExibicao(n.criado_em?.substring(0, 10))} → Fechado: ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}`,
+        val: `${n.dias} dia${n.dias !== 1 ? 's' : ''}`
+      })),
+      footer: `Soma: <b>${somaDias}</b> dias totais ÷ <b>${total}</b> contratos ganhos`,
+      formula: `Ciclo Médio = ${diasStr} dias por fechamento`
+    };
+    _bindKpiHover('rel-ciclo-vendas');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Ciclo Médio de Vendas:', err.message);
@@ -2293,9 +2443,6 @@ async function _carregarCicloVendas(inicio, fim) {
  *
  * Fórmula:
  *   SUM(negocio_valor) de todos os negócios com negocio_status = 'Aberto'
- *
- * Não filtra por período: representa o estado atual do pipeline,
- * independente de quando os negócios foram criados.
  */
 async function _carregarReceitaAberto() {
   const cardEl  = document.getElementById('rel-receita-aberto');
@@ -2307,17 +2454,16 @@ async function _carregarReceitaAberto() {
   try {
     const { data, error } = await supabase
       .from('negocios')
-      .select('negocio_valor')
-      .eq('negocio_status', 'Aberto');
+      .select('negocio_id, negocio_titulo, negocio_valor, criado_em, usuarios(user_nome)')
+      .eq('negocio_status', 'Aberto')
+      .order('negocio_valor', { ascending: false });
 
     if (error) throw error;
 
     const negocios = data ?? [];
     const total    = negocios.length;
-
     const soma = negocios.reduce((acc, n) => acc + Number(n.negocio_valor ?? 0), 0);
 
-    // Atualiza o card no DOM
     if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(soma)}`;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
@@ -2327,11 +2473,25 @@ async function _carregarReceitaAberto() {
       : `${total} negócio${total !== 1 ? 's' : ''} aberto${total !== 1 ? 's' : ''} no pipeline`;
 
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: SUM(negocio_valor) onde negocio_status = Aberto\nSnapshot atual — não filtrado por período\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver as principais propostas em aberto`;
 
     if (trendEl) {
       trendEl.lastChild.textContent = `${total} negócio${total !== 1 ? 's' : ''} ativo${total !== 1 ? 's' : ''}`;
     }
+
+    // Popula o Hover Card da Receita em Aberto com as maiores propostas
+    _kpiBreakdowns['rel-receita-aberto'] = {
+      title: 'Receita em Aberto (Pipeline)',
+      badge: `${total} Proposta${total !== 1 ? 's' : ''}`,
+      items: negocios.slice(0, 15).map(n => ({
+        name: n.negocio_titulo || 'Proposta Ativa',
+        sub: `Responsável: ${n.usuarios?.user_nome || 'Equipe'} · Criado em ${_formatarExibicao(n.criado_em?.substring(0, 10))}`,
+        val: `R$ ${_formatarBRL(n.negocio_valor)}`
+      })),
+      footer: `Potencial total em negociação no pipeline ativo hoje`,
+      formula: `Soma Total = R$ ${_formatarBRL(soma)}`
+    };
+    _bindKpiHover('rel-receita-aberto');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Receita em Aberto:', err.message);
@@ -2365,15 +2525,15 @@ async function _carregarMotivosPerda(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. Negócios Perdidos no período com motivo_perda preenchido
-    // Nota: motivo_perda é bigint — .neq('','') seria inválido; .not('is',null) é suficiente
+    // 1. Negócios Perdidos no período com dados completos para o breakdown
     const { data: perdidos, error: perdidoError } = await supabase
       .from('negocios')
-      .select('motivo_perda')
+      .select('motivo_perda, negocio_titulo, negocio_valor, data_fechamento')
       .eq('negocio_status', 'Perdido')
       .not('motivo_perda', 'is', null)
       .gte('data_fechamento', inicioISO)
-      .lte('data_fechamento', fimISO);
+      .lte('data_fechamento', fimISO)
+      .order('data_fechamento', { ascending: false });
 
     if (perdidoError) throw perdidoError;
 
@@ -2382,16 +2542,19 @@ async function _carregarMotivosPerda(inicio, fim) {
       return;
     }
 
-    // 2. Agrupa por motivo_perda (ID) e conta frequência
+    // 2. Agrupa por motivo_perda (ID) e associa os negócios
     const contagem = {};
+    const negociosPorMotivo = {};
     for (const n of perdidos) {
       const id = String(n.motivo_perda);
       contagem[id] = (contagem[id] ?? 0) + 1;
+      if (!negociosPorMotivo[id]) negociosPorMotivo[id] = [];
+      negociosPorMotivo[id].push(n);
     }
 
     const ids = Object.keys(contagem);
 
-    // 3. Busca os nomes na tabela motivos_perda (PK = motivo_id)
+    // 3. Busca os nomes na tabela motivos_perda
     const { data: motivos, error: motivoError } = await supabase
       .from('motivos_perda')
       .select('motivo_id, motivo_descricao')
@@ -2399,14 +2562,18 @@ async function _carregarMotivosPerda(inicio, fim) {
 
     if (motivoError) throw motivoError;
 
-    // 4. Monta o ranking ordenado por frequência (decrescente)
     const nomeMap = {};
     for (const m of (motivos ?? [])) {
       nomeMap[String(m.motivo_id)] = m.motivo_descricao;
     }
 
     const ranking = ids
-      .map(id => ({ id, label: nomeMap[id] ?? `Motivo #${id}`, count: contagem[id] }))
+      .map(id => ({
+        id,
+        label: nomeMap[id] ?? `Motivo #${id}`,
+        count: contagem[id],
+        negocios: negociosPorMotivo[id] || []
+      }))
       .sort((a, b) => b.count - a.count);
 
     const total  = perdidos.length;
@@ -2415,10 +2582,10 @@ async function _carregarMotivosPerda(inicio, fim) {
     // 5. Renderiza
     listaEl.innerHTML = ranking.map((m, idx) => {
       const pct     = Math.round((m.count / total) * 100);
-      const barPct  = Math.round((m.count / maxCnt) * 100); // relativo ao campeão
+      const barPct  = Math.round((m.count / maxCnt) * 100);
       const campeao = idx === 0 ? ' rel-motivo-item--campeao' : '';
       return `
-        <div class="rel-motivo-item${campeao}">
+        <div class="rel-motivo-item${campeao}" data-motivo-idx="${idx}" style="cursor: pointer;">
           <span class="rel-motivo-label">${m.label}</span>
           <div class="rel-mini-bar-wrap">
             <div class="rel-mini-bar">
@@ -2431,6 +2598,29 @@ async function _carregarMotivosPerda(inicio, fim) {
       `;
     }).join('');
 
+    // Atacha Hover Cards nos itens de motivo de perda
+    listaEl.querySelectorAll('.rel-motivo-item').forEach(el => {
+      const idx = parseInt(el.dataset.motivoIdx, 10);
+      const m = ranking[idx];
+      if (!m) return;
+
+      el.addEventListener('mouseenter', () => {
+        _showKpiPopover(el, {
+          title: `Perdas: ${m.label}`,
+          badge: `${m.count} Ocorrência${m.count !== 1 ? 's' : ''}`,
+          items: m.negocios.slice(0, 10).map(n => ({
+            name: n.negocio_titulo || 'Oportunidade Perdida',
+            sub: `Fechado em ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}`,
+            val: n.negocio_valor ? `R$ ${_formatarBRL(n.negocio_valor)}` : 'Perdido ❌'
+          })),
+          footer: `Representa <b>${Math.round((m.count / total) * 100)}%</b> de todas as perdas do período (${total} casos no total)`,
+          formula: `Motivo: ${m.label}`
+        });
+      });
+
+      el.addEventListener('mouseleave', _hideKpiPopover);
+    });
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Motivos de Perda:', err.message);
     listaEl.innerHTML = '<div class="rel-motivo-empty">Erro ao carregar dados</div>';
@@ -2441,16 +2631,6 @@ async function _carregarMotivosPerda(inicio, fim) {
 
 /**
  * Carrega e renderiza o ranking de Performance por Vendedor no período.
- *
- * Agrupa negócios Ganhos (e Perdidos) por vendedor_id, calculando:
- *   - SUM(negocio_valor) dos ganhos
- *   - COUNT de ganhos e total de fechados (Ganho + Perdido)
- *   - Taxa de conversão = ganhos / total
- *
- * Ordena por receita total (decrescente).
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
  */
 async function _carregarPerformanceVendedor(inicio, fim) {
   const tbody = document.getElementById('rel-vendedor-tbody');
@@ -2467,10 +2647,11 @@ async function _carregarPerformanceVendedor(inicio, fim) {
     // Busca negócios fechados (Ganho ou Perdido) no período com join de usuários
     const { data, error } = await supabase
       .from('negocios')
-      .select('vendedor_id, negocio_status, negocio_valor, usuarios(user_nome, user_avatar)')
+      .select('vendedor_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento, usuarios(user_nome, user_avatar)')
       .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicioISO)
-      .lte('data_fechamento', fimISO);
+      .lte('data_fechamento', fimISO)
+      .order('data_fechamento', { ascending: false });
 
     if (error) throw error;
 
@@ -2484,20 +2665,22 @@ async function _carregarPerformanceVendedor(inicio, fim) {
     // Agrupa por vendedor_id
     const vendedores = {};
     for (const n of negocios) {
-      const vid = n.vendedor_id;
+      const vid = n.vendedor_id || 'sem_vendedor';
       if (!vendedores[vid]) {
         vendedores[vid] = {
-          nome:   n.usuarios?.user_nome   ?? 'Usuário desconhecido',
+          nome:   n.usuarios?.user_nome   ?? 'Não atribuído',
           avatar: n.usuarios?.user_avatar ?? null,
           ganhos: 0,
           total:  0,
           receita: 0,
+          contratos: []
         };
       }
       vendedores[vid].total++;
       if (n.negocio_status === 'Ganho') {
         vendedores[vid].ganhos++;
         vendedores[vid].receita += Number(n.negocio_valor ?? 0);
+        vendedores[vid].contratos.push(n);
       }
     }
 
@@ -2516,7 +2699,7 @@ async function _carregarPerformanceVendedor(inicio, fim) {
         : `<div class="rel-table-avatar">${iniciais}</div>`;
 
       return `
-        <tr>
+        <tr data-vendedor-idx="${idx}" style="cursor: pointer;">
           <td class="rel-rank">${idx + 1}</td>
           <td>
             <div class="rel-avatar-cell">
@@ -2542,6 +2725,32 @@ async function _carregarPerformanceVendedor(inicio, fim) {
       `;
     }).join('');
 
+    // Atacha Hover Cards nas linhas dos vendedores
+    tbody.querySelectorAll('tr').forEach(row => {
+      const idx = parseInt(row.dataset.vendedorIdx, 10);
+      const v = ranking[idx];
+      if (!v) return;
+
+      row.addEventListener('mouseenter', () => {
+        const taxa = v.total > 0 ? Math.round((v.ganhos / v.total) * 100) : 0;
+        _showKpiPopover(row, {
+          title: `Vendedor: ${v.nome}`,
+          badge: `${v.ganhos} Ganhos / ${v.total} Total`,
+          items: v.contratos.length > 0
+            ? v.contratos.slice(0, 10).map(c => ({
+                name: c.negocio_titulo || 'Contrato Ganho',
+                sub: `Fechado em ${_formatarExibicao(c.data_fechamento?.substring(0, 10))}`,
+                val: `R$ ${_formatarBRL(c.negocio_valor)}`
+              }))
+            : [{ name: 'Sem contratos ganhos', sub: 'Apenas oportunidades perdidas ou em aberto', val: '—' }],
+          footer: `Receita gerada: <b>R$ ${_formatarBRL(v.receita)}</b> · Taxa de conversão: <b>${taxa}%</b>`,
+          formula: `Ticket médio individual: R$ ${_formatarBRL(v.ganhos > 0 ? v.receita / v.ganhos : 0)}`
+        });
+      });
+
+      row.addEventListener('mouseleave', _hideKpiPopover);
+    });
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Performance por Vendedor:', err.message);
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--danger)">Erro ao carregar dados</td></tr>';
@@ -2554,13 +2763,8 @@ async function _carregarPerformanceVendedor(inicio, fim) {
  * Calcula e exibe a Taxa de No-Show em Reuniões no período.
  *
  * Fórmula:
- *   Taxa = (No-Shows ÷ Total de Reuniões) × 100
- *
- *   Total de Reuniões = negócios com reuniao_realizada = TRUE e criado_em no período
- *   No-Shows           = desses, os com negocio_noshow = TRUE
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ *   Taxa = (No-Shows ÷ Total de Reuniões Agendadas) × 100
+ *   onde Reuniões Agendadas = reuniao_realizada = true OU negocio_noshow = true
  */
 async function _carregarNoShow(inicio, fim) {
   const cardEl  = document.getElementById('rel-noshow');
@@ -2575,42 +2779,59 @@ async function _carregarNoShow(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Busca negócios com reuniao_realizada = TRUE no período (criado_em)
+    // 1. Busca todas as reuniões (realizadas ou com no-show) no período
     const { data, error } = await supabase
       .from('negocios')
-      .select('negocio_noshow')
-      .eq('reuniao_realizada', true)
+      .select('negocio_id, negocio_titulo, negocio_noshow, reuniao_realizada, criado_em, usuarios(user_nome)')
+      .or('reuniao_realizada.eq.true,negocio_noshow.eq.true')
       .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+      .lte('criado_em', fimISO)
+      .order('criado_em', { ascending: false });
 
     if (error) throw error;
 
-    const reunioes = data ?? [];
-    const total    = reunioes.length;
-    const noShows  = reunioes.filter(n => n.negocio_noshow === true).length;
+    const lista = data ?? [];
+    const totalReunioes = lista.length;
+    const noShows = lista.filter(n => n.negocio_noshow === true);
+    const totalNoShows = noShows.length;
 
-    let taxaFormatada;
-    let subInfo;
-
-    if (total === 0) {
-      taxaFormatada = '0%';
-      subInfo = 'Nenhuma reunião registrada no período';
-    } else {
-      const taxa = (noShows / total) * 100;
-      taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
-      subInfo = `${noShows} no-show${noShows !== 1 ? 's' : ''} de ${total} reunião${total !== 1 ? 'es' : ''}`;
-    }
+    // 2. Calcula a taxa
+    const taxa = totalReunioes > 0 ? (totalNoShows / totalReunioes) * 100 : 0;
+    const taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
+    const subInfo = totalReunioes === 0
+      ? 'Nenhuma reunião agendada no período'
+      : `${totalNoShows} falta${totalNoShows !== 1 ? 's' : ''} de ${totalReunioes} reunião${totalReunioes !== 1 ? 'es' : ''} agendada${totalReunioes !== 1 ? 's' : ''}`;
 
     if (valueEl) valueEl.textContent = taxaFormatada;
 
     const subEl    = cardEl?.querySelector('.rel-kpi-sub');
     const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
     if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Fórmula: (No-Shows ÷ Reuniões) × 100\nReuniões = reuniao_realizada = TRUE e criado_em no período\nNo-Show = negocio_noshow = TRUE\n${subInfo}`;
+    if (infoSpan) infoSpan.title   = `Passe o mouse para ver os leads faltantes`;
 
     if (trendEl) {
-      trendEl.lastChild.textContent = `${noShows} no-show${noShows !== 1 ? 's' : ''} / ${total} reunião${total !== 1 ? 'es' : ''}`;
+      trendEl.lastChild.textContent = `${totalNoShows} no-show / ${totalReunioes} reuniões`;
     }
+
+    // 3. Popula o Hover Card do No-Show
+    _kpiBreakdowns['rel-noshow'] = {
+      title: 'Taxa de No-Show em Reuniões',
+      badge: `${totalNoShows} Ausência${totalNoShows !== 1 ? 's' : ''}`,
+      items: totalNoShows > 0
+        ? noShows.map(n => ({
+            name: n.negocio_titulo || 'Lead',
+            sub: `Vendedor: ${n.usuarios?.user_nome || 'Equipe'} · Reunião em ${_formatarExibicao(n.criado_em?.substring(0, 10))}`,
+            val: 'Faltou ❌'
+          }))
+        : lista.slice(0, 8).map(n => ({
+            name: n.negocio_titulo || 'Lead',
+            sub: `Vendedor: ${n.usuarios?.user_nome || 'Equipe'} · ${_formatarExibicao(n.criado_em?.substring(0, 10))}`,
+            val: 'Presente ✅'
+          })),
+      footer: `<b>${totalNoShows}</b> faltas ÷ <b>${totalReunioes}</b> reuniões agendadas no período`,
+      formula: `Taxa de No-Show = ${taxaFormatada}`
+    };
+    _bindKpiHover('rel-noshow');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular No-Show:', err.message);
@@ -2622,15 +2843,6 @@ async function _carregarNoShow(inicio, fim) {
 
 /**
  * Calcula e exibe LTV Total da Carteira, LTV Médio e LTV/CAC Ratio.
- *
- * LTV Médio  = Média histórica de negocio_valor dos negócios Ganhos (sem filtro de período)
- * LTV Total  = LTV Médio × total de clientes ativos hoje (sem cliente_churn = true)
- * LTV/CAC    = LTV Médio ÷ CAC do período
- *
- * O CAC é recalculado internamente (investimento / novos clientes no período).
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
  */
 async function _carregarLtvMetrics(inicio, fim) {
   const ltvTotalEl  = document.getElementById('rel-ltv-total');
@@ -2660,7 +2872,7 @@ async function _carregarLtvMetrics(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // ── 1. LTV Médio: média histórica de todos os negócios Ganhos ──
+    // 1. LTV Médio: média histórica de todos os contratos Ganhos
     const { data: ganhos, error: ganhosErr } = await supabase
       .from('negocios')
       .select('negocio_valor')
@@ -2672,7 +2884,7 @@ async function _carregarLtvMetrics(inicio, fim) {
     const somaGanhos  = (ganhos ?? []).reduce((s, n) => s + Number(n.negocio_valor ?? 0), 0);
     const ltvMedio    = totalGanhos > 0 ? somaGanhos / totalGanhos : 0;
 
-    // ── 2. Clientes ativos (sem churn) ──
+    // 2. Clientes ativos na carteira (sem churn)
     const { count: clientesAtivos, error: clientesErr } = await supabase
       .from('clientes')
       .select('cliente_id', { count: 'exact', head: true })
@@ -2683,36 +2895,34 @@ async function _carregarLtvMetrics(inicio, fim) {
     const nAtivos  = clientesAtivos ?? 0;
     const ltvTotal = ltvMedio * nAtivos;
 
-    // ── 3. CAC do período: investimento / novos clientes ──
-    // Usa o mesmo padrão de UserStore.getUserId() do _carregarCAC
-    const userId = UserStore.getUserId();
-    let cac = 0;
-    let investimento = 0;
-    let novosClientesCount = 0;
+    // 3. CAC do período: investimento / novos clientes
+    const periodoKey = inicio.substring(0, 7);
+    let investimento = _investimentoMarketing || 0;
+    if (!investimento) {
+      const { data: invData } = await supabase
+        .from('relatorios_investimentos')
+        .select('valor')
+        .eq('periodo', periodoKey)
+        .maybeSingle();
 
-    if (userId) {
-      const { data: uData } = await supabase
-        .from('usuarios')
-        .select('investimento_marketing')
-        .eq('user_id', userId)
-        .single();
-
-      investimento = Number(uData?.investimento_marketing ?? 0);
-
-      const { count: novosClientes } = await supabase
-        .from('clientes')
-        .select('cliente_id', { count: 'exact', head: true })
-        .gte('criado_em', inicioISO)
-        .lte('criado_em', fimISO);
-
-      novosClientesCount = novosClientes ?? 0;
-      cac = novosClientesCount > 0 ? investimento / novosClientesCount : 0;
+      if (invData?.valor !== undefined && invData?.valor !== null) {
+        investimento = Number(invData.valor);
+      }
     }
 
-    // ── 4. LTV/CAC Ratio ──
+    const { count: novosClientes } = await supabase
+      .from('clientes')
+      .select('cliente_id', { count: 'exact', head: true })
+      .gte('criado_em', inicioISO)
+      .lte('criado_em', fimISO);
+
+    const novosClientesCount = novosClientes ?? 0;
+    const cac = novosClientesCount > 0 && investimento > 0 ? investimento / novosClientesCount : 0;
+
+    // 4. LTV/CAC Ratio
     const ratio = cac > 0 ? ltvMedio / cac : null;
 
-    // ── 5. Atualiza DOM ──
+    // 5. Atualiza DOM
     setValue(ltvMedioEl, `R$ ${_formatarBRL(ltvMedio)}`);
     setSub(ltvMedioEl, `Média de ${totalGanhos} contrato${totalGanhos !== 1 ? 's' : ''} ganho${totalGanhos !== 1 ? 's' : ''} (histórico)`);
     setTrend(ltvMedioEl, `${totalGanhos} contratos`);
@@ -2723,16 +2933,11 @@ async function _carregarLtvMetrics(inicio, fim) {
 
     if (ratio === null) {
       setValue(ltvCacEl, '—×');
-      let motivo;
-      if (!userId) {
-        motivo = 'Usuário não identificado';
-      } else if (investimento === 0) {
-        motivo = 'Registre o Investimento em Marketing para calcular o CAC';
-      } else if (novosClientesCount === 0) {
-        motivo = `Investimento: R$ ${_formatarBRL(investimento)} · Sem novos clientes no período`;
-      } else {
-        motivo = 'CAC = 0 — verifique os dados';
-      }
+      let motivo = investimento === 0
+        ? 'Registre o Investimento em Marketing para calcular o CAC'
+        : novosClientesCount === 0
+          ? `Investimento: R$ ${_formatarBRL(investimento)} · Sem novos clientes no período`
+          : 'CAC = 0 — verifique os dados';
       setSub(ltvCacEl, motivo);
       setTrend(ltvCacEl, 'LTV Médio disponível');
     } else {
@@ -2742,6 +2947,23 @@ async function _carregarLtvMetrics(inicio, fim) {
       setSub(ltvCacEl, `R$ ${_formatarBRL(ltvMedio)} (LTV) ÷ R$ ${_formatarBRL(cac)} (CAC) · ${status}`);
       setTrend(ltvCacEl, ratio >= 3 ? 'Meta atingida' : 'Abaixo da meta');
     }
+
+    // 6. Popula Hover Card do LTV/CAC Ratio
+    _kpiBreakdowns['rel-ltv-cac'] = {
+      title: 'LTV / CAC Ratio (Retorno sobre Aquisição)',
+      badge: ratio !== null ? `${ratio.toFixed(1).replace('.', ',')}×` : '—×',
+      items: [
+        { name: 'LTV Médio da Carteira', sub: `Média de ${totalGanhos} contratos fechados`, val: `R$ ${_formatarBRL(ltvMedio)}` },
+        { name: 'CAC do Período', sub: `Custo médio para conquistar 1 cliente`, val: cac > 0 ? `R$ ${_formatarBRL(cac)}` : 'R$ —' },
+        { name: 'Clientes Ativos na Carteira', sub: 'Base atual de clientes ativos', val: `${nAtivos} clientes` },
+        { name: 'Valor Total da Carteira (LTV Total)', sub: 'LTV Médio × Clientes Ativos', val: `R$ ${_formatarBRL(ltvTotal)}` }
+      ],
+      footer: ratio !== null && ratio >= 3
+        ? `✅ <b>Saudável</b>: Para cada R$ 1 investido em aquisição, o cliente retorna R$ ${ratio.toFixed(1).replace('.', ',')} de LTV.`
+        : `⚠️ <b>Atenção</b>: O ideal de mercado para agências e SaaS é ter LTV/CAC acima de 3×.`,
+      formula: `LTV ÷ CAC = ${ratio !== null ? ratio.toFixed(1).replace('.', ',') : '—'}×`
+    };
+    _bindKpiHover('rel-ltv-cac');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular LTV Métrics:', err.message);
@@ -3708,5 +3930,9 @@ export default {
   onDestroy() {
     _tabAtual = 'comercial';
     document.removeEventListener('click', _handleClickFora);
+    if (_popoverEl) {
+      _popoverEl.remove();
+      _popoverEl = null;
+    }
   },
 };

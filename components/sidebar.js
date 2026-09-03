@@ -62,6 +62,8 @@ export default class Sidebar {
         icon: `<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>` },
       { route: 'projetos',   label: 'Projetos',    badge: null, adminOnly: false,
         icon: `<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="4" rx="1"/><rect x="13" y="11" width="8" height="8" rx="1"/><rect x="3" y="15" width="8" height="4" rx="1"/>` },
+      { route: 'contratos',  label: 'Contratos',   badge: null, adminOnly: false,
+        icon: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>` },
       { route: 'email-marketing', label: 'Email Marketing', badge: null, adminOnly: false,
         icon: `<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>` },
       { route: 'financeiro', label: 'Financeiro', badge: null, adminOnly: true,
@@ -101,6 +103,28 @@ export default class Sidebar {
           <span>Painel</span>
         </div>
       </div>
+
+      <!-- Botão Dashboard (Link Externo) -->
+      <a href="https://dashboard.visimarketing.com.br"
+         target="_blank"
+         rel="noopener noreferrer"
+         class="sidebar-dashboard-btn"
+         id="btn-sidebar-dashboard"
+         title="Abrir Dashboard Visi Marketing">
+        <div class="sidebar-dashboard-content">
+          <svg viewBox="0 0 24 24" class="icon-main">
+            <path d="M12 14l3.5-3.5"/>
+            <path d="M3.34 19a10 10 0 1 1 17.32 0"/>
+            <circle cx="12" cy="14" r="1.5"/>
+          </svg>
+          <span>Dashboard</span>
+        </div>
+        <svg viewBox="0 0 24 24" class="icon-external">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="10" y1="14" x2="21" y2="3"></line>
+        </svg>
+      </a>
 
       ${linksHTML}
 

@@ -2084,7 +2084,7 @@ export default {
     });
   },
 
-  // ─── KPIs ────────────────────────────────────────────────────────────────
+    // ─── KPIs ────────────────────────────────────────────────────────────────
   _renderKPIs(ativados, novos, totalMidia, satisfacaoMedia, isAdmin = false) {
     const midiaFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMidia);
     const satDisplay = satisfacaoMedia !== '-' ? `${satisfacaoMedia}<span style="font-size:16px;font-weight:600;color:var(--text-secondary)">/10</span>` : '-';
@@ -2117,17 +2117,8 @@ export default {
   },
 
   // ─── Seção Onboarding ─────────────────────────────────────────────────────
-  _renderOnboardingSection(novos, tasksByNegocio = {}) {
+  _renderOnboardingSection(novos) {
     if (novos.length === 0) return '';
-
-    // Nomes das 5 tarefas reais (a 6ª é o botão Start)
-    const TASK_NAMES = [
-      'Pegar Acessos',
-      'Configurações BM e Páginas',
-      'Token do Dashboard',
-      'Desenvolvimento de Criativos',
-      'Estruturar Campanha e Solicitar Saldo',
-    ];
 
     const _deadline = (criadoEm) => {
       if (!criadoEm) return null;
@@ -2142,13 +2133,28 @@ export default {
       return              { estado: 'ok',         dias,                 label };
     };
 
+    const defaultChecklist = [
+      { titulo: 'Pegar Acessos', status: false },
+      { titulo: 'Configurações BM e Páginas', status: false },
+      { titulo: 'Token do Dashboard', status: false },
+      { titulo: 'Desenvolvimento de Criativos', status: false },
+      { titulo: 'Estruturar Campanha e Solicitar Saldo', status: false }
+    ];
+
     const cards = novos.map(c => {
-      const tasks      = tasksByNegocio[c.negocio_id] || [];
-      // Ordenar pelas 4 tarefas conhecidas
-      const ordered    = TASK_NAMES.map(name => tasks.find(t => t.tarefa_titulo === name) || { tarefa_titulo: name, tarefa_status: false });
-      const done       = ordered.filter(t => t.tarefa_status).length;
-      const pct        = Math.round((done / TASK_NAMES.length) * 100);
-      const allDone    = done === TASK_NAMES.length;
+      let checklist  = c.onboarding_checklist;
+      if (typeof checklist === 'string') {
+        try {
+          checklist = JSON.parse(checklist);
+        } catch (e) {
+          checklist = null;
+        }
+      }
+      checklist = checklist || defaultChecklist;
+      const done       = checklist.filter(t => t.status).length;
+      const total      = checklist.length;
+      const pct        = Math.round((done / total) * 100);
+      const allDone    = done === total;
       const dl         = _deadline(c.criado_em);
       const midia      = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(c.investimento_midia || 0));
 
@@ -2167,12 +2173,12 @@ export default {
         }
       }
 
-      const tasksHtml = ordered.map(t => `
-        <div class="task-row ${t.tarefa_status ? 'done' : ''}" data-tarefa-id="${t.tarefa_id || ''}" data-cliente-id="${c.cliente_id}" data-negocio-id="${c.negocio_id}">
-          <div class="task-check ${t.tarefa_status ? 'done' : ''}">
+      const tasksHtml = checklist.map((t, idx) => `
+        <div class="task-row ${t.status ? 'done' : ''}" data-index="${idx}" data-cliente-id="${c.cliente_id}">
+          <div class="task-check ${t.status ? 'done' : ''}">
             <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
           </div>
-          <span class="task-label">${t.tarefa_titulo}</span>
+          <span class="task-label">${t.titulo}</span>
         </div>`).join('');
 
       const startBtn = `
@@ -2182,7 +2188,7 @@ export default {
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          ${allDone ? 'Confirmar Start — Ativar Cliente' : 'Start (Ativação) — Conclua as tarefas acima'}
+          Ativar Cliente
         </button>`;
 
       return `
@@ -2207,7 +2213,7 @@ export default {
           <div class="ob-progress">
             <div class="ob-progress-labels">
               <span>Progresso do setup</span>
-              <span>${done}/${TASK_NAMES.length} tarefas · ${midia}</span>
+              <span>${done}/${total} tarefas · ${midia}</span>
             </div>
             <div class="progress-bar-bg">
               <div class="progress-bar-fill ${allDone ? 'complete' : ''}" style="width:${pct}%"></div>
@@ -2233,10 +2239,7 @@ export default {
 
   // ─── Bind eventos de onboarding ──────────────────────────────────────────
   _bindOnboardingEvents(novos) {
-    // Delegação em todo o container
     document.getElementById('clientes-page')?.addEventListener('click', async (e) => {
-
-      // ── Botão Abrir Gaveta do Cliente ───────────────────────────────────
       const infoBtn = e.target.closest('.ob-info-btn');
       if (infoBtn) {
         const clienteId = Number(infoBtn.dataset.clienteId);
@@ -2245,42 +2248,68 @@ export default {
         return;
       }
 
-      // ── Checkbox de tarefa ──────────────────────────────────────────────
-      const taskRow = e.target.closest('.task-row[data-tarefa-id]');
-      if (taskRow && !taskRow.classList.contains('done')) {
-        const tarefaId  = Number(taskRow.dataset.tarefaId);
+      const taskRow = e.target.closest('.task-row[data-index]');
+      if (taskRow) {
+        const idx = Number(taskRow.dataset.index);
         const clienteId = Number(taskRow.dataset.clienteId);
-        if (!tarefaId) return;
-
-        // Feedback visual imediato
-        taskRow.classList.add('done');
-        taskRow.querySelector('.task-check')?.classList.add('done');
-
-        await Tarefas.concluir(tarefaId);
-
-        // Verificar se todas as 4 tarefas do card estão concluídas
-        const card       = document.getElementById(`ob-card-${clienteId}`);
-        const allRows    = card?.querySelectorAll('.task-row');
-        const allDoneNow = allRows && [...allRows].every(r => r.classList.contains('done'));
-
-        if (allDoneNow) {
-          // Atualizar barra de progresso para 100%
-          card.querySelector('.progress-bar-fill')?.style.setProperty('width', '100%');
-          card.querySelector('.progress-bar-fill')?.classList.add('complete');
-          card.querySelector('.ob-progress-labels span:last-child').textContent = `${allRows.length}/${allRows.length} tarefas`;
-          // Habilitar botão Start
-          const btn = card.querySelector('.ob-start-btn');
-          if (btn) {
-            btn.classList.remove('disabled');
-            btn.classList.add('ready');
-            btn.removeAttribute('disabled');
-            btn.removeAttribute('title');
-            btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Confirmar Start — Ativar Cliente`;
+        const client = _todosClientes.find(x => x.cliente_id === clienteId);
+        if (!client) return;
+        const defaultChecklist = [
+          { titulo: 'Pegar Acessos', status: false },
+          { titulo: 'Configurações BM e Páginas', status: false },
+          { titulo: 'Token do Dashboard', status: false },
+          { titulo: 'Desenvolvimento de Criativos', status: false },
+          { titulo: 'Estruturar Campanha e Solicitar Saldo', status: false }
+        ];
+        let checklist = client.onboarding_checklist;
+        if (typeof checklist === 'string') {
+          try {
+            checklist = JSON.parse(checklist);
+          } catch (e) {
+            checklist = null;
           }
-          // Atualizar badge do card
-          card.querySelector('.badge')?.outerHTML;
+        }
+        checklist = checklist || defaultChecklist;
+        const isDone = !checklist[idx].status;
+        checklist[idx].status = isDone;
+        taskRow.classList.toggle('done', isDone);
+        taskRow.querySelector('.task-check')?.classList.toggle('done', isDone);
+        await Clientes.updateCliente(clienteId, { onboarding_checklist: checklist });
+        client.onboarding_checklist = checklist;
+        const card = document.getElementById(`ob-card-${clienteId}`);
+        const doneCount  = checklist.filter(item => item.status).length;
+        const totalCount = checklist.length;
+        const currentPct = Math.round((doneCount / totalCount) * 100);
+        const isAllDone  = doneCount === totalCount;
+        if (card) {
+          card.querySelector('.progress-bar-fill')?.style.setProperty('width', `${currentPct}%`);
+          card.querySelector('.progress-bar-fill')?.classList.toggle('complete', isAllDone);
+          const midia = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(client.investimento_midia || 0));
+          card.querySelector('.ob-progress-labels span:last-child').textContent = `${doneCount}/${totalCount} tarefas · ${midia}`;
+          const btn = card.querySelector('.ob-start-btn');
           const badge = card.querySelector('.ob-header .badge');
-          if (badge) { badge.className = 'badge badge-green'; badge.textContent = 'Pronto p/ ativar ✓'; }
+
+          if (isAllDone) {
+            btn?.classList.remove('disabled');
+            btn?.classList.add('ready');
+            btn?.removeAttribute('disabled');
+            btn?.removeAttribute('title');
+            btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Ativar Cliente`;
+            if (badge) {
+              badge.className = 'badge badge-green';
+              badge.textContent = 'Pronto p/ ativar ✓';
+            }
+          } else {
+            btn?.classList.add('disabled');
+            btn?.classList.remove('ready');
+            btn?.setAttribute('disabled', 'true');
+            btn?.setAttribute('title', 'Conclua todas as tarefas primeiro');
+            btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Ativar Cliente`;
+            if (badge) {
+              badge.className = 'badge badge-blue';
+              badge.textContent = 'Em andamento';
+            }
+          }
         }
         return;
       }
@@ -2291,6 +2320,16 @@ export default {
         const clienteId = Number(startBtn.dataset.clienteId);
         startBtn.disabled = true;
         startBtn.textContent = 'Ativando...';
+
+        // Concluir a tarefa principal de onboarding no banco
+        const client = _todosClientes.find(x => x.cliente_id === clienteId);
+        if (client && client.negocio_id) {
+          const tasks = _tasksByNegocio[client.negocio_id] || [];
+          const mainTask = tasks.find(t => t.tarefa_titulo.startsWith('Onboarding') && !t.tarefa_status);
+          if (mainTask) {
+            await Tarefas.concluir(mainTask.tarefa_id);
+          }
+        }
 
         const { error } = await Clientes.ativar(clienteId);
         if (error) {

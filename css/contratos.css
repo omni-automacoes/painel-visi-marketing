@@ -1,0 +1,413 @@
+/* ============================================================
+   VISI MARKETING CRM — CONTRATOS
+   Estilos da página do Gerador de Contratos
+   ============================================================ */
+
+.contratos-container {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 28px;
+  align-items: start;
+  animation: fadeSlideUp 0.4s ease;
+}
+
+@media (max-width: 1200px) {
+  .contratos-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- PAINEL ESQUERDO: FORMULÁRIO ---- */
+.contratos-form-pane {
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--black);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-section-title svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--cyan);
+  fill: none;
+  stroke-width: 2;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.form-input, .form-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg);
+  color: var(--black);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+  transition: var(--transition);
+}
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+/* Checkboxes & Adicionais */
+.services-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.service-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--black);
+  user-select: none;
+}
+
+.service-checkbox-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+
+.service-value-input-wrapper {
+  margin-top: 4px;
+  padding-left: 26px;
+  animation: pageFadeIn 0.2s ease;
+}
+
+/* ---- PAINEL DIREITO: PREVIEW A4 ---- */
+.contratos-preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 20px;
+}
+
+.preview-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  box-shadow: var(--shadow);
+}
+
+.preview-controls-left {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-controls-left span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #10B981;
+  border-radius: 50%;
+  animation: pulseGreen 2s infinite;
+}
+
+@keyframes pulseGreen {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.paper-scroll-container {
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-dark);
+  background: #2D3748; /* Cor escura simulando mesa/fundo */
+  padding: 40px 20px;
+  scrollbar-width: thin;
+}
+
+/* A4 Sheet Style (Fiel ao Word export) */
+.a4-paper {
+  padding: 0 !important;
+  background: #FFFFFF !important; /* Sempre branco, simulando papel real */
+  color: #000000 !important;     /* Sempre escuro */
+  width: 100%;
+  max-width: 800px;
+  min-height: 1128px; /* Proporção A4 */
+  margin: 0 auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  font-family: Arial, sans-serif !important;
+  outline: none;
+  position: relative;
+  transition: box-shadow 0.2s ease;
+}
+
+.a4-paper:focus-within {
+  box-shadow: 0 10px 40px rgba(26, 206, 238, 0.35);
+}
+
+.a4-paper .header-rectangle {
+  background-color: #3A3838;
+  height: 2.09cm;
+  width: 100%;
+}
+
+.a4-paper .document-content {
+  padding: 40px 70px 60px 70px;
+  text-align: justify;
+}
+
+/* Formatação interna do contrato conforme Word */
+.a4-paper h1 {
+  font-family: Arial, sans-serif !important;
+  font-size: 14pt !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 40px !important;
+  text-transform: uppercase !important;
+  color: #000000 !important;
+}
+
+.a4-paper h2 {
+  font-family: Arial, sans-serif !important;
+  font-size: 9pt !important;
+  font-weight: bold !important;
+  text-decoration: underline !important;
+  margin-top: 25px !important;
+  margin-bottom: 10px !important;
+  text-transform: uppercase !important;
+  color: #000000 !important;
+}
+
+.a4-paper p {
+  font-family: Arial, sans-serif !important;
+  font-size: 9pt !important;
+  font-weight: normal !important;
+  margin-bottom: 15px !important;
+  line-height: 1.5 !important;
+  text-indent: 0 !important;
+  color: #000000 !important;
+}
+
+/* Assinaturas */
+.a4-paper .signature-block {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 80px;
+  text-indent: 0 !important;
+}
+
+.a4-paper .signature-line {
+  width: 45%;
+  text-align: center;
+}
+
+.a4-paper .signature-line p {
+  margin: 3px 0 !important;
+  text-align: center !important;
+}
+
+/* Destaque das variáveis no editor */
+.a4-paper .contract-var {
+  background-color: rgba(26, 206, 238, 0.12);
+  border-bottom: 1px dashed var(--cyan);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  color: #000000 !important;
+  transition: all 0.2s ease;
+}
+
+.a4-paper .contract-var:hover {
+  background-color: rgba(26, 206, 238, 0.25);
+}
+
+/* Mensagem de ajuda/dica */
+.help-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan-mid);
+  color: var(--cyan);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.help-badge svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
+/* ── Modo Edição de Modelo Padrão ────────────────────────────────── */
+
+.contract-edit-banner {
+  background: linear-gradient(135deg, rgba(26, 206, 238, 0.12), rgba(99, 102, 241, 0.1));
+  border: 1px solid rgba(26, 206, 238, 0.35);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.contract-edit-banner-text {
+  font-size: 12px;
+  color: var(--black);
+  line-height: 1.4;
+}
+
+.contract-edit-banner-text b {
+  color: var(--cyan);
+}
+
+.a4-paper.template-editing-mode {
+  outline: 2px dashed rgba(26, 206, 238, 0.6) !important;
+  outline-offset: 4px;
+}
+
+/* Chips de variáveis protegidas no modo edição */
+.a4-paper.template-editing-mode .contract-var--chip {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(26, 206, 238, 0.18) !important;
+  color: #007d93 !important;
+  border: 1.5px solid rgba(26, 206, 238, 0.6) !important;
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  user-select: none;
+  cursor: not-allowed;
+  vertical-align: middle;
+  margin: 0 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .a4-paper.template-editing-mode .contract-var--chip {
+  background: rgba(26, 206, 238, 0.25) !important;
+  color: #1aceee !important;
+  border-color: rgba(26, 206, 238, 0.7) !important;
+}
+
+/* Chips para blocos de cláusulas automáticas no modo edição */
+.a4-paper.template-editing-mode .contract-section--chip {
+  display: block;
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.08) !important;
+  border: 1.5px dashed rgba(99, 102, 241, 0.45) !important;
+  border-radius: 8px;
+  color: #4f46e5 !important;
+  font-size: 11.5px;
+  font-weight: 700;
+  user-select: none;
+  cursor: not-allowed;
+  text-align: left;
+}
+
+[data-theme="dark"] .a4-paper.template-editing-mode .contract-section--chip {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #818cf8 !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+/* Notificação Toast */
+.contrato-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #10B981;
+  color: #ffffff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 99999;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}

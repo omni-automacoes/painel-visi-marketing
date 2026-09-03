@@ -61,6 +61,9 @@
   transform: translateY(-8px);
   pointer-events: none;
   transition: opacity 0.2s, transform 0.2s;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .fin-dropdown-menu.show {
@@ -403,6 +406,12 @@
   color: var(--cyan);
 }
 
+.fin-type-parcelado {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366F1;
+}
+
+
 /* Empty Table State */
 .fin-empty-state {
   padding: 40px;
@@ -550,4 +559,20 @@
 
 .fin-table-wrapper::-webkit-scrollbar-thumb:hover {
   background: rgba(26, 206, 238, 0.65);
+}
+
+/* Hover style for inline delete row button */
+.fin-btn-delete-row {
+  opacity: 0.25 !important;
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease !important;
+}
+
+.fin-row-clickable:hover .fin-btn-delete-row {
+  opacity: 0.75 !important;
+}
+
+.fin-btn-delete-row:hover {
+  opacity: 1 !important;
+  color: #FF4D4D !important;
+  transform: scale(1.18);
 }

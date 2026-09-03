@@ -6,7 +6,7 @@
  *   const panel = new NegocioPanel();
  *   panel.open(negocioId);
  */
-import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards } from '../../js/db.js';
+import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards, Usuarios, NegociosResponsaveis, EtapasPipeline } from '../../js/db.js';
 import UserStore from '../../js/userStore.js';
 import GanhoModal from './GanhoModal.js';
 
@@ -16,12 +16,14 @@ export default class NegocioPanel {
     this._negocioId = null;
     this._negocioData = null; // cache dos dados do negócio
     this._ganhoModal = new GanhoModal();
+    this._hasChanges = false;
   }
 
   // ── API pública ───────────────────────────────────────────────
 
   open(negocioId) {
     this._negocioId = negocioId;
+    this._hasChanges = false;
     this._mount();
     this._loadData(negocioId);
   }
@@ -30,7 +32,12 @@ export default class NegocioPanel {
     const overlay = document.getElementById('np-overlay');
     if (!overlay) return;
     overlay.classList.add('np-overlay--closing');
-    setTimeout(() => overlay.remove(), 280);
+    setTimeout(() => {
+      overlay.remove();
+      if (this._hasChanges) {
+        window.location.reload();
+      }
+    }, 280);
 
     if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
     if (this._hashHandler) window.removeEventListener('hashchange', this._hashHandler);
@@ -80,16 +87,26 @@ export default class NegocioPanel {
   // ── Data ──────────────────────────────────────────────────────
 
   async _loadData(negocioId) {
-    const [negRes, tarefasRes, anotacoesRes, docsRes, tentativasRes] = await Promise.all([
+    const [negRes, tarefasRes, anotacoesRes, docsRes, tentativasRes, vendedoresRes] = await Promise.all([
       Negocios.getById(negocioId),
       Tarefas.getByNegocio(negocioId),
       Anotacoes.getByNegocio(negocioId),
       Documentos.getByNegocio(negocioId),
       ContatoTentativas.getByNegocio(negocioId),
+      Usuarios.getVendedoresAtivos(),
     ]);
 
     if (negRes.error) { this._renderError(); return; }
+
+    let stages = [];
+    if (negRes.data?.pipeline_id) {
+      const stagesRes = await EtapasPipeline.getByPipeline(negRes.data.pipeline_id);
+      stages = stagesRes.data ?? [];
+    }
+    this._etapasPipeline = stages;
+
     this._negocioData = negRes.data; // cache para uso no GanhoModal
+    this._vendedores = vendedoresRes.data ?? []; // cache active sellers
     this._renderContent(negRes.data, tarefasRes.data ?? [], anotacoesRes.data ?? [], docsRes.data ?? [], tentativasRes.data ?? []);
   }
 
@@ -168,9 +185,13 @@ export default class NegocioPanel {
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
             ${funilNome}
           </div>
-          <div class="np-meta-pill">
+          <div class="np-meta-pill np-meta-pill--select" title="Alterar etapa do lead">
             <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            ${etapaNome}
+            <select id="np-select-etapa" class="np-meta-select">
+              ${this._etapasPipeline.map(e => `
+                <option value="${e.etapa_id}" ${e.etapa_id === neg.etapa_id ? 'selected' : ''}>${e.etapa_nome}</option>
+              `).join('')}
+            </select>
           </div>
         </div>
       </div>
@@ -182,42 +203,81 @@ export default class NegocioPanel {
         <aside class="np-sidebar">
 
           <!-- Contato -->
-          <div class="np-sb-section">
+          <div class="np-sb-section np-sb-section--contato">
             <div class="np-sb-title">
               <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               Contato
             </div>
-            ${neg.negocio_telefone ? `
-            <div class="np-sb-item">
-              <span class="np-sb-label">Telefone</span>
-              <span class="np-sb-value">${neg.negocio_telefone}</span>
-            </div>` : ''}
-            ${neg.negocio_email ? `
-            <div class="np-sb-item">
-              <span class="np-sb-label">E-mail</span>
-              <span class="np-sb-value">${neg.negocio_email}</span>
-            </div>` : ''}
-            ${neg.negocio_origem ? `
-            <div class="np-sb-item">
-              <span class="np-sb-label">Origem</span>
-              <span class="np-sb-value">${neg.negocio_origem}</span>
-            </div>` : ''}
-            ${neg.negocio_segmento ? `
-            <div class="np-sb-item">
-              <span class="np-sb-label">Segmento</span>
-              <span class="np-sb-value">${neg.negocio_segmento}</span>
-            </div>` : ''}
-            ${neg.link_instagram ? `
-            <div class="np-sb-item">
-              <span class="np-sb-label">Instagram</span>
-              <span class="np-sb-value">
-                ${neg.link_instagram.startsWith('http') 
-                  ? `<a href="${neg.link_instagram}" target="_blank" style="color:var(--cyan);text-decoration:none;">Acessar Link</a>` 
-                  : neg.link_instagram}
-              </span>
-            </div>` : ''}
-            ${!neg.negocio_telefone && !neg.negocio_email && !neg.negocio_origem && !neg.negocio_segmento && !neg.link_instagram
-              ? '<p class="np-sb-empty">Sem informações de contato.</p>' : ''}
+            
+            <div id="np-contato-view-box">
+              <div class="np-sb-item">
+                <span class="np-sb-label">Telefone</span>
+                <span class="np-sb-value" id="np-val-telefone">${neg.negocio_telefone || '—'}</span>
+              </div>
+              <div class="np-sb-item">
+                <span class="np-sb-label">E-mail</span>
+                <span class="np-sb-value" id="np-val-email">${neg.negocio_email || '—'}</span>
+              </div>
+              <div class="np-sb-item">
+                <span class="np-sb-label">Origem</span>
+                <span class="np-sb-value" id="np-val-origem">${neg.negocio_origem || '—'}</span>
+              </div>
+              <div class="np-sb-item">
+                <span class="np-sb-label">Segmento</span>
+                <span class="np-sb-value" id="np-val-segmento">${neg.negocio_segmento || '—'}</span>
+              </div>
+              <div class="np-sb-item">
+                <span class="np-sb-label">Instagram</span>
+                <span class="np-sb-value" id="np-val-instagram">
+                  ${neg.link_instagram 
+                    ? (neg.link_instagram.startsWith('http') 
+                      ? `<a href="${neg.link_instagram}" target="_blank" style="color:var(--cyan);text-decoration:none;">Acessar Link</a>` 
+                      : neg.link_instagram)
+                    : '—'}
+                </span>
+              </div>
+              
+              <div class="np-sb-actions-row" style="margin-top: 10px;">
+                <button id="np-contato-edit-btn" class="np-sb-edit-btn">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Editar
+                </button>
+              </div>
+            </div>
+
+            <!-- Formulário de edição dos contatos -->
+            <div id="np-contato-form-box" style="display: none; margin-top: 8px;">
+              <div class="np-sb-item">
+                <label class="np-sb-label" for="np-input-telefone">Telefone</label>
+                <input type="text" id="np-input-telefone" class="np-contato-input-field" value="${neg.negocio_telefone ?? ''}" placeholder="Ex: (11) 99999-9999">
+              </div>
+              <div class="np-sb-item">
+                <label class="np-sb-label" for="np-input-email">E-mail</label>
+                <input type="email" id="np-input-email" class="np-contato-input-field" value="${neg.negocio_email ?? ''}" placeholder="Ex: lead@email.com">
+              </div>
+              <div class="np-sb-item">
+                <label class="np-sb-label" for="np-input-origem">Origem</label>
+                <input type="text" id="np-input-origem" class="np-contato-input-field" value="${neg.negocio_origem ?? ''}" placeholder="Ex: Instagram, Indicação">
+              </div>
+              <div class="np-sb-item">
+                <label class="np-sb-label" for="np-input-segmento">Segmento</label>
+                <input type="text" id="np-input-segmento" class="np-contato-input-field" value="${neg.negocio_segmento ?? ''}" placeholder="Ex: Estética, E-commerce">
+              </div>
+              <div class="np-sb-item">
+                <label class="np-sb-label" for="np-input-instagram">Instagram</label>
+                <input type="text" id="np-input-instagram" class="np-contato-input-field" value="${neg.link_instagram ?? ''}" placeholder="Ex: https://instagram.com/perfil">
+              </div>
+              
+              <div class="np-sb-actions-row" style="margin-top: 10px; display: flex; gap: 6px;">
+                <button id="np-contato-save-btn" class="np-recontado-save" style="flex: 1; justify-content: center;">
+                  <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                  Salvar
+                </button>
+                <button id="np-contato-cancel-btn" class="np-recontado-clear" style="flex: 1; justify-content: center;">
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Faturamento -->
@@ -269,7 +329,7 @@ export default class NegocioPanel {
               </button>
             </div>
             <div class="np-recontado-field" id="np-recontado-field" style="${recontadoInputVal ? 'display:none; margin-top:6px;' : 'display:flex;'}">
-              <input type="date" id="np-recontado-input" class="np-recontado-input" value="${recontadoInputVal}">
+              <input type="date" id="np-recontado-input" class="np-recontado-input" value="${recontadoInputVal}" onclick="if (typeof this.showPicker === 'function') this.showPicker()">
               <button id="np-recontado-save" class="np-recontado-save" title="Salvar data de recontato">
                 <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                 Salvar
@@ -307,19 +367,78 @@ export default class NegocioPanel {
             </div>` : ''}
           </div>
 
-          <!-- Responsável -->
+          <!-- Responsáveis -->
           <div class="np-sb-section">
             <div class="np-sb-title">
               <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Responsável
+              Responsáveis
             </div>
-            <div class="np-vendedor-row">
-              ${avatarUrl
-                ? `<img class="np-avatar" src="${avatarUrl}" alt="${vendedorNome}">`
-                : `<div class="np-avatar np-avatar--initials">${vendedorNome.charAt(0).toUpperCase()}</div>`
-              }
-              <span class="np-vendedor-nome">${vendedorNome}</span>
+
+            <!-- Responsável Principal -->
+            <div class="np-sb-item-sub">
+              <span class="np-sb-label">Responsável Principal</span>
+              <div class="np-vendedor-row" style="margin-top: 6px;">
+                ${avatarUrl
+                  ? `<img class="np-avatar-sm" src="${avatarUrl}" alt="${vendedorNome}">`
+                  : `<div class="np-avatar-sm np-avatar--initials">${vendedorNome.charAt(0).toUpperCase()}</div>`
+                }
+                <span class="np-vendedor-nome">${vendedorNome}</span>
+              </div>
             </div>
+
+            <!-- Co-responsáveis -->
+            <div class="np-sb-item-sub" style="margin-top: 12px;">
+              <span class="np-sb-label">Co-responsáveis</span>
+              <div class="np-co-responsaveis-list" id="np-co-responsaveis-list">
+                ${(neg.negocios_responsaveis && neg.negocios_responsaveis.length > 0)
+                  ? neg.negocios_responsaveis.map(r => {
+                      const name = r.usuarios?.user_nome ?? 'Sem nome';
+                      const avatar = r.usuarios?.user_avatar;
+                      return `
+                        <div class="np-co-avatar-badge" title="${name}">
+                          ${avatar
+                            ? `<img class="np-avatar-xs" src="${avatar}" alt="${name}">`
+                            : `<div class="np-avatar-xs np-avatar--initials">${name.charAt(0).toUpperCase()}</div>`
+                          }
+                          <span class="np-co-name">${name.split(' ')[0]}</span>
+                        </div>
+                      `;
+                    }).join('')
+                  : '<span class="np-sb-empty-inline">Nenhum</span>'
+                }
+              </div>
+              
+              <!-- Gerenciamento de Co-responsáveis -->
+              <div class="np-co-actions" style="margin-top: 6px;">
+                <button class="np-sb-edit-btn" id="np-btn-edit-co">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Gerenciar
+                </button>
+              </div>
+
+              <!-- Form/List de Co-responsáveis (escondido por padrão) -->
+              <div class="np-co-selector-box" id="np-co-selector-box" style="display: none;">
+                <div class="np-co-selector-list">
+                  ${this._vendedores
+                    .filter(v => v.user_id !== neg.vendedor_id) // remove o principal
+                    .map(v => {
+                      const isChecked = neg.negocios_responsaveis && neg.negocios_responsaveis.some(r => r.usuario_id === v.user_id);
+                      return `
+                        <label class="np-co-selector-item">
+                          <input type="checkbox" class="np-co-checkbox" data-user-id="${v.user_id}" ${isChecked ? 'checked' : ''}>
+                          <span class="np-co-selector-name">${v.user_nome}</span>
+                        </label>
+                      `;
+                    }).join('')}
+                </div>
+                <div class="np-co-selector-actions">
+                  <button class="np-co-save-btn" id="np-btn-save-co">Salvar</button>
+                  <button class="np-co-cancel-btn" id="np-btn-cancel-co">Cancelar</button>
+                </div>
+              </div>
+
+            </div>
+
           </div>
 
         </aside>
@@ -427,6 +546,10 @@ export default class NegocioPanel {
                   <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                   Email
                 </button>
+                <button class="np-contato-btn np-contato-btn--instagram" data-tipo="Instagram" id="np-contato-instagram">
+                  <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+                  Instagram
+                </button>
               </div>
               <!-- Lista de tentativas -->
               <div class="np-contato-list" id="np-contato-list">
@@ -442,7 +565,7 @@ export default class NegocioPanel {
               <div class="np-task-form">
                 <div class="np-task-form-row">
                   <input type="text" id="np-task-input" class="np-task-input" placeholder="Título da tarefa...">
-                  <input type="date" id="np-task-date" class="np-task-date">
+                  <input type="date" id="np-task-date" class="np-task-date" onclick="if (typeof this.showPicker === 'function') this.showPicker()">
                   <button id="np-task-submit" class="np-task-submit" title="Adicionar tarefa">
                     <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </button>
@@ -514,6 +637,26 @@ export default class NegocioPanel {
     this._bindRecontadoForm(neg.negocio_id);
     this._bindFaturamentoField(neg.negocio_id);
     this._bindValorField(neg.negocio_id);
+    this._bindResponsaveis(neg.negocio_id, neg);
+
+    // Bind select etapa
+    document.getElementById('np-select-etapa')?.addEventListener('change', async (e) => {
+      const etapaId = parseInt(e.target.value, 10);
+      if (etapaId) {
+        const select = e.target;
+        select.disabled = true;
+        const { error } = await Negocios.updateEtapa(neg.negocio_id, etapaId);
+        select.disabled = false;
+        if (error) {
+          console.error('[NegocioPanel] Erro ao atualizar etapa:', error);
+          alert('Não foi possível alterar a etapa do lead.');
+          return;
+        }
+        this._reloadFunnelPage();
+      }
+    });
+
+    this._bindContatoForm(neg.negocio_id, neg);
   }
 
   // ── Ações de Status ──────────────────────────────────────
@@ -579,18 +722,15 @@ export default class NegocioPanel {
             negocio_id:        neg.negocio_id ?? null,
           };
 
+          const nomeCliente = (dados.nome_cliente || '').trim() || 'Cliente';
           const tarefasOnboarding = [
-            'Pegar Acessos',
-            'Configurações BM e Páginas',
-            'Token do Dashboard',
-            'Desenvolvimento de Criativos',
-            'Estruturar Campanha e Solicitar Saldo',
-          ].map(titulo => ({
-            tarefa_titulo: titulo,
-            tarefa_status: false,
-            negocio_id:   neg.negocio_id ?? null,
-            vendedor_id:  dados.responsavel_id ?? null,
-          }));
+            {
+              tarefa_titulo: `Onboarding - ${nomeCliente}`,
+              tarefa_status: false,
+              negocio_id:   neg.negocio_id ?? null,
+              vendedor_id:  dados.responsavel_id ?? null,
+            }
+          ];
 
           const [clienteRes, statusRes, , tarefasRes] = await Promise.all([
             Clientes.create(clientePayload),
@@ -1135,8 +1275,8 @@ export default class NegocioPanel {
   _bindContatosTab() {
     const list = document.getElementById('np-contato-list');
 
-    // Botões rápidos: Ligação, WhatsApp, Email
-    ['np-contato-ligacao', 'np-contato-whatsapp', 'np-contato-email'].forEach(id => {
+    // Botões rápidos: Ligação, WhatsApp, Email, Instagram
+    ['np-contato-ligacao', 'np-contato-whatsapp', 'np-contato-email', 'np-contato-instagram'].forEach(id => {
       document.getElementById(id)?.addEventListener('click', async (e) => {
         const btn = e.currentTarget;
         const tipo = btn.dataset.tipo;
@@ -1244,6 +1384,7 @@ export default class NegocioPanel {
       'Ligação':  { cls: 'ligacao',  icon: `<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.27 6.27l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>` },
       'WhatsApp': { cls: 'whatsapp', icon: `<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>` },
       'Email':    { cls: 'email',    icon: `<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>` },
+      'Instagram': { cls: 'instagram', icon: `<rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>` },
     };
     const cfg = TIPO_CFG[t.tentativa_tipo] ?? TIPO_CFG['Ligação'];
     const dateFmt = this._fmtNoteDate(t.tentativa_data);
@@ -2029,6 +2170,176 @@ export default class NegocioPanel {
       const statusRow = cardEl.querySelector('.opp-status-row');
       if (statusRow) statusRow.insertAdjacentHTML('afterend', html);
     }
+  }
+
+  _bindResponsaveis(negocioId, neg) {
+    const btnEditCo = document.getElementById('np-btn-edit-co');
+    const btnSaveCo = document.getElementById('np-btn-save-co');
+    const btnCancelCo = document.getElementById('np-btn-cancel-co');
+    const coSelectorBox = document.getElementById('np-co-selector-box');
+    const coSelectorList = document.querySelector('.np-co-selector-list');
+
+    // Co-responsáveis: Mostrar/Esconder seletor
+    btnEditCo?.addEventListener('click', () => {
+      const isVisible = coSelectorBox.style.display !== 'none';
+      coSelectorBox.style.display = isVisible ? 'none' : 'block';
+    });
+
+    btnCancelCo?.addEventListener('click', () => {
+      coSelectorBox.style.display = 'none';
+      const coCheckboxes = document.querySelectorAll('.np-co-checkbox');
+      coCheckboxes.forEach(cb => {
+        const uid = cb.dataset.userId;
+        const isChecked = neg.negocios_responsaveis && neg.negocios_responsaveis.some(r => r.usuario_id === uid);
+        cb.checked = isChecked;
+      });
+    });
+
+    btnSaveCo?.addEventListener('click', async () => {
+      btnSaveCo.disabled = true;
+      const coCheckboxes = document.querySelectorAll('.np-co-checkbox');
+      const selectedIds = Array.from(coCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.dataset.userId);
+
+      const { error } = await NegociosResponsaveis.updateResponsaveis(negocioId, selectedIds);
+      btnSaveCo.disabled = false;
+
+      if (error) {
+        console.error('[NegocioPanel] Erro ao salvar co-responsáveis:', error);
+        return;
+      }
+
+      neg.negocios_responsaveis = selectedIds.map(uid => {
+        const vData = this._vendedores.find(v => v.user_id === uid);
+        return {
+          usuario_id: uid,
+          usuarios: {
+            user_nome: vData ? vData.user_nome : 'Sem nome',
+            user_avatar: vData ? vData.user_avatar : null
+          }
+        };
+      });
+
+      coSelectorBox.style.display = 'none';
+
+      const listContainer = document.getElementById('np-co-responsaveis-list');
+      if (listContainer) {
+        if (neg.negocios_responsaveis.length > 0) {
+          listContainer.innerHTML = neg.negocios_responsaveis.map(r => {
+            const name = r.usuarios?.user_nome ?? 'Sem nome';
+            const avatar = r.usuarios?.user_avatar;
+            return `
+              <div class="np-co-avatar-badge" title="${name}">
+                ${avatar
+                  ? `<img class="np-avatar-xs" src="${avatar}" alt="${name}">`
+                  : `<div class="np-avatar-xs np-avatar--initials">${name.charAt(0).toUpperCase()}</div>`
+                }
+                <span class="np-co-name">${name.split(' ')[0]}</span>
+              </div>
+            `;
+          }).join('');
+        } else {
+          listContainer.innerHTML = '<span class="np-sb-empty-inline">Nenhum</span>';
+        }
+      }
+
+      this._reloadFunnelPage();
+    });
+  }
+
+  _bindContatoForm(negocioId, neg) {
+    const editBtn = document.getElementById('np-contato-edit-btn');
+    const saveBtn = document.getElementById('np-contato-save-btn');
+    const cancelBtn = document.getElementById('np-contato-cancel-btn');
+    const viewBox = document.getElementById('np-contato-view-box');
+    const formBox = document.getElementById('np-contato-form-box');
+
+    const inputTelefone = document.getElementById('np-input-telefone');
+    const inputEmail = document.getElementById('np-input-email');
+    const inputOrigem = document.getElementById('np-input-origem');
+    const inputSegmento = document.getElementById('np-input-segmento');
+    const inputInstagram = document.getElementById('np-input-instagram');
+
+    editBtn?.addEventListener('click', () => {
+      viewBox.style.display = 'none';
+      formBox.style.display = 'block';
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+      formBox.style.display = 'none';
+      viewBox.style.display = 'block';
+      // Reset values
+      inputTelefone.value = neg.negocio_telefone ?? '';
+      inputEmail.value = neg.negocio_email ?? '';
+      inputOrigem.value = neg.negocio_origem ?? '';
+      inputSegmento.value = neg.negocio_segmento ?? '';
+      inputInstagram.value = neg.link_instagram ?? '';
+    });
+
+    saveBtn?.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      inputTelefone.disabled = true;
+      inputEmail.disabled = true;
+      inputOrigem.disabled = true;
+      inputSegmento.disabled = true;
+      inputInstagram.disabled = true;
+
+      const payload = {
+        negocio_telefone: inputTelefone.value.trim() || null,
+        negocio_email: inputEmail.value.trim() || null,
+        negocio_origem: inputOrigem.value.trim() || null,
+        negocio_segmento: inputSegmento.value.trim() || null,
+        link_instagram: inputInstagram.value.trim() || null
+      };
+
+      const { error } = await Negocios.update(negocioId, payload);
+
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      inputTelefone.disabled = false;
+      inputEmail.disabled = false;
+      inputOrigem.disabled = false;
+      inputSegmento.disabled = false;
+      inputInstagram.disabled = false;
+
+      if (error) {
+        console.error('[NegocioPanel] Erro ao salvar contato:', error);
+        alert('Não foi possível salvar os dados de contato.');
+        return;
+      }
+
+      // Update local object
+      neg.negocio_telefone = payload.negocio_telefone;
+      neg.negocio_email = payload.negocio_email;
+      neg.negocio_origem = payload.negocio_origem;
+      neg.negocio_segmento = payload.negocio_segmento;
+      neg.link_instagram = payload.link_instagram;
+
+      // Update static view fields in DOM
+      document.getElementById('np-val-telefone').textContent = neg.negocio_telefone || '—';
+      document.getElementById('np-val-email').textContent = neg.negocio_email || '—';
+      document.getElementById('np-val-origem').textContent = neg.negocio_origem || '—';
+      document.getElementById('np-val-segmento').textContent = neg.negocio_segmento || '—';
+      
+      const instaLink = neg.link_instagram 
+        ? (neg.link_instagram.startsWith('http') 
+          ? `<a href="${neg.link_instagram}" target="_blank" style="color:var(--cyan);text-decoration:none;">Acessar Link</a>` 
+          : neg.link_instagram)
+        : '—';
+      document.getElementById('np-val-instagram').innerHTML = instaLink;
+
+      // Toggle views
+      formBox.style.display = 'none';
+      viewBox.style.display = 'block';
+
+      this._reloadFunnelPage();
+    });
+  }
+
+  _reloadFunnelPage() {
+    this._hasChanges = true;
   }
 
   _renderError() {

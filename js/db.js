@@ -106,11 +106,14 @@ export const Clientes = {
    * KPI: Clientes Ativos (Operações)
    */
   async getAtivos(userId) {
-    return supabase
+    let query = supabase
       .from('clientes')
       .select('cliente_id', { count: 'exact' })
-      .eq('cliente_status', 'Ativado')
-      .eq('user_id', userId);
+      .eq('cliente_status', 'Ativado');
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    return query;
   },
 
   /**
@@ -118,11 +121,15 @@ export const Clientes = {
    * KPI: Clientes para Otimizar (Operações)
    */
   async getParaOtimizar(userId) {
-    return supabase
+    let query = supabase
       .from('clientes')
       .select('cliente_id', { count: 'exact' })
-      .eq('cliente_otimizacao', false)
-      .eq('user_id', userId);
+      .eq('cliente_status', 'Ativado')
+      .eq('cliente_otimizacao', false);
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    return query;
   },
 
   /**
@@ -131,11 +138,14 @@ export const Clientes = {
    * nota_entrega e nota_performance (todas numeric, 0–10).
    */
   async getSaudeMedia(userId) {
-    return supabase
+    let query = supabase
       .from('clientes')
       .select('nota_comunicacao, nota_entrega, nota_performance')
-      .eq('cliente_status', 'Ativado')
-      .eq('user_id', userId);
+      .eq('cliente_status', 'Ativado');
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    return query;
   },
 
   /**
@@ -148,13 +158,16 @@ export const Clientes = {
     const inicio = new Date(Date.UTC(ano, 0, 1)).toISOString();
     const fim    = new Date(Date.UTC(ano, 11, 31, 23, 59, 59, 999)).toISOString();
 
-    return supabase
+    let query = supabase
       .from('clientes')
       .select('data_churn')
-      .eq('user_id', userId)
       .eq('cliente_churn', true)
       .gte('data_churn', inicio)
       .lte('data_churn', fim);
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    return query;
   },
 
   /**
@@ -167,12 +180,15 @@ export const Clientes = {
     const inicio = new Date(Date.UTC(ano, 0, 1)).toISOString();
     const fim    = new Date(Date.UTC(ano, 11, 31, 23, 59, 59, 999)).toISOString();
 
-    return supabase
+    let query = supabase
       .from('clientes')
       .select('criado_em')
-      .eq('user_id', userId)
       .gte('criado_em', inicio)
       .lte('criado_em', fim);
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    return query;
   },
 
   /**
@@ -246,7 +262,8 @@ export const Clientes = {
         receita_perdida,
         motivo_churn,
         cliente_contrato,
-        contrato_duracao
+        contrato_duracao,
+        onboarding_checklist
       `)
       .eq('user_id', userId)
       .order('cliente_nome', { ascending: true });
@@ -289,7 +306,8 @@ export const Clientes = {
         receita_perdida,
         motivo_churn,
         cliente_contrato,
-        contrato_duracao
+        contrato_duracao,
+        onboarding_checklist
       `)
       .order('cliente_nome', { ascending: true });
   },
@@ -614,11 +632,14 @@ export const Tarefas = {
    * @param {number} limit - máximo de tarefas a retornar (padrão: 10)
    */
   async getRecentesPorVendedor(vendedorId, limit = 6) {
-    return supabase
+    let query = supabase
       .from('tarefas')
       .select('tarefa_id, tarefa_titulo, tarefa_vencimento, tarefa_status, tarefa_descricao, negocio_id')
-      .eq('vendedor_id', vendedorId)
-      .eq('tarefa_status', false)
+      .eq('tarefa_status', false);
+    if (vendedorId) {
+      query = query.eq('vendedor_id', vendedorId);
+    }
+    return query
       .order('tarefa_vencimento', { ascending: true })
       .limit(limit);
   },
@@ -699,21 +720,49 @@ export const Tarefas = {
    * @param {string} vendedorId
    */
   async getAllPorVendedor(vendedorId) {
-    return supabase
-      .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
-      .eq('vendedor_id', vendedorId)
-      .order('tarefa_vencimento', { ascending: true });
+    let allData = [];
+    let from = 0;
+    const limit = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from('tarefas')
+        .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
+        .eq('vendedor_id', vendedorId)
+        .order('tarefa_vencimento', { ascending: true })
+        .range(from, from + limit - 1);
+      
+      if (error) return { data: null, error };
+      if (!data || data.length === 0) break;
+      
+      allData.push(...data);
+      if (data.length < limit) break;
+      from += limit;
+    }
+    return { data: allData, error: null };
   },
 
   /**
    * Retorna TODAS as tarefas de todos os vendedores (para visão admin).
    */
   async getAllAdmin() {
-    return supabase
-      .from('tarefas')
-      .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
-      .order('tarefa_vencimento', { ascending: true });
+    let allData = [];
+    let from = 0;
+    const limit = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from('tarefas')
+        .select('tarefa_id, tarefa_titulo, tarefa_descricao, tarefa_vencimento, tarefa_status, tarefa_prioridade, negocio_id, criado_em, data_inicio, data_conclusao, tempo_acumulado_ms, vendedor_id, usuarios(user_nome)')
+        .order('tarefa_vencimento', { ascending: true })
+        .range(from, from + limit - 1);
+      
+      if (error) return { data: null, error };
+      if (!data || data.length === 0) break;
+      
+      allData.push(...data);
+      if (data.length < limit) break;
+      from += limit;
+    }
+    return { data: allData, error: null };
   },
 
   /**
@@ -974,32 +1023,86 @@ export const Usuarios = {
 
 export const Metas = {
   /**
-   * Retorna a meta do mês atual, buscando pelo nome do mês em português.
+   * Retorna a meta do mês atual da tabela meta_mensal.
    */
   async getMesAtual() {
-    const nomeMes = new Intl.DateTimeFormat('pt-BR', { month: 'long' })
-      .format(new Date())
-      .replace(/^\w/, c => c.toUpperCase());
+    const agora = new Date();
+    const inicioMes = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1)).toISOString();
+    const fimMes    = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
 
     return supabase
-      .from('metas')
-      .select('meta_id, meta_tipo, meta_principal, meta_mes')
-      .eq('meta_mes', nomeMes)
-      .order('meta_id', { ascending: false })
+      .from('meta_mensal')
+      .select('meta_id, meta_valor, meta_data')
+      .gte('meta_data', inicioMes)
+      .lte('meta_data', fimMes)
+      .order('meta_data', { ascending: false })
       .limit(1)
       .maybeSingle();
   },
 
   /**
-   * Retorna todas as metas cadastradas (para montar o gráfico anual).
-   * O mapeamento de nome do mês → índice é feito no client-side.
+   * Retorna todas as metas cadastradas para o ano atual da tabela meta_mensal.
    */
   async getAnoAtual() {
+    const ano = new Date().getUTCFullYear();
+    const inicio = new Date(Date.UTC(ano, 0, 1)).toISOString();
+    const fim    = new Date(Date.UTC(ano, 11, 31, 23, 59, 59, 999)).toISOString();
+
     return supabase
-      .from('metas')
-      .select('meta_principal, meta_mes')
-      .order('meta_id', { ascending: true });
+      .from('meta_mensal')
+      .select('meta_valor, meta_data')
+      .gte('meta_data', inicio)
+      .lte('meta_data', fim)
+      .order('meta_data', { ascending: true });
   },
+
+  /**
+   * Retorna todas as metas cadastradas na tabela meta_mensal ordenadas por meta_data decrescente.
+   */
+  async getAll() {
+    return supabase
+      .from('meta_mensal')
+      .select('meta_id, meta_data, meta_valor, criado_em')
+      .order('meta_data', { ascending: false });
+  },
+
+  /**
+   * Cria uma nova meta mensal.
+   */
+  async create(meta_data, meta_valor) {
+    const now = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T') + '-03:00';
+    return supabase
+      .from('meta_mensal')
+      .insert({
+        meta_data,
+        meta_valor,
+        criado_em: now
+      })
+      .select()
+      .single();
+  },
+
+  /**
+   * Atualiza os dados de uma meta mensal.
+   */
+  async update(meta_id, updates) {
+    return supabase
+      .from('meta_mensal')
+      .update(updates)
+      .eq('meta_id', meta_id)
+      .select()
+      .single();
+  },
+
+  /**
+   * Exclui uma meta mensal.
+   */
+  async delete(meta_id) {
+    return supabase
+      .from('meta_mensal')
+      .delete()
+      .eq('meta_id', meta_id);
+  }
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -1068,6 +1171,15 @@ export const EtapasPipeline = {
 // ══════════════════════════════════════════════════════════════════
 
 export const Negocios = {
+  async update(negocioId, payload) {
+    return supabase
+      .from('negocios')
+      .update({ ...payload, ultima_atualizacao: nowBrasilia() })
+      .eq('negocio_id', negocioId)
+      .select()
+      .single();
+  },
+
   /**
    * Busca negócios pelo título (para autocomplete).
    * @param {string} query - texto digitado pelo usuário
@@ -1106,7 +1218,11 @@ export const Negocios = {
         motivo_perda,
         criado_em,
         vendedor_id,
-        usuarios ( user_nome, user_avatar )
+        usuarios ( user_nome, user_avatar ),
+        negocios_responsaveis (
+          usuario_id,
+          usuarios ( user_nome, user_avatar )
+        )
       `)
       .eq('pipeline_id', pipelineId)
       .order('criado_em', { ascending: false });
@@ -1205,6 +1321,13 @@ export const Negocios = {
       .eq('negocio_id', negocioId);
   },
 
+  async updateVendedor(negocioId, vendedorId) {
+    return supabase
+      .from('negocios')
+      .update({ vendedor_id: vendedorId, ultima_atualizacao: nowBrasilia() })
+      .eq('negocio_id', negocioId);
+  },
+
   /**
    * Marca o negócio como Perdido e persiste o ID do motivo (FK bigint).
    * @param {number} negocioId
@@ -1263,7 +1386,11 @@ export const Negocios = {
         etapas_pipeline ( etapa_nome, etapa_ordem ),
         pipelines        ( pipeline_nome ),
         usuarios         ( user_nome, user_avatar ),
-        motivos_perda    ( motivo_descricao )
+        motivos_perda    ( motivo_descricao ),
+        negocios_responsaveis (
+          usuario_id,
+          usuarios ( user_nome, user_avatar )
+        )
       `)
       .eq('negocio_id', negocioId)
       .single();
@@ -1278,34 +1405,32 @@ export const Negocios = {
   async getAbertosPorVendedor(vendedorId) {
     return supabase
       .from('negocios')
-      .select('negocio_id, negocio_status')
-      .eq('vendedor_id', vendedorId)
+      .select('negocio_id, negocio_status, vendedor_id, negocios_responsaveis ( usuario_id )')
       .eq('negocio_status', 'Aberto');
   },
 
   /**
-   * Retorna negócios FECHADOS (Ganho ou Perdido) do vendedor no mês atual,
+   * Retorna negócios FECHADOS (Ganho ou Perdido) no mês atual,
    * filtrando pela coluna data_fechamento (timestamptz).
    *
    * @param {string} vendedorId
    */
   async getFechadosMesAtual(vendedorId) {
     const agora     = new Date();
-    // Usa UTC para não deslocar o intervalo por timezone do browser
+    // Use UTC para não deslocar o intervalo por timezone do browser
     const inicioMes = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1));
     const fimMes    = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
     return supabase
       .from('negocios')
-      .select('negocio_id, negocio_status, negocio_valor, data_fechamento')
-      .eq('vendedor_id', vendedorId)
+      .select('negocio_id, negocio_status, negocio_valor, data_fechamento, vendedor_id, negocios_responsaveis ( usuario_id )')
       .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicioMes.toISOString())
       .lte('data_fechamento', fimMes.toISOString());
   },
 
   /**
-   * Retorna negócios FECHADOS (Ganho ou Perdido) do vendedor no mês anterior.
+   * Retorna negócios FECHADOS (Ganho ou Perdido) no mês anterior.
    * Usado para calcular a variação % vs. mês atual.
    *
    * @param {string} vendedorId
@@ -1317,15 +1442,14 @@ export const Negocios = {
 
     return supabase
       .from('negocios')
-      .select('negocio_id, negocio_status')
-      .eq('vendedor_id', vendedorId)
+      .select('negocio_id, negocio_status, vendedor_id, negocios_responsaveis ( usuario_id )')
       .eq('negocio_status', 'Ganho')
       .gte('data_fechamento', inicioMes.toISOString())
       .lte('data_fechamento', fimMes.toISOString());
   },
 
   /**
-   * Retorna todos os negócios FECHADOS do vendedor no ano atual.
+   * Retorna todos os negócios FECHADOS no ano atual.
    * Usado para montar o gráfico de barras mês a mês.
    *
    * @param {string} vendedorId
@@ -1337,15 +1461,14 @@ export const Negocios = {
 
     return supabase
       .from('negocios')
-      .select('negocio_status, negocio_valor, data_fechamento')
-      .eq('vendedor_id', vendedorId)
+      .select('negocio_status, negocio_valor, data_fechamento, vendedor_id, negocios_responsaveis ( usuario_id )')
       .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicio.toISOString())
       .lte('data_fechamento', fim.toISOString());
   },
 
   /**
-   * Retorna todos os negócios GANHOS do mês atual de TODOS os vendedores.
+   * Retorna todos os negócios GANHOS do mês atual de TODOS os vendedores com seus co-responsáveis.
    * Usado para montar o ranking "Top Vendedores".
    */
   async getGanhosMesAtualTodos() {
@@ -1355,24 +1478,25 @@ export const Negocios = {
 
     return supabase
       .from('negocios')
-      .select('vendedor_id, negocio_valor')
+      .select('vendedor_id, negocio_valor, negocios_responsaveis ( usuario_id )')
       .eq('negocio_status', 'Ganho')
       .gte('data_fechamento', inicioMes.toISOString())
       .lte('data_fechamento', fimMes.toISOString());
   },
 
   /**
-   * Retorna negócios na etapa de Onboarding do vendedor:
-   *   pipeline_id = 2  E  etapa_id ≠ 10
-   * KPI: Clientes na Etapa de Onboarding (Operações)
+   * Retorna clientes com status 'Novo Cliente' (Onboarding) do vendedor.
+   * KPI: Clientes em Onboarding (Operações)
    */
   async getOnboarding(vendedorId) {
-    return supabase
-      .from('negocios')
-      .select('negocio_id', { count: 'exact' })
-      .eq('pipeline_id', 2)
-      .neq('etapa_id', 10)
-      .eq('vendedor_id', vendedorId);
+    let query = supabase
+      .from('clientes')
+      .select('cliente_id', { count: 'exact' })
+      .eq('cliente_status', 'Novo Cliente');
+    if (vendedorId) {
+      query = query.eq('user_id', vendedorId);
+    }
+    return query;
   },
 
   /**
@@ -1414,8 +1538,7 @@ export const Negocios = {
 
     return supabase
       .from('negocios')
-      .select('negocio_id')
-      .eq('vendedor_id', vendedorId)
+      .select('negocio_id, vendedor_id, negocios_responsaveis ( usuario_id )')
       .eq('reuniao_realizada', true)
       .gte('criado_em', inicioMes.toISOString())
       .lte('criado_em', fimMes.toISOString());
@@ -1443,7 +1566,7 @@ export const Negocios = {
 //  Colunas da tabela `contato_tentativas`:
 //    tentativa_id    INTEGER (PK, gerado automaticamente)
 //    negocio_id      INTEGER → FK para negocios.negocio_id
-//    tentativa_tipo  TEXT    ('Ligação' | 'Email' | 'WhatsApp')
+//    tentativa_tipo  TEXT    ('Ligação' | 'Email' | 'WhatsApp' | 'Instagram')
 //    tentativa_data  TIMESTAMPTZ
 // ══════════════════════════════════════════════════════════════════
 
@@ -1463,7 +1586,7 @@ export const ContatoTentativas = {
   /**
    * Registra uma nova tentativa de contato.
    * @param {number} negocioId
-   * @param {'Ligação'|'Email'|'WhatsApp'} tipo
+   * @param {'Ligação'|'Email'|'WhatsApp'|'Instagram'} tipo
    */
   async create(negocioId, tipo) {
     return supabase
@@ -1979,14 +2102,28 @@ export const DiaFinalizado = {
       fim    = new Date(agora.getFullYear(), agora.getMonth() + 1, 0, 23, 59, 59, 999);
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('dia_finalizado')
-      .select('quantidade_contatos_realizados, quantidade_prospecao')
-      .eq('user_id', userId)
+      .select(`
+        quantidade_contatos_realizados,
+        quantidade_prospecao,
+        criado_em,
+        user_id,
+        usuarios (
+          user_nome,
+          user_avatar
+        )
+      `)
       .gte('criado_em', inicio.toISOString())
       .lte('criado_em', fim.toISOString());
 
-    if (error) return { error, contatos: 0, prospeccoes: 0 };
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) return { error, contatos: 0, prospeccoes: 0, rows: [] };
 
     let contatos = 0;
     let prospeccoes = 0;
@@ -1996,7 +2133,7 @@ export const DiaFinalizado = {
       prospeccoes += (Number(row.quantidade_prospecao) || 0);
     });
 
-    return { error: null, contatos, prospeccoes };
+    return { error: null, contatos, prospeccoes, rows: data || [] };
   },
 
   /**
@@ -2006,20 +2143,34 @@ export const DiaFinalizado = {
    * @param {string} dataFim - 'YYYY-MM-DD'
    */
   async getEstatisticasCustom(userId, dataInicio, dataFim) {
-    if (!dataInicio || !dataFim) return { error: 'Datas inválidas', contatos: 0, prospeccoes: 0 };
+    if (!dataInicio || !dataFim) return { error: 'Datas inválidas', contatos: 0, prospeccoes: 0, rows: [] };
 
     // Adiciona o timezone zero (UTC) se vier só yyyy-mm-dd
     const inicio = new Date(`${dataInicio}T00:00:00`);
     const fim    = new Date(`${dataFim}T23:59:59.999`);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('dia_finalizado')
-      .select('quantidade_contatos_realizados, quantidade_prospecao')
-      .eq('user_id', userId)
+      .select(`
+        quantidade_contatos_realizados,
+        quantidade_prospecao,
+        criado_em,
+        user_id,
+        usuarios (
+          user_nome,
+          user_avatar
+        )
+      `)
       .gte('criado_em', inicio.toISOString())
       .lte('criado_em', fim.toISOString());
 
-    if (error) return { error, contatos: 0, prospeccoes: 0 };
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) return { error, contatos: 0, prospeccoes: 0, rows: [] };
 
     let contatos = 0;
     let prospeccoes = 0;
@@ -2029,7 +2180,7 @@ export const DiaFinalizado = {
       prospeccoes += (Number(row.quantidade_prospecao) || 0);
     });
 
-    return { error: null, contatos, prospeccoes };
+    return { error: null, contatos, prospeccoes, rows: data || [] };
   },
 };
 
@@ -2064,7 +2215,11 @@ export const KanbanCards = {
   async getByColuna(colunaId) {
     return supabase
       .from('kanban_cards')
-      .select('card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban, card_etiqueta')
+      .select(`
+        card_id, coluna_id, card_titulo, card_descricao, card_prioridade, card_data_entrega, card_ordem, tipo_kanban, card_etiqueta,
+        kanban_arquivos (arquivo_id),
+        kanban_comentarios (comentario_id)
+      `)
       .eq('coluna_id', colunaId)
       .order('card_ordem', { ascending: true });
   },
@@ -2159,6 +2314,56 @@ export const FinanceiroDespesas = {
   },
   async delete(id) {
     return supabase.from('financeiro_despesas').delete().eq('despesa_id', id);
+  }
+};
+
+export const NegociosResponsaveis = {
+  async updateResponsaveis(negocioId, usuarioIds) {
+    const { error: deleteError } = await supabase
+      .from('negocios_responsaveis')
+      .delete()
+      .eq('negocio_id', negocioId);
+
+    if (deleteError) return { error: deleteError };
+
+    if (!usuarioIds || usuarioIds.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const payloads = usuarioIds.map(uid => ({
+      negocio_id: negocioId,
+      usuario_id: uid
+    }));
+
+    return supabase
+      .from('negocios_responsaveis')
+      .insert(payloads);
+  }
+};
+
+export const ContratosModelos = {
+  async get(id = 'padrao_marketing') {
+    return supabase
+      .from('contratos_modelos')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+  },
+  async save(id = 'padrao_marketing', html, nome = 'Contrato Gestão de Marketing') {
+    return supabase
+      .from('contratos_modelos')
+      .upsert({
+        id,
+        nome,
+        conteudo_html: html,
+        atualizado_em: new Date().toISOString()
+      });
+  },
+  async reset(id = 'padrao_marketing') {
+    return supabase
+      .from('contratos_modelos')
+      .delete()
+      .eq('id', id);
   }
 };
 

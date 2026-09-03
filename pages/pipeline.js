@@ -215,6 +215,7 @@ function _pillDropdownHTML(pillId) {
         { value: '',        label: 'Todos' },
         { value: 'Aberto',  label: '🟢 Aberto'  },
         { value: 'Perdido', label: '❌ Perdido' },
+        { value: 'Ganho',   label: '🏆 Ganho'   },
       ];
       break;
     case 'responsavel':
@@ -403,7 +404,6 @@ export default {
       <div class="page-header">
         <div class="page-title-block">
           <div id="funil-title-area"><h1 class="funil-title-loading">Carregando funil…</h1></div>
-          <p>Quadro Kanban · <span style="color:#1ACEEE;font-weight:600;" id="funil-opp-count">—</span></p>
         </div>
         <div class="header-actions">
           <div class="view-mode-toggle">
@@ -468,6 +468,11 @@ export default {
   },
 
   async onMount() {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.classList.add('no-vertical-scroll');
+    }
+
     const isAdmin = UserStore.isAdmin();
     const userId  = UserStore.getUserId();
     if (!isAdmin) _vendedorFilter = userId;
@@ -589,6 +594,11 @@ export default {
   },
 
   onDestroy() {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.classList.remove('no-vertical-scroll');
+    }
+
     document.removeEventListener('click', _closeAll);
     _funis           = [];
     _funilAtivo      = null;

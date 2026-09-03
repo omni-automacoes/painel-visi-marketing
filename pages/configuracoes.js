@@ -5,7 +5,8 @@
 
 import UserStore    from '../js/userStore.js';
 import { supabase } from '../js/supabase.js';
-import { Pipelines, EtapasPipeline, MotivosPerdas, Usuarios } from '../js/db.js';
+import { Pipelines, EtapasPipeline, MotivosPerdas, Usuarios, Metas } from '../js/db.js';
+import { formatCurrency } from '../js/utils.js';
 
 // Bucket de avatares
 const AVATAR_BUCKET = 'visi-marketing';
@@ -33,10 +34,13 @@ export default {
             <button class="config-nav-item" data-section="funil" id="config-nav-funil">
               <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
               Funil
-            </button>
-            <button class="config-nav-item" data-section="usuarios" id="config-nav-usuarios">
+                 <button class="config-nav-item" data-section="usuarios" id="config-nav-usuarios">
               <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               Usuários
+            </button>
+            <button class="config-nav-item" data-section="metas" id="config-nav-metas">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              Metas
             </button>
           </div>
           ` : ''}
@@ -52,10 +56,10 @@ export default {
             </button>
           </div>
         </aside>
-
+ 
         <div class="config-content" id="config-content">
           ${isAdmin
-            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMeuPerfil(false) + _renderSectionMotivosPerdas(false)
+            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMetas() + _renderSectionMeuPerfil(false) + _renderSectionMotivosPerdas(false)
             : _renderSectionMeuPerfil(true) + _renderSectionMotivosPerdas(false)}
         </div>
       </div>
@@ -109,6 +113,62 @@ export default {
           <button class="btn btn-cyan nu-popup-close" id="btn-nu-popup-close">Fechar</button>
         </div>
       </div>
+
+      <!-- ══ POPUP DE CADASTRAR/EDITAR META ══════════════════════════════ -->
+      <div class="nu-popup-overlay" id="meta-modal" aria-hidden="true">
+        <div class="nu-popup" role="dialog" aria-modal="true" style="text-align: left; max-width: 450px;">
+          <h3 class="nu-popup-title" id="meta-modal-title" style="margin-bottom: 20px;">Adicionar Meta</h3>
+          <form id="meta-modal-form">
+            <input type="hidden" id="meta-modal-id" />
+            <div class="config-form-row">
+              <div class="config-field">
+                <label class="config-label" for="meta-modal-mes">Mês <span class="config-required">*</span></label>
+                <div class="config-input-wrap config-select-wrap">
+                  <select id="meta-modal-mes" class="config-input config-select" required>
+                    <option value="0">Janeiro</option>
+                    <option value="1">Fevereiro</option>
+                    <option value="2">Março</option>
+                    <option value="3">Abril</option>
+                    <option value="4">Maio</option>
+                    <option value="5">Junho</option>
+                    <option value="6">Julho</option>
+                    <option value="7">Agosto</option>
+                    <option value="8">Setembro</option>
+                    <option value="9">Outubro</option>
+                    <option value="10">Novembro</option>
+                    <option value="11">Dezembro</option>
+                  </select>
+                  <svg class="config-select-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </div>
+              <div class="config-field">
+                <label class="config-label" for="meta-modal-ano">Ano <span class="config-required">*</span></label>
+                <div class="config-input-wrap config-select-wrap">
+                  <select id="meta-modal-ano" class="config-input config-select" required>
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                    <option value="2028">2028</option>
+                    <option value="2029">2029</option>
+                    <option value="2030">2030</option>
+                  </select>
+                  <svg class="config-select-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="config-form-row" style="margin-top: 12px;">
+              <div class="config-field">
+                <label class="config-label" for="meta-modal-valor">Valor da Meta (R$) <span class="config-required">*</span></label>
+                <input type="number" step="0.01" id="meta-modal-valor" class="config-input" placeholder="Ex: 100000.00" required />
+              </div>
+            </div>
+            <div class="config-form-actions" style="margin-top: 24px; justify-content: flex-end;">
+              <button type="button" class="btn btn-ghost" id="btn-meta-modal-cancel">Cancelar</button>
+              <button type="submit" class="btn btn-cyan" id="btn-meta-modal-save">Salvar</button>
+            </div>
+          </form>
+        </div>
+      </div>
     `;
   },
 
@@ -119,7 +179,12 @@ export default {
     }
   },
 
-  onDestroy() {},
+  onDestroy() {
+    _funilLoaded = false;
+    _motivosLoaded = false;
+    _usuariosLoaded = false;
+    _metasLoaded = false;
+  },
 };
 
 // ── HTML das seções ────────────────────────────────────────────────
@@ -274,6 +339,57 @@ function _renderSectionAcessoNegado() {
         </div>
         <h2>Acesso Restrito</h2>
         <p>Esta seção é exclusiva para usuários com cargo <strong>Administrador</strong>. Fale com o seu gestor para obter acesso.</p>
+      </div>
+    </section>
+  `;
+}
+
+function _renderSectionMetas() {
+  return `
+    <section class="config-section" id="section-metas">
+      <div class="config-section-header">
+        <div class="config-section-icon config-section-icon--admin">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div>
+          <h2 class="config-section-title">Gerenciar Metas Mensais</h2>
+          <p class="config-section-desc">Gerencie as metas globais de faturamento mensal do CRM.</p>
+        </div>
+        <span class="config-admin-badge">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Somente Administradores
+        </span>
+      </div>
+
+      <div class="config-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 0;">Metas Cadastradas</h3>
+          <button id="btn-meta-abrir-modal" class="btn btn-cyan btn-sm" style="height: 32px; padding: 0 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Adicionar Meta
+          </button>
+        </div>
+
+        <div id="meta-loading" class="funil-loading" style="padding: 16px 0;">
+          <div class="funil-spinner"></div>
+          Carregando metas...
+        </div>
+
+        <div id="meta-table-wrapper" style="display:none; margin-top: 16px; overflow-x: auto;">
+          <table class="mini-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding: 10px;">Mês/Ano</th>
+                <th style="text-align: left; padding: 10px;">Valor</th>
+                <th style="text-align: left; padding: 10px;">Cadastrado em</th>
+                <th style="text-align: center; padding: 10px; width: 100px;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="meta-tbody">
+              <!-- Renderizado dinamicamente -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   `;
@@ -497,6 +613,271 @@ function _bindMotivosActions(motivosArr) {
     if (emptyEl) emptyEl.remove();
     listEl?.insertAdjacentHTML('beforeend', _renderMotivoItem(novo));
     if (input) input.value = '';
+  });
+}
+
+// ── Metas Manager ──────────────────────────────────────────────────
+
+let _metasLoaded = false;
+let _metasData = [];
+
+async function _loadMetas() {
+  if (_metasLoaded) return;
+  _metasLoaded = true;
+
+  const loading = document.getElementById('meta-loading');
+  const wrapper = document.getElementById('meta-table-wrapper');
+  const tbody   = document.getElementById('meta-tbody');
+
+  const { data: metas, error } = await Metas.getAll();
+  if (error) {
+    if (loading) loading.textContent = '❌ Erro ao carregar metas.';
+    return;
+  }
+
+  _metasData = metas || [];
+
+  if (loading) loading.style.display = 'none';
+  if (wrapper) wrapper.style.display = 'block';
+  if (tbody) {
+    tbody.innerHTML = _renderMetasTbody(_metasData);
+  }
+
+  _bindMetasActions();
+}
+
+function _renderMetasTbody(metas) {
+  if (!metas.length) {
+    return `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">Nenhuma meta cadastrada ainda.</td></tr>`;
+  }
+
+  const formatarMesAno = (dateStr) => {
+    if (!dateStr) return '—';
+    const date = new Date(dateStr);
+    const meses = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return `${meses[date.getUTCMonth()]}/${date.getUTCFullYear()}`;
+  };
+
+  const formatarDataCriado = (dateStr) => {
+    if (!dateStr) return '—';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('pt-BR') + ' às ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return metas.map(m => `
+    <tr id="meta-row-${m.meta_id}" style="border-bottom: 1px solid var(--border-light);">
+      <td style="padding: 12px 10px; font-weight: 600; color: var(--text-primary);">${formatarMesAno(m.meta_data)}</td>
+      <td style="padding: 12px 10px; color: var(--cyan); font-weight: 700;" class="meta-row-valor">${formatCurrency(Number(m.meta_valor) || 0)}</td>
+      <td style="padding: 12px 10px; color: var(--text-secondary); font-size: 11px;">${formatarDataCriado(m.criado_em)}</td>
+      <td style="padding: 12px 10px; text-align: center;">
+        <div style="display: flex; gap: 8px; justify-content: center;">
+          <button class="funil-action-btn" data-action="meta-edit" data-meta-id="${m.meta_id}" data-meta-valor="${m.meta_valor}" data-meta-mes="${formatarMesAno(m.meta_data)}" title="Editar Valor">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="funil-action-btn funil-action-btn--del" data-action="meta-delete" data-meta-id="${m.meta_id}" data-meta-mes="${formatarMesAno(m.meta_data)}" title="Excluir Meta">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function _bindMetasActions() {
+  const btnAbrirModal = document.getElementById('btn-meta-abrir-modal');
+  const modal = document.getElementById('meta-modal');
+  const form = document.getElementById('meta-modal-form');
+  const cancelBtn = document.getElementById('btn-meta-modal-cancel');
+  const tbody = document.getElementById('meta-tbody');
+
+  // Abre modal para ADICIONAR meta
+  const novoBtnAbrir = btnAbrirModal?.cloneNode(true);
+  if (btnAbrirModal && novoBtnAbrir) {
+    btnAbrirModal.parentNode.replaceChild(novoBtnAbrir, btnAbrirModal);
+  }
+
+  novoBtnAbrir?.addEventListener('click', () => {
+    const modalTitle = document.getElementById('meta-modal-title');
+    if (modalTitle) modalTitle.textContent = 'Adicionar Meta';
+
+    const idInput = document.getElementById('meta-modal-id');
+    if (idInput) idInput.value = '';
+
+    const mesSelect = document.getElementById('meta-modal-mes');
+    const anoSelect = document.getElementById('meta-modal-ano');
+    const valorInput = document.getElementById('meta-modal-valor');
+
+    // Inicializa com mês e ano atuais
+    const agora = new Date();
+    if (mesSelect) mesSelect.value = String(agora.getMonth());
+    if (anoSelect) anoSelect.value = String(agora.getFullYear());
+    if (valorInput) valorInput.value = '';
+
+    if (modal) {
+      modal.classList.add('active');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+  });
+
+  // Clone do form primeiro (isso clona e limpa os listeners antigos de todos os elementos internos, incluindo o botão Cancelar)
+  const novoForm = form?.cloneNode(true);
+  if (form && novoForm) {
+    form.parentNode.replaceChild(novoForm, form);
+  }
+
+  // Agora buscamos o botão cancelar de dentro do form clonado e ativo na tela
+  const novoCancelBtn = novoForm?.querySelector('#btn-meta-modal-cancel');
+  novoCancelBtn?.addEventListener('click', () => {
+    if (modal) {
+      modal.classList.remove('active');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+    novoForm?.reset();
+  });
+
+  novoForm?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const idInput = document.getElementById('meta-modal-id');
+    const mesSelect = document.getElementById('meta-modal-mes');
+    const anoSelect = document.getElementById('meta-modal-ano');
+    const valorInput = document.getElementById('meta-modal-valor');
+
+    if (!mesSelect || !anoSelect || !valorInput) return;
+
+    const metaId = idInput?.value;
+    const mesVal = parseInt(mesSelect.value); // 0 a 11
+    const anoVal = parseInt(anoSelect.value); // 2025 a 2030
+    const valorVal = parseFloat(valorInput.value);
+
+    if (isNaN(mesVal) || isNaN(anoVal) || isNaN(valorVal)) return;
+
+    // Converte para o padrão formatado (primeiro dia do mês selecionado)
+    const metaData = new Date(Date.UTC(anoVal, mesVal, 1)).toISOString();
+
+    const saveBtn = document.getElementById('btn-meta-modal-save');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Salvando...';
+    }
+
+    if (!metaId) {
+      // MODO CRIAÇÃO (Adicionar)
+      const { data: novaMeta, error } = await Metas.create(metaData, valorVal);
+
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar';
+      }
+
+      if (error) {
+        alert('Erro ao cadastrar meta: ' + error.message);
+        return;
+      }
+
+      _metasData.unshift(novaMeta);
+    } else {
+      // MODO EDIÇÃO
+      const mid = parseInt(metaId);
+      const { data: atualizada, error } = await Metas.update(mid, {
+        meta_data: metaData,
+        meta_valor: valorVal
+      });
+
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar';
+      }
+
+      if (error) {
+        alert('Erro ao atualizar meta: ' + error.message);
+        return;
+      }
+
+      const idx = _metasData.findIndex(m => m.meta_id === mid);
+      if (idx !== -1) {
+        _metasData[idx] = atualizada;
+      }
+    }
+
+    // Ordena localmente
+    _metasData.sort((a, b) => new Date(b.meta_data) - new Date(a.meta_data));
+
+    // Atualiza tabela
+    const currentTbody = document.getElementById('meta-tbody');
+    if (currentTbody) currentTbody.innerHTML = _renderMetasTbody(_metasData);
+
+    // Fecha o modal
+    if (modal) {
+      modal.classList.remove('active');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  // Ações de clique na tabela (Editar / Excluir)
+  const novoTbody = tbody?.cloneNode(true);
+  if (tbody && novoTbody) {
+    tbody.parentNode.replaceChild(novoTbody, tbody);
+  }
+
+  novoTbody?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    const metaId = parseInt(btn.dataset.metaId);
+    const metaMes = btn.dataset.metaMes;
+
+    if (action === 'meta-edit') {
+      const meta = _metasData.find(m => m.meta_id === metaId);
+      if (!meta) return;
+
+      const dateObj = new Date(meta.meta_data);
+      const mesVal = dateObj.getUTCMonth();
+      const anoVal = dateObj.getUTCFullYear();
+
+      const modalTitle = document.getElementById('meta-modal-title');
+      if (modalTitle) modalTitle.textContent = 'Editar Meta';
+
+      const idInput = document.getElementById('meta-modal-id');
+      if (idInput) idInput.value = String(metaId);
+
+      const mesSelect = document.getElementById('meta-modal-mes');
+      const anoSelect = document.getElementById('meta-modal-ano');
+      const valorInput = document.getElementById('meta-modal-valor');
+
+      if (mesSelect) mesSelect.value = String(mesVal);
+      if (anoSelect) anoSelect.value = String(anoVal);
+      if (valorInput) valorInput.value = String(meta.meta_valor);
+
+      if (modal) {
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+    }
+
+    if (action === 'meta-delete') {
+      if (!confirm(`Tem certeza que deseja excluir a meta de ${metaMes}?`)) return;
+
+      const { error } = await Metas.delete(metaId);
+      if (error) {
+        alert('Erro ao excluir meta: ' + error.message);
+        return;
+      }
+
+      // Remove localmente
+      _metasData = _metasData.filter(m => m.meta_id !== metaId);
+
+      // Remove a linha
+      const row = document.getElementById(`meta-row-${metaId}`);
+      row?.remove();
+
+      if (!_metasData.length && novoTbody) {
+        novoTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">Nenhuma meta cadastrada ainda.</td></tr>`;
+      }
+    }
   });
 }
 
@@ -855,6 +1236,7 @@ function _bindEvents() {
       if (section === 'funil') _loadFunil();
       if (section === 'motivos-perda') _loadMotivos();
       if (section === 'usuarios') _loadUsuarios();
+      if (section === 'metas') _loadMetas();
     });
   });
 

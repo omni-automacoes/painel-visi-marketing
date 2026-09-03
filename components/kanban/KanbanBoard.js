@@ -137,12 +137,25 @@ export default class KanbanBoard {
 
     // Filtros encadeados (client-side)
     let list = this._vendedorFilter
-      ? this._allNegocios.filter(n => n.vendedor_id === this._vendedorFilter)
+      ? this._allNegocios.filter(n => 
+          n.vendedor_id === this._vendedorFilter || 
+          (n.negocios_responsaveis && n.negocios_responsaveis.some(r => r.usuario_id === this._vendedorFilter))
+        )
       : [...this._allNegocios];
 
     if (this._statusFilter !== 'Todos') {
       if (this._statusFilter === 'Aberto') {
-        list = list.filter(n => n.negocio_status === 'Aberto' || n.negocio_status === 'Ganho');
+        const agora = new Date();
+        const mesAtual = agora.getMonth();
+        const anoAtual = agora.getFullYear();
+        list = list.filter(n => {
+          if (n.negocio_status === 'Aberto') return true;
+          if (n.negocio_status === 'Ganho' && n.data_fechamento) {
+            const date = new Date(n.data_fechamento);
+            return date.getMonth() === mesAtual && date.getFullYear() === anoAtual;
+          }
+          return false;
+        });
       } else {
         list = list.filter(n => n.negocio_status === this._statusFilter);
       }

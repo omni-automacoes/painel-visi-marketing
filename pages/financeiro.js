@@ -6,12 +6,39 @@ import { today, staggerAnimation } from '../js/utils.js';
 import { FinanceiroReceitas, FinanceiroDespesas, Clientes } from '../js/db.js';
 import UserStore from '../js/userStore.js';
 
+// ── Helper de Período Atual e Gerador Dinâmico ──────────────────────
+function _getCurrentPeriod() {
+  const monthList = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  const today = new Date();
+  return `${monthList[today.getMonth()]} ${today.getFullYear()}`;
+}
+
+function _generatePeriods() {
+  const monthList = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  const periods = [];
+  const today = new Date();
+  
+  // Gera os últimos 6 meses e os próximos 5 meses (total 12 meses móveis)
+  for (let i = -6; i <= 5; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    const label = `${monthList[d.getMonth()]} ${d.getFullYear()}`;
+    periods.push(label);
+  }
+  return periods;
+}
+
 // ── Estado ─────────────────────────────────────────────────────────
 let _state = {
   receitas: [],
   despesas: [],
   clientes: [],
-  selectedPeriod: "Julho 2026",
+  selectedPeriod: _getCurrentPeriod(),
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -125,6 +152,26 @@ function _shiftDateToPeriod(dateStr, targetPeriod) {
   return `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
 }
 
+function _addMonths(dateStr, monthsCount) {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+
+  const targetMonth = month + monthsCount;
+  const dummyDate = new Date(Date.UTC(year, targetMonth, 1));
+  const targetYear = dummyDate.getUTCFullYear();
+  const targetMonthIdx = dummyDate.getUTCMonth();
+
+  const safeDate = new Date(Date.UTC(targetYear, targetMonthIdx, day));
+  if (safeDate.getUTCMonth() !== targetMonthIdx) {
+    const lastDay = new Date(Date.UTC(targetYear, targetMonthIdx + 1, 0)).getUTCDate();
+    return `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T12:00:00.000Z`;
+  }
+  return `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+}
+
 function _getDefaultDueDateForPeriod(periodStr) {
   const monthMap = {
     "Janeiro": 0, "Fevereiro": 1, "Março": 2, "Abril": 3, "Maio": 4, "Junho": 5,
@@ -212,7 +259,7 @@ function _renderModalDynamicFields(tipo) {
       </div>
       <div class="fin-form-row">
         <div class="fin-form-group">
-          <label class="fin-form-label" for="fin-valor">Valor (R$)</label>
+          <label class="fin-form-label" for="fin-valor" id="fin-valor-label">Valor (R$)</label>
           <input class="fin-form-input" id="fin-valor" type="number" step="0.01" placeholder="Ex: 1500" required />
         </div>
         <div class="fin-form-group">
@@ -261,7 +308,7 @@ function _renderModalDynamicFields(tipo) {
       </div>
       <div class="fin-form-row">
         <div class="fin-form-group">
-          <label class="fin-form-label" for="fin-valor">Valor (R$)</label>
+          <label class="fin-form-label" for="fin-valor" id="fin-valor-label">Valor (R$)</label>
           <input class="fin-form-input" id="fin-valor" type="number" step="0.01" placeholder="Ex: 1000" required />
         </div>
         <div class="fin-form-group">
@@ -269,8 +316,13 @@ function _renderModalDynamicFields(tipo) {
           <select class="fin-form-input" id="fin-tipo-fat">
             <option value="Recorrente">Recorrente</option>
             <option value="Pontual">Pontual</option>
+            <option value="Parcelado">Parcelado</option>
           </select>
         </div>
+      </div>
+      <div class="fin-form-group" id="fin-parcelas-group" style="display:none;">
+        <label class="fin-form-label" for="fin-parcelas">Parcelas Restantes</label>
+        <input class="fin-form-input" id="fin-parcelas" type="number" min="1" step="1" placeholder="Ex: 10" />
       </div>
       <div class="fin-form-row">
         <div class="fin-form-group">
@@ -315,6 +367,29 @@ function _renderModalDynamicFields(tipo) {
   if (statusSelect && dateGroup) {
     statusSelect.addEventListener('change', () => {
       dateGroup.style.display = statusSelect.value === 'Pago' ? 'block' : 'none';
+    });
+  }
+
+  // Monitora se o tipo de faturamento/pagamento é "Parcelado" (apenas despesas)
+  const tipoFatSelect = document.getElementById('fin-tipo-fat');
+  const parcelasGroup = document.getElementById('fin-parcelas-group');
+  const valorLabel = document.getElementById('fin-valor-label');
+  const valorInput = document.getElementById('fin-valor');
+  const parcelasInput = document.getElementById('fin-parcelas');
+
+  if (tipoFatSelect && parcelasGroup) {
+    tipoFatSelect.addEventListener('change', () => {
+      const isParcelado = tipoFatSelect.value === 'Parcelado';
+      parcelasGroup.style.display = isParcelado ? 'block' : 'none';
+      if (isParcelado) {
+        parcelasInput.setAttribute('required', 'true');
+        if (valorLabel) valorLabel.textContent = 'Valor da Parcela (R$)';
+        if (valorInput) valorInput.placeholder = 'Ex: 100';
+      } else {
+        parcelasInput.removeAttribute('required');
+        if (valorLabel) valorLabel.textContent = 'Valor (R$)';
+        if (valorInput) valorInput.placeholder = tipo === 'receita' ? 'Ex: 1500' : 'Ex: 1000';
+      }
     });
   }
 }
@@ -401,6 +476,14 @@ function _abrirModalNovaMovimentacao() {
       return;
     }
 
+    const isParcelado = !isReceita && document.getElementById('fin-tipo-fat').value === 'Parcelado';
+    const qtdParcelas = isParcelado ? (parseInt(document.getElementById('fin-parcelas').value, 10) || 1) : 1;
+
+    if (isParcelado && qtdParcelas < 1) {
+      _showToast('A quantidade de parcelas deve ser pelo menos 1!');
+      return;
+    }
+
     const saveBtn = document.getElementById('fin-modal-save');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Salvando...';
@@ -424,13 +507,33 @@ function _abrirModalNovaMovimentacao() {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Adicionar';
       } else {
+        if (payload.receita_tipo === 'Recorrente') {
+          const recurringPayloads = [];
+          for (let m = 1; m <= 12; m++) {
+            recurringPayloads.push({
+              cliente_id: payload.cliente_id,
+              receita_nome: payload.receita_nome,
+              receita_descricao: payload.receita_descricao,
+              receita_tipo: payload.receita_tipo,
+              receita_valor: payload.receita_valor,
+              data_vencimento: _addMonths(payload.data_vencimento, m),
+              data_recebimento: null,
+              receita_status: 'Pendente'
+            });
+          }
+          const { error: recurrError } = await FinanceiroReceitas.createMany(recurringPayloads);
+          if (recurrError) {
+            console.error("Erro ao criar recorrências:", recurrError);
+            _showToast('Receita principal criada, mas houve erro ao gerar as recorrências.');
+          }
+        }
         _showToast('Receita cadastrada com sucesso!');
         fechar();
         _loadData();
       }
     } else {
       const payload = {
-        despesa_nome: desc,
+        despesa_nome: isParcelado ? `${desc} (1/${qtdParcelas})` : desc,
         despesa_categoria: document.getElementById('fin-categoria').value,
         despesa_tipo: document.getElementById('fin-tipo-fat').value,
         despesa_valor: valor,
@@ -446,6 +549,43 @@ function _abrirModalNovaMovimentacao() {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Adicionar';
       } else {
+        if (payload.despesa_tipo === 'Recorrente') {
+          const recurringPayloads = [];
+          for (let m = 1; m <= 12; m++) {
+            recurringPayloads.push({
+              despesa_nome: payload.despesa_nome,
+              despesa_categoria: payload.despesa_categoria,
+              despesa_tipo: payload.despesa_tipo,
+              despesa_valor: payload.despesa_valor,
+              data_vencimento: _addMonths(payload.data_vencimento, m),
+              data_pagamento: null,
+              despesa_status: 'Pendente'
+            });
+          }
+          const { error: recurrError } = await FinanceiroDespesas.createMany(recurringPayloads);
+          if (recurrError) {
+            console.error("Erro ao criar recorrências de despesa:", recurrError);
+            _showToast('Despesa principal criada, mas houve erro ao gerar as recorrências.');
+          }
+        } else if (payload.despesa_tipo === 'Parcelado' && qtdParcelas > 1) {
+          const recurringPayloads = [];
+          for (let m = 1; m < qtdParcelas; m++) {
+            recurringPayloads.push({
+              despesa_nome: `${desc} (${m + 1}/${qtdParcelas})`,
+              despesa_categoria: payload.despesa_categoria,
+              despesa_tipo: payload.despesa_tipo,
+              despesa_valor: payload.despesa_valor,
+              data_vencimento: _addMonths(payload.data_vencimento, m),
+              data_pagamento: null,
+              despesa_status: 'Pendente'
+            });
+          }
+          const { error: recurrError } = await FinanceiroDespesas.createMany(recurringPayloads);
+          if (recurrError) {
+            console.error("Erro ao criar parcelas de despesa:", recurrError);
+            _showToast('Primeira parcela criada, mas houve erro ao gerar as parcelas seguintes.');
+          }
+        }
         _showToast('Despesa cadastrada com sucesso!');
         fechar();
         _loadData();
@@ -674,6 +814,7 @@ function _abrirModalEdicaoDespesa(d) {
           <select class="fin-form-input" id="fin-tipo-fat">
             <option value="Recorrente" ${d.despesa_tipo === 'Recorrente' ? 'selected' : ''}>Recorrente</option>
             <option value="Pontual" ${d.despesa_tipo === 'Pontual' ? 'selected' : ''}>Pontual</option>
+            <option value="Parcelado" ${d.despesa_tipo === 'Parcelado' ? 'selected' : ''}>Parcelado</option>
           </select>
         </div>
       </div>
@@ -783,133 +924,6 @@ function _abrirModalEdicaoDespesa(d) {
   });
 }
 
-// Importar movimentações do mês anterior
-async function _importarMesAnterior() {
-  const currentPeriod = _state.selectedPeriod;
-  const prevPeriod = _getPreviousPeriod(currentPeriod);
-  if (!prevPeriod) {
-    _showToast("Período anterior não determinado.");
-    return;
-  }
-
-  if (!confirm(`Deseja realmente importar todas as receitas e despesas de ${prevPeriod} para o período atual (${currentPeriod})?\n\nAs novas movimentações serão criadas com status 'Pendente'.`)) {
-    return;
-  }
-
-  const prevRecs = _filterByPeriod(_state.receitas, prevPeriod, 'data_vencimento');
-  const prevDesps = _filterByPeriod(_state.despesas, prevPeriod, 'data_vencimento');
-
-  if (prevRecs.length === 0 && prevDesps.length === 0) {
-    _showToast(`Nenhuma movimentação encontrada em ${prevPeriod} para importar.`);
-    return;
-  }
-
-  const importBtn = document.getElementById('btn-importar-mes');
-  if (importBtn) {
-    importBtn.disabled = true;
-    importBtn.textContent = 'Importando...';
-  }
-
-  try {
-    // 1. Duplicar Receitas
-    if (prevRecs.length > 0) {
-      const newRecs = prevRecs.map(r => ({
-        cliente_id: r.cliente_id,
-        receita_nome: r.receita_nome,
-        receita_descricao: r.receita_descricao,
-        receita_tipo: r.receita_tipo,
-        receita_valor: r.receita_valor,
-        data_vencimento: _shiftDateToPeriod(r.data_vencimento, currentPeriod),
-        data_recebimento: null,
-        receita_status: 'Pendente'
-      }));
-      const { error } = await FinanceiroReceitas.createMany(newRecs);
-      if (error) throw error;
-    }
-
-    // 2. Duplicar Despesas
-    if (prevDesps.length > 0) {
-      const newDesps = prevDesps.map(d => ({
-        despesa_nome: d.despesa_nome,
-        despesa_categoria: d.despesa_categoria,
-        despesa_tipo: d.despesa_tipo,
-        despesa_valor: d.despesa_valor,
-        data_vencimento: _shiftDateToPeriod(d.data_vencimento, currentPeriod),
-        data_pagamento: null,
-        despesa_status: 'Pendente'
-      }));
-      const { error } = await FinanceiroDespesas.createMany(newDesps);
-      if (error) throw error;
-    }
-
-    _showToast(`Importação de ${prevPeriod} concluída!`);
-    await _loadData();
-  } catch (err) {
-    console.error("Erro ao importar:", err);
-    _showToast("Erro durante a importação.");
-  } finally {
-    if (importBtn) {
-      importBtn.disabled = false;
-      importBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><polyline points="7 3 7 8 15 8"/><circle cx="12" cy="18" r="3"/></svg>
-        Importar Mês Anterior
-      `;
-    }
-  }
-}
-
-// Importar clientes ativos como receitas de mensalidade
-async function _importarClientesDoCRM() {
-  const currentPeriod = _state.selectedPeriod;
-
-  if (!confirm(`Deseja importar todos os clientes ativos do CRM como novas receitas de 'Mensalidade' para ${currentPeriod}?\n\nIsso criará uma receita pendente para cada cliente ativo com o valor da sua respectiva mensalidade.`)) {
-    return;
-  }
-
-  const ativos = _state.clientes.filter(c => (c.cliente_status || '').trim().toLowerCase() === 'ativado');
-
-  if (ativos.length === 0) {
-    _showToast("Nenhum cliente com status 'Ativado' encontrado.");
-    return;
-  }
-
-  const importBtn = document.getElementById('btn-importar-clientes');
-  if (importBtn) {
-    importBtn.disabled = true;
-    importBtn.textContent = 'Importando...';
-  }
-
-  try {
-    const dueDate = _getDefaultDueDateForPeriod(currentPeriod);
-    const newRecs = ativos.map(c => ({
-      cliente_id: c.cliente_id,
-      receita_nome: null,
-      receita_descricao: 'Mensalidade',
-      receita_tipo: 'Recorrente',
-      receita_valor: parseFloat(c.cliente_mensalidade || 0),
-      data_vencimento: dueDate,
-      data_recebimento: null,
-      receita_status: 'Pendente'
-    }));
-
-    const { error } = await FinanceiroReceitas.createMany(newRecs);
-    if (error) throw error;
-
-    _showToast(`${ativos.length} mensalidades importadas com sucesso!`);
-    await _loadData();
-  } catch (err) {
-    console.error("Erro ao importar clientes:", err);
-    _showToast("Erro ao importar clientes do CRM.");
-  } finally {
-    if (importBtn) {
-      importBtn.disabled = false;
-      importBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Importar Clientes
-      `;
-    }
-  }
-}
 
 // Carregamento de dados dinâmico e atualização da UI
 async function _loadData() {
@@ -976,13 +990,13 @@ function _renderAll() {
   const tbodyRec = document.getElementById('tbody-receitas');
   if (tbodyRec) {
     if (receitasFiltradas.length === 0) {
-      tbodyRec.innerHTML = `<tr><td colspan="7" class="fin-empty-state">Nenhuma receita encontrada em ${_state.selectedPeriod}.</td></tr>`;
+      tbodyRec.innerHTML = `<tr><td colspan="8" class="fin-empty-state">Nenhuma receita encontrada em ${_state.selectedPeriod}.</td></tr>`;
     } else {
       tbodyRec.innerHTML = receitasFiltradas.map((r) => {
         const statusVal = r.receita_status || 'Pendente';
         const statusClean = statusVal.trim().toLowerCase();
         const badgeStatusClass = statusClean === "pago" ? "fin-status-pago" : (statusClean === "atrasado" ? "fin-status-atrasado" : (statusClean === "cancelado" ? "fin-status-atrasado" : "fin-status-pendente"));
-        const badgeTypeClass = r.receita_tipo === "Recorrente" ? "fin-type-recorrente" : "fin-type-pontual";
+        const badgeTypeClass = r.receita_tipo === "Recorrente" ? "fin-type-recorrente" : (r.receita_tipo === "Parcelado" ? "fin-type-parcelado" : "fin-type-pontual");
         const clienteNome = r.cliente_id && clientMap[r.cliente_id]
           ? clientMap[r.cliente_id]
           : (r.receita_nome || 'Lançamento Avulso');
@@ -1000,6 +1014,11 @@ function _renderAll() {
             <td class="fin-date-cell">${_formatISODate(r.data_vencimento)}</td>
             <td class="fin-date-cell">${_formatISODate(r.data_recebimento)}</td>
             <td><span class="fin-status-badge ${badgeStatusClass}">${statusVal}</span></td>
+            <td style="text-align: right; width: 40px; padding-right: 20px;">
+              <button class="fin-btn-delete-row" data-id="${r.receita_id}" data-type="receita" title="Excluir" style="background: transparent; border: none; color: #EF4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.5; transition: opacity 0.2s;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
+            </td>
           </tr>
         `;
       }).join('');
@@ -1010,13 +1029,13 @@ function _renderAll() {
   const tbodyDes = document.getElementById('tbody-despesas');
   if (tbodyDes) {
     if (despesasFiltradas.length === 0) {
-      tbodyDes.innerHTML = `<tr><td colspan="7" class="fin-empty-state">Nenhuma despesa encontrada em ${_state.selectedPeriod}.</td></tr>`;
+      tbodyDes.innerHTML = `<tr><td colspan="8" class="fin-empty-state">Nenhuma despesa encontrada em ${_state.selectedPeriod}.</td></tr>`;
     } else {
       tbodyDes.innerHTML = despesasFiltradas.map((d) => {
         const statusVal = d.despesa_status || 'Pendente';
         const statusClean = statusVal.trim().toLowerCase();
         const badgeStatusClass = statusClean === "pago" ? "fin-status-pago" : (statusClean === "atrasado" ? "fin-status-atrasado" : "fin-status-pendente");
-        const badgeTypeClass = d.despesa_tipo === "Recorrente" ? "fin-type-recorrente" : "fin-type-pontual";
+        const badgeTypeClass = d.despesa_tipo === "Recorrente" ? "fin-type-recorrente" : (d.despesa_tipo === "Parcelado" ? "fin-type-parcelado" : "fin-type-pontual");
 
         return `
           <tr class="fin-row-clickable" data-id="${d.despesa_id}" data-type="despesa" style="cursor:pointer;">
@@ -1031,6 +1050,11 @@ function _renderAll() {
             <td class="fin-date-cell">${_formatISODate(d.data_vencimento)}</td>
             <td class="fin-date-cell">${_formatISODate(d.data_pagamento)}</td>
             <td><span class="fin-status-badge ${badgeStatusClass}">${statusVal}</span></td>
+            <td style="text-align: right; width: 40px; padding-right: 20px;">
+              <button class="fin-btn-delete-row" data-id="${d.despesa_id}" data-type="despesa" title="Excluir" style="background: transparent; border: none; color: #EF4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.5; transition: opacity 0.2s;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
+            </td>
           </tr>
         `;
       }).join('');
@@ -1039,7 +1063,10 @@ function _renderAll() {
 
   // Registra eventos de clique para edição
   document.querySelectorAll('.fin-row-clickable').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (e) => {
+      // Impede abrir o modal caso clique na lixeira de exclusão direta
+      if (e.target.closest('.fin-btn-delete-row')) return;
+
       const id = parseInt(row.dataset.id, 10);
       const type = row.dataset.type;
       if (type === 'receita') {
@@ -1048,6 +1075,41 @@ function _renderAll() {
       } else {
         const d = _state.despesas.find(x => x.despesa_id === id);
         if (d) _abrirModalEdicaoDespesa(d);
+      }
+    });
+  });
+
+  // Registra eventos de exclusão direta na tabela
+  document.querySelectorAll('.fin-btn-delete-row').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = parseInt(btn.dataset.id, 10);
+      const type = btn.dataset.type;
+
+      if (type === 'receita') {
+        if (!confirm('Deseja realmente excluir esta receita?')) return;
+        btn.disabled = true;
+        const { error } = await FinanceiroReceitas.delete(id);
+        if (error) {
+          console.error(error);
+          _showToast('Erro ao excluir receita.');
+          btn.disabled = false;
+        } else {
+          _showToast('Receita excluída!');
+          _loadData();
+        }
+      } else {
+        if (!confirm('Deseja realmente excluir esta despesa?')) return;
+        btn.disabled = true;
+        const { error } = await FinanceiroDespesas.delete(id);
+        if (error) {
+          console.error(error);
+          _showToast('Erro ao excluir despesa.');
+          btn.disabled = false;
+        } else {
+          _showToast('Despesa excluída!');
+          _loadData();
+        }
       }
     });
   });
@@ -1073,6 +1135,13 @@ export default {
       `;
     }
 
+    const periods = _generatePeriods();
+    const activePeriod = _state.selectedPeriod;
+
+    const periodsHTML = periods.map(p => `
+      <button class="fin-dropdown-item ${p === activePeriod ? 'active' : ''}" data-period="${p}">${p}</button>
+    `).join('');
+
     return `
       <!-- Cabeçalho (Header) -->
       <div class="page-header">
@@ -1084,26 +1153,13 @@ export default {
           <!-- Filtro de período -->
           <div class="fin-filter-container">
             <button class="fin-select-btn" id="fin-period-trigger">
-              <span>Julho 2026</span>
+              <span>${activePeriod}</span>
               <svg viewBox="0 0 24 24" stroke="currentColor"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="fin-dropdown-menu" id="fin-period-dropdown">
-              <button class="fin-dropdown-item" data-period="Maio 2026">Maio 2026</button>
-              <button class="fin-dropdown-item" data-period="Junho 2026">Junho 2026</button>
-              <button class="fin-dropdown-item active" data-period="Julho 2026">Julho 2026</button>
-              <button class="fin-dropdown-item" data-period="Agosto 2026">Agosto 2026</button>
+              ${periodsHTML}
             </div>
           </div>
-          <!-- Botão Importar Clientes -->
-          <button class="btn btn-ghost" id="btn-importar-clientes" style="border: 1px solid rgba(26, 206, 238, 0.4); color: var(--cyan); display: flex; align-items: center; gap: 6px; padding: 10px 16px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Importar Clientes
-          </button>
-          <!-- Botão Importar Mês Anterior -->
-          <button class="btn btn-ghost" id="btn-importar-mes" style="border: 1px solid rgba(26, 206, 238, 0.4); color: var(--cyan); display: flex; align-items: center; gap: 6px; padding: 10px 16px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><polyline points="7 3 7 8 15 8"/><circle cx="12" cy="18" r="3"/></svg>
-            Importar Mês Anterior
-          </button>
           <!-- Botão Primário Ciano -->
           <button class="btn btn-cyan" id="btn-nova-movimentacao">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1178,10 +1234,11 @@ export default {
                   <th>Vencimento</th>
                   <th>Recebimento</th>
                   <th>Status</th>
+                  <th style="width: 50px;"></th>
                 </tr>
               </thead>
               <tbody id="tbody-receitas">
-                <tr><td colspan="7" class="fin-empty-state"><span class="smc-loading">Buscando receitas no Supabase...</span></td></tr>
+                <tr><td colspan="8" class="fin-empty-state"><span class="smc-loading">Buscando receitas no Supabase...</span></td></tr>
               </tbody>
             </table>
           </div>
@@ -1200,10 +1257,11 @@ export default {
                   <th>Vencimento</th>
                   <th>Pagamento</th>
                   <th>Status</th>
+                  <th style="width: 50px;"></th>
                 </tr>
               </thead>
               <tbody id="tbody-despesas">
-                <tr><td colspan="7" class="fin-empty-state"><span class="smc-loading">Buscando despesas no Supabase...</span></td></tr>
+                <tr><td colspan="8" class="fin-empty-state"><span class="smc-loading">Buscando despesas no Supabase...</span></td></tr>
               </tbody>
             </table>
           </div>
@@ -1275,25 +1333,8 @@ export default {
           }
         });
 
-        // Alterna exibição do botão Importar Clientes apenas na aba Receitas
-        const btnImportarClis = document.getElementById('btn-importar-clientes');
-        if (btnImportarClis) {
-          btnImportarClis.style.display = tab === 'receitas' ? 'flex' : 'none';
-        }
       });
     });
-
-    // Botão "Importar Clientes"
-    const btnImportarClientes = document.getElementById('btn-importar-clientes');
-    if (btnImportarClientes) {
-      btnImportarClientes.addEventListener('click', _importarClientesDoCRM);
-    }
-
-    // Botão "Importar Mês Anterior"
-    const btnImportar = document.getElementById('btn-importar-mes');
-    if (btnImportar) {
-      btnImportar.addEventListener('click', _importarMesAnterior);
-    }
 
     // Botão "+ Nova Movimentação"
     const btnNova = document.getElementById('btn-nova-movimentacao');
