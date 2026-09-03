@@ -703,11 +703,11 @@ function _htmlSectionOperacoes() {
         icon: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
         iconColor: 'purple',
         accentColor: 'purple',
-        value: '— min',
+        value: '— dias',
         label: 'Tempo Médio de Setup',
-        sub: 'Por usuário ativado — da contratação ao 1º uso',
+        sub: 'Tempo decorrido da contratação até a finalização do onboarding',
         trend: 'neu',
-        trendLabel: 'vs. mês ant.',
+        trendLabel: 'Meta: ≤ 5 dias',
       })}
 
       ${_kpiCard({
@@ -717,7 +717,7 @@ function _htmlSectionOperacoes() {
         accentColor: 'blue',
         value: '—%',
         label: 'Capacity Operacional',
-        sub: 'Capacidade utilizada vs. disponível da equipe',
+        sub: 'Ocupação da carteira vs. capacidade disponível (20 contas/gestor)',
         trend: 'neu',
         trendLabel: 'Meta: 80%',
       })}
@@ -3191,12 +3191,12 @@ async function _carregarSetupMedio(inicio, fim) {
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
     // ── Query 1: tarefas de onboarding concluídas no período ──
-    // Não há FK direta entre tarefas e clientes → join client-side via negocio_id
+    // Busca ampla cobrindo todas as variações de títulos de onboarding
     const { data: tarefas, error: tarefasErr } = await supabase
       .from('tarefas')
-      .select('negocio_id, data_conclusao')
-      .eq('tarefa_titulo', 'Estruturar campanha / Solicitar saldo')
+      .select('tarefa_id, tarefa_titulo, negocio_id, data_conclusao')
       .eq('tarefa_status', true)
+      .or('tarefa_titulo.ilike.%Estruturar Campanha%Solicitar Saldo%,tarefa_titulo.ilike.%Estruturar campanha / Solicitar saldo%')
       .gte('data_conclusao', inicioISO)
       .lte('data_conclusao', fimISO);
 
@@ -3207,75 +3207,185 @@ async function _carregarSetupMedio(inicio, fim) {
     if (tarefasValidas.length === 0) {
       if (valueEl) valueEl.textContent = '— dias';
       if (subEl)   subEl.textContent   = 'Nenhum onboarding concluído no período';
-      if (trendEl) trendEl.lastChild.textContent = 'Sem dados';
+      if (trendEl) {
+        trendEl.textContent = 'Sem dados';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--neu';
+      }
+      _kpiBreakdowns['rel-setup-medio'] = {
+        title: 'Tempo de Setup (Onboarding)',
+        badge: '0 Concluídos',
+        items: [{ name: 'Sem onboardings concluídos', sub: 'Nenhum setup finalizado no período', val: '—' }],
+        footer: 'Acompanhamento do tempo entre a contratação e o início das campanhas'
+      };
+      _bindKpiHover('rel-setup-medio');
       return;
     }
 
-    const negocioIds = tarefasValidas.map(t => t.negocio_id);
+    const negocioIds = [...new Set(tarefasValidas.map(t => t.negocio_id))];
 
-    // ── Query 2: clientes com os negocio_ids encontrados ──
+    // ── Query 2: clientes correspondentes aos negócios ──
     const { data: clientes, error: clientesErr } = await supabase
       .from('clientes')
-      .select('negocio_id, criado_em')
+      .select('cliente_id, cliente_nome, negocio_id, criado_em')
       .in('negocio_id', negocioIds);
 
     if (clientesErr) throw clientesErr;
 
-    // Monta mapa negocio_id → criado_em para join client-side
     const clienteMap = {};
     for (const c of (clientes ?? [])) {
-      clienteMap[c.negocio_id] = c.criado_em;
+      clienteMap[c.negocio_id] = c;
     }
 
-    // Calcula diff em dias para cada tarefa (filtra diffs inválidos ≤ 0)
-    const logsDebug = [];
-    const diffs = tarefasValidas
-      .map(t => {
-        const criadoEm = clienteMap[t.negocio_id];
-        if (!criadoEm) {
-          logsDebug.push({ negocio_id: t.negocio_id, erro: 'Cliente não encontrado' });
-          return null;
-        }
-        const conclusao = new Date(t.data_conclusao).getTime();
-        const criacao   = new Date(criadoEm).getTime();
-        const diffDias  = (conclusao - criacao) / (1000 * 60 * 60 * 24);
-        
-        logsDebug.push({
-          negocio_id: t.negocio_id,
-          cliente_criado_em: criadoEm,
-          tarefa_data_conclusao: t.data_conclusao,
-          diff_dias: diffDias
-        });
+    const diffsObjects = [];
+    for (const t of tarefasValidas) {
+      const cli = clienteMap[t.negocio_id];
+      if (!cli || !cli.criado_em) continue;
 
-        return diffDias;
-      })
-      .filter(d => d !== null && d > 0);
+      const conclusao = new Date(t.data_conclusao).getTime();
+      const criacao   = new Date(cli.criado_em).getTime();
+      const diffDias  = Math.max(0.5, (conclusao - criacao) / (1000 * 60 * 60 * 24));
 
-    console.groupCollapsed('[Relatórios] Debug: Tempo Médio de Setup');
-    console.log('Média final sendo calculada com base nesses registros:');
-    console.table(logsDebug);
-    console.log('Valores finais válidos (> 0 dias):', diffs);
-    if (diffs.length > 0) {
-      console.log('Soma total de dias:', diffs.reduce((s, d) => s + d, 0));
-      console.log('Dividido por', diffs.length, 'onboardings');
+      diffsObjects.push({
+        cliente_nome: cli.cliente_nome,
+        criado_em: cli.criado_em,
+        data_conclusao: t.data_conclusao,
+        diffDias
+      });
     }
-    console.groupEnd();
 
-    if (diffs.length === 0) {
+    if (diffsObjects.length === 0) {
       if (valueEl) valueEl.textContent = '— dias';
       if (subEl)   subEl.textContent   = 'Datas inválidas nos registros do período';
       return;
     }
 
-    const mediaDias = diffs.reduce((s, d) => s + d, 0) / diffs.length;
+    const somaDias = diffsObjects.reduce((s, d) => s + d.diffDias, 0);
+    const mediaDias = somaDias / diffsObjects.length;
     const mediaDiasFormatada = mediaDias.toFixed(1).replace('.', ',');
 
     if (valueEl) valueEl.textContent = `${mediaDiasFormatada} dias`;
-    if (subEl)   subEl.textContent   = `Base: ${diffs.length} onboarding${diffs.length !== 1 ? 's' : ''} concluído${diffs.length !== 1 ? 's' : ''} no período`;
-    if (trendEl) trendEl.lastChild.textContent = `${diffs.length} setup${diffs.length !== 1 ? 's' : ''} no período`;
+    if (subEl)   subEl.textContent   = `Base: ${diffsObjects.length} onboarding${diffsObjects.length !== 1 ? 's' : ''} concluído${diffsObjects.length !== 1 ? 's' : ''} no período`;
+    if (trendEl) {
+      const ok = mediaDias <= 5;
+      trendEl.textContent = ok ? '✅ Meta atingida (≤ 5 dias)' : `${diffsObjects.length} onboardings`;
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'neu'}`;
+    }
+
+    // Popula Hover Card com detalhamento de cada onboarding
+    const items = diffsObjects
+      .sort((a, b) => a.diffDias - b.diffDias)
+      .slice(0, 10)
+      .map(d => ({
+        name: d.cliente_nome,
+        sub: `Entrada ${_formatarExibicao(d.criado_em.substring(0, 10))} → Conclusão ${_formatarExibicao(d.data_conclusao.substring(0, 10))}`,
+        val: `${d.diffDias.toFixed(1).replace('.', ',')} dias`
+      }));
+
+    _kpiBreakdowns['rel-setup-medio'] = {
+      title: 'Tempo de Setup por Onboarding',
+      badge: `${diffsObjects.length} Concluído${diffsObjects.length !== 1 ? 's' : ''}`,
+      items,
+      footer: `Média de <b>${mediaDiasFormatada} dias</b> por cliente ativado`,
+      formula: 'Data de conclusão do setup − Data de criação do cliente'
+    };
+    _bindKpiHover('rel-setup-medio');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Tempo Médio de Setup:', err.message);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Capacity Operacional (Setor Operacional) ─────────────────────────
+
+/**
+ * Calcula a capacidade operacional utilizada vs. disponível.
+ * Benchmark de mercado: 20 contas ativas por gestor operacional.
+ */
+async function _carregarCapacityOperacional() {
+  const cardEl  = document.getElementById('rel-capacity');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+
+  if (valueEl) valueEl.textContent = '…%';
+
+  try {
+    // 1. Busca todos os usuários ativos
+    const { data: gestores, error: uErr } = await supabase
+      .from('usuarios')
+      .select('user_id, user_nome, user_cargo, user_avatar')
+      .eq('user_status', 'Ativo');
+
+    if (uErr) throw uErr;
+
+    // 2. Busca todos os clientes Ativados com user_id
+    const { data: clientes, error: cErr } = await supabase
+      .from('clientes')
+      .select('cliente_id, cliente_nome, user_id')
+      .eq('cliente_status', 'Ativado');
+
+    if (cErr) throw cErr;
+
+    const totalAtivos = clientes?.length || 0;
+
+    const contagemPorGestor = {};
+    for (const c of (clientes || [])) {
+      if (c.user_id) {
+        contagemPorGestor[c.user_id] = (contagemPorGestor[c.user_id] || 0) + 1;
+      }
+    }
+
+    // Identifica gestores operacionais (cargo Operações ou que possuem clientes atribuídos)
+    const gestoresOp = (gestores || []).filter(u => 
+      u.user_cargo === 'Operações' || contagemPorGestor[u.user_id] > 0
+    );
+
+    const numGestores = Math.max(gestoresOp.length, 1);
+    const capacidadePadraoPorGestor = 20;
+    const capacidadeTotal = numGestores * capacidadePadraoPorGestor;
+
+    const capacityPercent = Math.round((totalAtivos / capacidadeTotal) * 100);
+
+    if (valueEl) valueEl.textContent = `${capacityPercent}%`;
+    if (subEl)   subEl.textContent   = `${totalAtivos} clientes ativos ÷ ${capacidadeTotal} vagas (${numGestores} gestor${numGestores !== 1 ? 'es' : ''} × 20 contas)`;
+    
+    if (trendEl) {
+      if (capacityPercent <= 85) {
+        trendEl.textContent = capacityPercent >= 60 ? '✅ Ideal (60% a 85%)' : '🟢 Folga na equipe (< 60%)';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--up';
+      } else {
+        trendEl.textContent = '⚠️ Sobrecarga (> 85%)';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--down';
+      }
+    }
+
+    // Prepara hover card com cada gestor
+    const items = gestoresOp.map(g => {
+      const qtd = contagemPorGestor[g.user_id] || 0;
+      const pct = Math.round((qtd / capacidadePadraoPorGestor) * 100);
+      return {
+        name: `${g.user_nome} (${g.user_cargo})`,
+        sub: `${qtd} de ${capacidadePadraoPorGestor} clientes sob gestão`,
+        val: `${pct}% capacidade`
+      };
+    }).sort((a, b) => {
+      const nA = parseInt(a.sub, 10);
+      const nB = parseInt(b.sub, 10);
+      return nB - nA;
+    });
+
+    _kpiBreakdowns['rel-capacity'] = {
+      title: 'Capacidade Operacional por Gestor',
+      badge: `${capacityPercent}% Equipe`,
+      items,
+      footer: `Meta saudável da agência: <b>80%</b> de taxa de ocupação`,
+      formula: 'Clientes Ativos ÷ (Gestores de Operações × 20 contas)'
+    };
+    _bindKpiHover('rel-capacity');
+
+  } catch (err) {
+    console.error('[Relatórios] Erro ao calcular Capacity Operacional:', err.message);
     if (valueEl) valueEl.textContent = 'Erro';
   }
 }
@@ -3284,15 +3394,7 @@ async function _carregarSetupMedio(inicio, fim) {
 
 /**
  * Calcula o Health Score Médio da Carteira.
- *
- * Filtra clientes com cliente_status = 'Ativado'.
- * Mapeia cliente_satisfacao (ENUM) para uma escala de 0 a 100:
- *   Muito Insatisfeito = 0
- *   Insatisfeito = 25
- *   Razoável = 50
- *   Satisfeito = 75
- *   Muito Satisfeito = 100
- * Retorna a média.
+ * Mapeia cliente_satisfacao (ENUM) para escala 0 a 100.
  */
 async function _carregarHealthScore() {
   const cardEl  = document.getElementById('rel-health-score');
@@ -3305,7 +3407,7 @@ async function _carregarHealthScore() {
   try {
     const { data: clientes, error } = await supabase
       .from('clientes')
-      .select('cliente_satisfacao')
+      .select('cliente_id, cliente_nome, cliente_satisfacao')
       .eq('cliente_status', 'Ativado');
 
     if (error) throw error;
@@ -3323,7 +3425,10 @@ async function _carregarHealthScore() {
     if (validos.length === 0) {
       if (valueEl) valueEl.textContent = '—';
       if (subEl)   subEl.textContent   = 'Nenhum cliente ativado com satisfação registrada';
-      if (trendEl) trendEl.lastChild.textContent = 'Sem dados';
+      if (trendEl) {
+        trendEl.textContent = 'Sem dados';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--neu';
+      }
       return;
     }
 
@@ -3332,7 +3437,72 @@ async function _carregarHealthScore() {
 
     if (valueEl) valueEl.textContent = media.toFixed(1).replace('.', ',');
     if (subEl)   subEl.textContent   = `Baseado em ${validos.length} cliente${validos.length !== 1 ? 's' : ''} ativado${validos.length !== 1 ? 's' : ''} com avaliação`;
-    if (trendEl) trendEl.lastChild.textContent = media >= 75 ? 'Meta atingida (≥ 75)' : 'Abaixo da meta (< 75)';
+    if (trendEl) {
+      const ok = media >= 75;
+      trendEl.textContent = ok ? '✅ Meta atingida (≥ 75)' : '⚠️ Abaixo da meta (< 75)';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+    }
+
+    // Popula hover card por faixas
+    const tiers = {
+      'Muito Satisfeito': [],
+      'Satisfeito': [],
+      'Razoável': [],
+      'Insatisfeito': [],
+      'Muito Insatisfeito': []
+    };
+
+    validos.forEach(c => {
+      if (tiers[c.cliente_satisfacao]) {
+        tiers[c.cliente_satisfacao].push(c.cliente_nome);
+      }
+    });
+
+    const items = [];
+    if (tiers['Muito Satisfeito'].length > 0) {
+      items.push({
+        name: `🟢 Muito Satisfeito (${tiers['Muito Satisfeito'].length})`,
+        sub: tiers['Muito Satisfeito'].slice(0, 3).join(', ') + (tiers['Muito Satisfeito'].length > 3 ? '...' : ''),
+        val: '100 pts'
+      });
+    }
+    if (tiers['Satisfeito'].length > 0) {
+      items.push({
+        name: `🟢 Satisfeito (${tiers['Satisfeito'].length})`,
+        sub: tiers['Satisfeito'].slice(0, 3).join(', ') + (tiers['Satisfeito'].length > 3 ? '...' : ''),
+        val: '75 pts'
+      });
+    }
+    if (tiers['Razoável'].length > 0) {
+      items.push({
+        name: `🟡 Razoável (${tiers['Razoável'].length})`,
+        sub: tiers['Razoável'].slice(0, 3).join(', ') + (tiers['Razoável'].length > 3 ? '...' : ''),
+        val: '50 pts'
+      });
+    }
+    if (tiers['Insatisfeito'].length > 0) {
+      items.push({
+        name: `🔴 Insatisfeito (${tiers['Insatisfeito'].length})`,
+        sub: tiers['Insatisfeito'].slice(0, 3).join(', ') + (tiers['Insatisfeito'].length > 3 ? '...' : ''),
+        val: '25 pts'
+      });
+    }
+    if (tiers['Muito Insatisfeito'].length > 0) {
+      items.push({
+        name: `🔴 Muito Insatisfeito (${tiers['Muito Insatisfeito'].length})`,
+        sub: tiers['Muito Insatisfeito'].slice(0, 3).join(', ') + (tiers['Muito Insatisfeito'].length > 3 ? '...' : ''),
+        val: '0 pts'
+      });
+    }
+
+    _kpiBreakdowns['rel-health-score'] = {
+      title: 'Distribuição do Health Score',
+      badge: `${media.toFixed(1)} / 100`,
+      items,
+      footer: `Total de <b>${validos.length}</b> clientes ativos avaliados`,
+      formula: 'Muito Insatisfeito (0) a Muito Satisfeito (100 pts)'
+    };
+    _bindKpiHover('rel-health-score');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Health Score:', err.message);
@@ -3343,13 +3513,7 @@ async function _carregarHealthScore() {
 // ─── NPS / Satisfação por Gestor (Setor Operacional) ───────────────────────
 
 /**
- * Calcula a média geral do NPS / Satisfação no período.
- * Puxa os clientes ativos e extrai a média aritmética das 3 notas
- * (nota_comunicacao, nota_entrega, nota_performance) que vão de 0 a 10.
- * O filtro de data é aplicado sobre a coluna 'data_envio_nps'.
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ * Calcula a média geral do NPS / Satisfação no período com fallback inteligente.
  */
 async function _carregarNPS(inicio, fim) {
   const cardEl  = document.getElementById('rel-nps');
@@ -3365,16 +3529,30 @@ async function _carregarNPS(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    const { data: clientes, error } = await supabase
+    let { data: clientes, error } = await supabase
       .from('clientes')
-      .select('nota_comunicacao, nota_entrega, nota_performance')
+      .select('cliente_id, cliente_nome, nota_comunicacao, nota_entrega, nota_performance, data_envio_nps')
       .eq('cliente_status', 'Ativado')
       .gte('data_envio_nps', inicioISO)
       .lte('data_envio_nps', fimISO);
 
     if (error) throw error;
 
-    // Filtra clientes que possuem pelo menos uma nota preenchida
+    let isFallback = false;
+    // Se o período selecionado não tem envios de NPS no intervalo, busca a última rodada geral
+    if (!clientes || clientes.length === 0) {
+      const { data: allNps, error: fallbackErr } = await supabase
+        .from('clientes')
+        .select('cliente_id, cliente_nome, nota_comunicacao, nota_entrega, nota_performance, data_envio_nps')
+        .eq('cliente_status', 'Ativado')
+        .not('data_envio_nps', 'is', null);
+
+      if (!fallbackErr && allNps && allNps.length > 0) {
+        clientes = allNps;
+        isFallback = true;
+      }
+    }
+
     const validos = (clientes ?? []).filter(c => 
       c.nota_comunicacao != null || c.nota_entrega != null || c.nota_performance != null
     );
@@ -3382,26 +3560,68 @@ async function _carregarNPS(inicio, fim) {
     if (validos.length === 0) {
       if (valueEl) valueEl.textContent = '—';
       if (subEl)   subEl.textContent   = 'Nenhuma avaliação de NPS registrada para clientes ativos';
-      if (trendEl) trendEl.lastChild.textContent = 'Sem dados';
+      if (trendEl) {
+        trendEl.textContent = 'Sem dados';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--neu';
+      }
       return;
     }
 
-    // Calcula a média de cada cliente (somente considerando as notas preenchidas dele) e soma tudo
+    let sumCom = 0, countCom = 0;
+    let sumEnt = 0, countEnt = 0;
+    let sumPerf = 0, countPerf = 0;
+
     const somaGeral = validos.reduce((soma, c) => {
       const notasDoCliente = [];
-      if (c.nota_comunicacao != null) notasDoCliente.push(Number(c.nota_comunicacao));
-      if (c.nota_entrega != null)     notasDoCliente.push(Number(c.nota_entrega));
-      if (c.nota_performance != null) notasDoCliente.push(Number(c.nota_performance));
+      if (c.nota_comunicacao != null) {
+        const v = Number(c.nota_comunicacao);
+        notasDoCliente.push(v);
+        sumCom += v; countCom++;
+      }
+      if (c.nota_entrega != null) {
+        const v = Number(c.nota_entrega);
+        notasDoCliente.push(v);
+        sumEnt += v; countEnt++;
+      }
+      if (c.nota_performance != null) {
+        const v = Number(c.nota_performance);
+        notasDoCliente.push(v);
+        sumPerf += v; countPerf++;
+      }
       
       const mediaDoCliente = notasDoCliente.reduce((a, b) => a + b, 0) / notasDoCliente.length;
       return soma + mediaDoCliente;
     }, 0);
 
     const mediaGlobal = somaGeral / validos.length;
+    const avgCom = countCom > 0 ? (sumCom / countCom).toFixed(1) : '—';
+    const avgEnt = countEnt > 0 ? (sumEnt / countEnt).toFixed(1) : '—';
+    const avgPerf = countPerf > 0 ? (sumPerf / countPerf).toFixed(1) : '—';
 
     if (valueEl) valueEl.textContent = `${mediaGlobal.toFixed(1).replace('.', ',')} / 10`;
-    if (subEl)   subEl.textContent   = `Média consolidada. Baseado em ${validos.length} cliente${validos.length !== 1 ? 's' : ''} avaliado${validos.length !== 1 ? 's' : ''}`;
-    if (trendEl) trendEl.lastChild.textContent = mediaGlobal >= 8 ? 'Meta atingida (≥ 8)' : 'Abaixo da meta (< 8)';
+    if (subEl) {
+      subEl.textContent = isFallback
+        ? `Última rodada disponível · ${validos.length} clientes avaliados`
+        : `Média do período selecionado · ${validos.length} clientes avaliados`;
+    }
+    if (trendEl) {
+      const ok = mediaGlobal >= 8;
+      trendEl.textContent = ok ? '✅ Meta atingida (≥ 8)' : '⚠️ Abaixo da meta (< 8)';
+      trendEl.className = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+    }
+
+    _kpiBreakdowns['rel-nps'] = {
+      title: 'Dimensões do NPS / Satisfação',
+      badge: `${mediaGlobal.toFixed(1)} / 10`,
+      items: [
+        { name: '💬 Comunicação', sub: 'Clareza, agilidade e presteza no atendimento', val: `${avgCom} / 10` },
+        { name: '📦 Entrega', sub: 'Prazos e qualidade técnica dos materiais', val: `${avgEnt} / 10` },
+        { name: '🚀 Performance', sub: 'Resultados e retorno das campanhas', val: `${avgPerf} / 10` }
+      ],
+      footer: `Média calculada sobre <b>${validos.length}</b> clientes ativos`,
+      formula: 'Média das 3 dimensões (Comunicação + Entrega + Performance)'
+    };
+    _bindKpiHover('rel-nps');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular NPS:', err.message);
@@ -3412,16 +3632,7 @@ async function _carregarNPS(inicio, fim) {
 // ─── Índice de Silêncio (Setor Operacional) ──────────────────────────
 
 /**
- * Calcula o Índice de Silêncio da carteira.
- * (Snapshot, não depende de data).
- *
- * Fórmula:
- *   Verifica todos os clientes com cliente_status = 'Ativado'.
- *   Para cada um, cruza pelo negocio_id com a tabela de tarefas (onde tarefa_status = true).
- *   Pega a 'data_conclusao' mais recente.
- *   Calcula a diferença em dias de hoje até a última data_conclusao.
- *   Se > 7 dias (ou se nunca teve tarefa concluída), o cliente é considerado silencioso.
- *   % = (Silenciosos / Total Ativos) * 100.
+ * Calcula o Índice de Silêncio da carteira (> 7 dias sem tarefas concluídas).
  */
 async function _carregarIndiceSilencio() {
   const cardEl  = document.getElementById('rel-silencio');
@@ -3432,10 +3643,9 @@ async function _carregarIndiceSilencio() {
   if (valueEl) valueEl.textContent = '…%';
 
   try {
-    // 1. Puxa todos os clientes Ativados
     const { data: clientes, error: cliErr } = await supabase
       .from('clientes')
-      .select('negocio_id')
+      .select('cliente_id, cliente_nome, negocio_id, user_id, usuarios(user_nome)')
       .eq('cliente_status', 'Ativado');
 
     if (cliErr) throw cliErr;
@@ -3446,13 +3656,15 @@ async function _carregarIndiceSilencio() {
     if (totalAtivos === 0) {
       if (valueEl) valueEl.textContent = '0%';
       if (subEl)   subEl.textContent   = 'Nenhum cliente ativo na base';
-      if (trendEl) trendEl.lastChild.textContent = 'Sem dados';
+      if (trendEl) {
+        trendEl.textContent = 'Sem dados';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--neu';
+      }
       return;
     }
 
     const negocioIds = ativos.map(c => c.negocio_id);
 
-    // 2. Busca todas as tarefas CONCLUÍDAS vinculadas a esses negócios
     const { data: tarefas, error: tarErr } = await supabase
       .from('tarefas')
       .select('negocio_id, data_conclusao')
@@ -3461,7 +3673,6 @@ async function _carregarIndiceSilencio() {
 
     if (tarErr) throw tarErr;
 
-    // 3. Agrupa para encontrar a última data de conclusão de cada negócio
     const ultimaInteracao = {};
     for (const t of (tarefas ?? [])) {
       if (!t.data_conclusao) continue;
@@ -3471,28 +3682,56 @@ async function _carregarIndiceSilencio() {
       }
     }
 
-    // 4. Calcula quem está silencioso (> 7 dias)
     const agora = Date.now();
-    let silenciosos = 0;
+    const listaSilenciosos = [];
 
-    for (const id of negocioIds) {
-      const ultima = ultimaInteracao[id];
+    for (const c of ativos) {
+      const ultima = ultimaInteracao[c.negocio_id];
       if (!ultima) {
-        // Se nunca teve tarefa concluída, está em silêncio
-        silenciosos++;
+        listaSilenciosos.push({
+          nome: c.cliente_nome,
+          gestor: c.usuarios?.user_nome || 'Não atribuído',
+          dias: 'Sem tarefas registradas'
+        });
       } else {
-        const diffDias = (agora - ultima) / (1000 * 60 * 60 * 24);
+        const diffDias = Math.floor((agora - ultima) / (1000 * 60 * 60 * 24));
         if (diffDias > 7) {
-          silenciosos++;
+          listaSilenciosos.push({
+            nome: c.cliente_nome,
+            gestor: c.usuarios?.user_nome || 'Não atribuído',
+            dias: `${diffDias} dias sem contato`
+          });
         }
       }
     }
 
-    const pct = (silenciosos / totalAtivos) * 100;
+    const silenciososCount = listaSilenciosos.length;
+    const pct = (silenciososCount / totalAtivos) * 100;
 
     if (valueEl) valueEl.textContent = `${pct.toFixed(1).replace('.', ',')}%`;
-    if (subEl)   subEl.textContent   = `Silenciosos: ${silenciosos} de ${totalAtivos} clientes ativados (sem tarefas concluídas há > 7 dias).`;
-    if (trendEl) trendEl.lastChild.textContent = pct < 10 ? 'Meta atingida (< 10%)' : 'Abaixo da meta (≥ 10%)';
+    if (subEl)   subEl.textContent   = `${silenciososCount} de ${totalAtivos} clientes ativados sem tarefas concluídas há > 7 dias`;
+    if (trendEl) {
+      const ok = pct < 10;
+      trendEl.textContent = ok ? '✅ Meta atingida (< 10%)' : '⚠️ Acima da meta (≥ 10%)';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+    }
+
+    const items = listaSilenciosos.length > 0
+      ? listaSilenciosos.slice(0, 10).map(s => ({
+          name: s.nome,
+          sub: `Responsável: ${s.gestor}`,
+          val: s.dias
+        }))
+      : [{ name: 'Nenhum cliente em silêncio', sub: 'Toda a carteira recebeu tarefas recentes', val: '100% Ativa' }];
+
+    _kpiBreakdowns['rel-silencio'] = {
+      title: 'Clientes em Silêncio (> 7 dias)',
+      badge: `${silenciososCount} Clientes`,
+      items,
+      footer: `Meta da agência: Manter menos de <b>10%</b> em silêncio`,
+      formula: '(Clientes sem tarefas concluídas há > 7 dias ÷ Total Ativos) × 100'
+    };
+    _bindKpiHover('rel-silencio');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Índice de Silêncio:', err.message);
@@ -3504,7 +3743,6 @@ async function _carregarIndiceSilencio() {
 
 /**
  * Calcula a porcentagem de clientes ativados que estão com a campanha "Sem Saldo".
- * (Snapshot, não depende de data).
  */
 async function _carregarCampanhasSemSaldo() {
   const cardEl  = document.getElementById('rel-campanhas-sem-saldo');
@@ -3517,7 +3755,7 @@ async function _carregarCampanhasSemSaldo() {
   try {
     const { data: clientes, error } = await supabase
       .from('clientes')
-      .select('cliente_campanha_status')
+      .select('cliente_id, cliente_nome, cliente_campanha_status, investimento_midia, usuarios(user_nome)')
       .eq('cliente_status', 'Ativado');
 
     if (error) throw error;
@@ -3527,16 +3765,41 @@ async function _carregarCampanhasSemSaldo() {
     if (totalAtivos === 0) {
       if (valueEl) valueEl.textContent = '0%';
       if (subEl)   subEl.textContent   = 'Nenhum cliente ativo na base';
-      if (trendEl) trendEl.lastChild.textContent = 'Sem dados';
+      if (trendEl) {
+        trendEl.textContent = 'Sem dados';
+        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--neu';
+      }
       return;
     }
 
-    const semSaldoCount = (clientes ?? []).filter(c => c.cliente_campanha_status === 'Sem Saldo').length;
+    const semSaldoList = (clientes ?? []).filter(c => c.cliente_campanha_status === 'Sem Saldo');
+    const semSaldoCount = semSaldoList.length;
     const pct = (semSaldoCount / totalAtivos) * 100;
 
     if (valueEl) valueEl.textContent = `${pct.toFixed(1).replace('.', ',')}%`;
-    if (subEl)   subEl.textContent   = `Sem saldo: ${semSaldoCount} de ${totalAtivos} clientes ativados.`;
-    if (trendEl) trendEl.lastChild.textContent = pct <= 5 ? 'Meta atingida (≤ 5%)' : 'Abaixo da meta (> 5%)';
+    if (subEl)   subEl.textContent   = `${semSaldoCount} de ${totalAtivos} clientes ativados estão sem saldo de mídia`;
+    if (trendEl) {
+      const ok = pct <= 5;
+      trendEl.textContent = ok ? '✅ Meta atingida (≤ 5%)' : '⚠️ Alerta: Acima da meta (> 5%)';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+    }
+
+    const items = semSaldoList.length > 0
+      ? semSaldoList.slice(0, 10).map(c => ({
+          name: c.cliente_nome,
+          sub: `Gestor: ${c.usuarios?.user_nome || 'Não atribuído'}`,
+          val: c.investimento_midia ? `R$ ${_formatarBRL(c.investimento_midia)}/mês` : 'Sem Saldo'
+        }))
+      : [{ name: 'Todas as contas com saldo ativo', sub: 'Nenhum cliente pausado por falta de saldo', val: '100% Ok' }];
+
+    _kpiBreakdowns['rel-campanhas-sem-saldo'] = {
+      title: 'Contas de Anúncio Sem Saldo',
+      badge: `${semSaldoCount} Contas`,
+      items,
+      footer: `<b>${semSaldoCount}</b> de <b>${totalAtivos}</b> clientes ativados`,
+      formula: '(Clientes com status "Sem Saldo" ÷ Total de Ativados) × 100'
+    };
+    _bindKpiHover('rel-campanhas-sem-saldo');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Campanhas sem Saldo:', err.message);
@@ -3547,9 +3810,7 @@ async function _carregarCampanhasSemSaldo() {
 // ─── Volume de Otimizações Realizadas (Setor Operacional) ─────────────
 
 /**
- * Calcula o volume de otimizações.
- * (Snapshot, não depende de data).
- * Conta todos os clientes ativos que estão com cliente_otimizacao = true.
+ * Calcula o volume de otimizações de campanhas realizadas na carteira ativa.
  */
 async function _carregarOtimizacoesRealizadas() {
   const cardEl  = document.getElementById('rel-otimizacoes');
@@ -3560,19 +3821,51 @@ async function _carregarOtimizacoesRealizadas() {
   if (valueEl) valueEl.textContent = '…';
 
   try {
-    const { count, error } = await supabase
+    const { data: clientes, error } = await supabase
       .from('clientes')
-      .select('cliente_id', { count: 'exact', head: true })
-      .eq('cliente_status', 'Ativado')
-      .eq('cliente_otimizacao', true);
+      .select('cliente_id, cliente_nome, cliente_otimizacao, usuarios(user_nome)')
+      .eq('cliente_status', 'Ativado');
 
     if (error) throw error;
 
-    const volume = count || 0;
+    const totalAtivos = (clientes || []).length;
+    const otimizados = (clientes || []).filter(c => c.cliente_otimizacao === true);
+    const pendentes = (clientes || []).filter(c => !c.cliente_otimizacao);
+
+    const volume = otimizados.length;
+    const pct = totalAtivos > 0 ? Math.round((volume / totalAtivos) * 100) : 0;
 
     if (valueEl) valueEl.textContent = `${volume}`;
-    if (subEl)   subEl.textContent   = `Total de clientes Ativados com flag de otimização marcada.`;
-    if (trendEl) trendEl.lastChild.textContent = volume > 0 ? 'Otimizações registradas' : 'Nenhuma otimização no momento';
+    if (subEl)   subEl.textContent   = `${volume} de ${totalAtivos} clientes ativos com otimização concluída (${pct}%)`;
+    if (trendEl) {
+      trendEl.textContent = `${pct}% da carteira otimizada`;
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${pct >= 80 ? 'up' : 'neu'}`;
+    }
+
+    const items = [];
+    if (otimizados.length > 0) {
+      items.push({
+        name: `✅ Otimizações Concluídas (${otimizados.length})`,
+        sub: otimizados.slice(0, 3).map(c => c.cliente_nome).join(', ') + (otimizados.length > 3 ? '...' : ''),
+        val: `${pct}% da carteira`
+      });
+    }
+    if (pendentes.length > 0) {
+      items.push({
+        name: `⚪ Pendentes de Otimização (${pendentes.length})`,
+        sub: pendentes.slice(0, 3).map(c => c.cliente_nome).join(', ') + (pendentes.length > 3 ? '...' : ''),
+        val: `${100 - pct}% pendente`
+      });
+    }
+
+    _kpiBreakdowns['rel-otimizacoes'] = {
+      title: 'Status de Otimização da Carteira',
+      badge: `${volume} / ${totalAtivos} Otimizados`,
+      items,
+      footer: `<b>${pendentes.length}</b> clientes aguardando rotina de otimização`,
+      formula: 'Contagem de clientes ativos com flag de otimização marcada'
+    };
+    _bindKpiHover('rel-otimizacoes');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Otimizações Realizadas:', err.message);
@@ -3583,12 +3876,8 @@ async function _carregarOtimizacoesRealizadas() {
 // ─── Taxa de Conclusão de Atividades por Usuário (Setor Operacional) ──
 
 /**
- * Calcula a taxa de conclusão de tarefas no período, agrupadas por usuário.
- * Filtra tarefas pela data de vencimento dentro do período selecionado.
- * Taxa = (Concluídas / Previstas) * 100.
- *
- * @param {string} inicio  'YYYY-MM-DD'
- * @param {string} fim     'YYYY-MM-DD'
+ * Calcula a taxa de conclusão de tarefas no período por colaborador.
+ * Considera tarefas com data_conclusao, tarefa_vencimento ou criado_em no período.
  */
 async function _carregarConclusaoAtividades(inicio, fim) {
   const tbody = document.getElementById('rel-atividades-tbody');
@@ -3602,26 +3891,25 @@ async function _carregarConclusaoAtividades(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. Busca todas as tarefas que tinham vencimento no período
+    // 1. Busca todas as tarefas do período (concluídas, com vencimento ou criadas no período)
     const { data: tarefas, error: tarErr } = await supabase
       .from('tarefas')
-      .select('vendedor_id, tarefa_status')
-      .gte('tarefa_vencimento', inicioISO)
-      .lte('tarefa_vencimento', fimISO);
+      .select('tarefa_id, tarefa_titulo, tarefa_status, data_conclusao, tarefa_vencimento, criado_em, vendedor_id')
+      .or(`and(data_conclusao.gte.${inicioISO},data_conclusao.lte.${fimISO}),and(tarefa_vencimento.gte.${inicioISO},tarefa_vencimento.lte.${fimISO}),and(criado_em.gte.${inicioISO},criado_em.lte.${fimISO})`);
 
     if (tarErr) throw tarErr;
 
     const validas = (tarefas ?? []).filter(t => t.vendedor_id);
 
     if (validas.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px;">Nenhuma tarefa prevista no período</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--text-secondary);">Nenhuma tarefa registrada no período</td></tr>`;
       return;
     }
 
-    // 2. Busca os usuários para mostrar o nome e avatar
+    // 2. Busca os usuários para mostrar nome e avatar
     const { data: usuarios, error: usuErr } = await supabase
       .from('usuarios')
-      .select('user_id, user_nome, user_avatar');
+      .select('user_id, user_nome, user_avatar, user_cargo');
       
     if (usuErr) throw usuErr;
     
@@ -3635,28 +3923,26 @@ async function _carregarConclusaoAtividades(inicio, fim) {
     for (const t of validas) {
       const vid = t.vendedor_id;
       if (!stats[vid]) {
-        stats[vid] = { id: vid, previstas: 0, concluidas: 0 };
+        stats[vid] = { id: vid, previstas: 0, concluidas: 0, tarefasList: [] };
       }
       stats[vid].previstas++;
       if (t.tarefa_status === true) {
         stats[vid].concluidas++;
       }
+      stats[vid].tarefasList.push(t);
     }
 
-    // 4. Converte para array e calcula a taxa
     const ranking = Object.values(stats).map(s => {
       s.taxa = s.previstas > 0 ? (s.concluidas / s.previstas) * 100 : 0;
       return s;
     });
 
-    // Ordena por maior taxa e depois maior número de previstas/concluídas
     ranking.sort((a, b) => b.taxa - a.taxa || b.concluidas - a.concluidas);
 
-    // 5. Renderiza a tabela
     tbody.innerHTML = '';
     
     ranking.forEach((row, index) => {
-      const user = userMap[row.id] || { user_nome: 'Usuário Desconhecido', user_avatar: null };
+      const user = userMap[row.id] || { user_nome: 'Colaborador', user_avatar: null, user_cargo: 'Operações' };
       
       const avatarHtml = user.user_avatar 
         ? `<img src="${user.user_avatar}" alt="" class="rel-table-avatar" style="object-fit:cover; border-radius:50%;">`
@@ -3679,6 +3965,8 @@ async function _carregarConclusaoAtividades(inicio, fim) {
       }
 
       const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.dataset.userIndex = index;
       tr.innerHTML = `
         <td class="rel-rank">${index + 1}</td>
         <td>
@@ -3686,17 +3974,50 @@ async function _carregarConclusaoAtividades(inicio, fim) {
             ${avatarHtml}
             <div>
               <div class="rel-table-name">${user.user_nome}</div>
-              <div class="rel-table-sub">Atendimento</div>
+              <div class="rel-table-sub">${user.user_cargo || 'Equipe Operacional'}</div>
             </div>
           </div>
         </td>
         <td>${row.previstas}</td>
-        <td>${row.concluidas}</td>
+        <td><b>${row.concluidas}</b></td>
         <td style="width: 140px;">
           ${_miniBar(taxaInt, barColor)}
         </td>
         <td><span class="rel-pill ${pillClass}">${pillText}</span></td>
       `;
+
+      // Hover card para a linha do colaborador
+      tr.addEventListener('mouseenter', () => {
+        const concluidasSample = row.tarefasList.filter(t => t.tarefa_status);
+        const pendentesSample = row.tarefasList.filter(t => !t.tarefa_status);
+
+        const items = [];
+        if (concluidasSample.length > 0) {
+          items.push({
+            name: `✅ Concluídas (${row.concluidas})`,
+            sub: concluidasSample.slice(0, 3).map(t => t.tarefa_titulo).join(', ') + (concluidasSample.length > 3 ? '...' : ''),
+            val: `${taxaInt}%`
+          });
+        }
+        if (pendentesSample.length > 0) {
+          items.push({
+            name: `⏳ Pendentes (${row.previstas - row.concluidas})`,
+            sub: pendentesSample.slice(0, 3).map(t => t.tarefa_titulo).join(', ') + (pendentesSample.length > 3 ? '...' : ''),
+            val: `${row.previstas - row.concluidas} pendentes`
+          });
+        }
+
+        _showKpiPopover(tr, {
+          title: `Atividades: ${user.user_nome}`,
+          badge: `${taxaInt}% Conclusão`,
+          items,
+          footer: `<b>${row.concluidas}</b> de <b>${row.previstas}</b> tarefas concluídas`,
+          formula: '(Tarefas Concluídas ÷ Tarefas Previstas no Período) × 100'
+        });
+      });
+
+      tr.addEventListener('mouseleave', _hideKpiPopover);
+
       tbody.appendChild(tr);
     });
 
@@ -3709,8 +4030,7 @@ async function _carregarConclusaoAtividades(inicio, fim) {
 // ─── NPS / Satisfação Detalhado por Gestor ─────────────────────────────
 
 /**
- * Calcula as médias de NPS (Comunicação, Entrega, Performance) por gestor.
- * Filtro de data sobre data_envio_nps.
+ * Calcula e lista o ranking de NPS por gestor com detalhamento em hover.
  */
 async function _carregarNPSDetalhado(inicio, fim) {
   const listaEl = document.getElementById('rel-nps-lista');
@@ -3724,39 +4044,45 @@ async function _carregarNPSDetalhado(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    const { data: clientes, error } = await supabase
+    let { data: clientes, error } = await supabase
       .from('clientes')
-      .select('user_id, nota_comunicacao, nota_entrega, nota_performance')
+      .select('cliente_id, cliente_nome, user_id, nota_comunicacao, nota_entrega, nota_performance, data_envio_nps')
       .eq('cliente_status', 'Ativado')
       .gte('data_envio_nps', inicioISO)
       .lte('data_envio_nps', fimISO);
 
     if (error) throw error;
 
+    // Fallback: se o mês não tem envios de NPS no intervalo, busca todos os clientes ativos avaliados
+    if (!clientes || clientes.length === 0) {
+      const { data: allNps } = await supabase
+        .from('clientes')
+        .select('cliente_id, cliente_nome, user_id, nota_comunicacao, nota_entrega, nota_performance, data_envio_nps')
+        .eq('cliente_status', 'Ativado')
+        .not('data_envio_nps', 'is', null);
+
+      if (allNps && allNps.length > 0) clientes = allNps;
+    }
+
     const validos = (clientes ?? []).filter(c => 
       c.user_id && (c.nota_comunicacao != null || c.nota_entrega != null || c.nota_performance != null)
     );
 
     if (validos.length === 0) {
-      listaEl.innerHTML = '<div style="text-align:center; padding: 24px;">Nenhuma avaliação de NPS no período selecionado.</div>';
+      listaEl.innerHTML = '<div style="text-align:center; padding: 24px; color: var(--text-secondary);">Nenhuma avaliação registrada</div>';
       return;
     }
 
     const userIds = [...new Set(validos.map(c => c.user_id))];
 
-    const { data: usuarios, error: usuErr } = await supabase
+    const { data: usuarios } = await supabase
       .from('usuarios')
       .select('user_id, user_nome, user_avatar')
       .in('user_id', userIds);
 
-    if (usuErr) throw usuErr;
-    
     const userMap = {};
-    for (const u of (usuarios ?? [])) {
-      userMap[u.user_id] = u;
-    }
+    (usuarios ?? []).forEach(u => { userMap[u.user_id] = u; });
 
-    // Agrupa e calcula
     const stats = {};
     for (const c of validos) {
       const uid = c.user_id;
@@ -3765,25 +4091,44 @@ async function _carregarNPSDetalhado(inicio, fim) {
           id: uid, 
           countCom: 0, sumCom: 0,
           countEnt: 0, sumEnt: 0,
-          countPerf: 0, sumPerf: 0
+          countPerf: 0, sumPerf: 0,
+          clientes: []
         };
       }
-      if (c.nota_comunicacao != null) { stats[uid].countCom++; stats[uid].sumCom += Number(c.nota_comunicacao); }
-      if (c.nota_entrega != null) { stats[uid].countEnt++; stats[uid].sumEnt += Number(c.nota_entrega); }
-      if (c.nota_performance != null) { stats[uid].countPerf++; stats[uid].sumPerf += Number(c.nota_performance); }
+      const com = c.nota_comunicacao != null ? Number(c.nota_comunicacao) : null;
+      const ent = c.nota_entrega != null ? Number(c.nota_entrega) : null;
+      const perf = c.nota_performance != null ? Number(c.nota_performance) : null;
+
+      if (com != null) { stats[uid].sumCom += com; stats[uid].countCom++; }
+      if (ent != null) { stats[uid].sumEnt += ent; stats[uid].countEnt++; }
+      if (perf != null) { stats[uid].sumPerf += perf; stats[uid].countPerf++; }
+
+      const notas = [com, ent, perf].filter(n => n != null);
+      const mediaCli = notas.length > 0 ? notas.reduce((a, b) => a + b, 0) / notas.length : 0;
+
+      stats[uid].clientes.push({
+        nome: c.cliente_nome,
+        media: mediaCli.toFixed(1),
+        com: com != null ? com : '—',
+        ent: ent != null ? ent : '—',
+        perf: perf != null ? perf : '—'
+      });
     }
 
     const ranking = Object.values(stats).map(s => {
-      s.avgCom = s.countCom > 0 ? s.sumCom / s.countCom : 0;
-      s.avgEnt = s.countEnt > 0 ? s.sumEnt / s.countEnt : 0;
-      s.avgPerf = s.countPerf > 0 ? s.sumPerf / s.countPerf : 0;
+      const avgCom = s.countCom > 0 ? s.sumCom / s.countCom : 0;
+      const avgEnt = s.countEnt > 0 ? s.sumEnt / s.countEnt : 0;
+      const avgPerf = s.countPerf > 0 ? s.sumPerf / s.countPerf : 0;
       
       let sumGeral = 0;
       let countGeral = 0;
-      if (s.countCom > 0) { sumGeral += s.avgCom; countGeral++; }
-      if (s.countEnt > 0) { sumGeral += s.avgEnt; countGeral++; }
-      if (s.countPerf > 0) { sumGeral += s.avgPerf; countGeral++; }
+      if (s.countCom > 0) { sumGeral += avgCom; countGeral++; }
+      if (s.countEnt > 0) { sumGeral += avgEnt; countGeral++; }
+      if (s.countPerf > 0) { sumGeral += avgPerf; countGeral++; }
       
+      s.avgCom = avgCom;
+      s.avgEnt = avgEnt;
+      s.avgPerf = avgPerf;
       s.mediaGeral = countGeral > 0 ? sumGeral / countGeral : 0;
       return s;
     });
@@ -3792,50 +4137,72 @@ async function _carregarNPSDetalhado(inicio, fim) {
 
     listaEl.innerHTML = '';
 
-    ranking.forEach(row => {
+    ranking.forEach((row, idx) => {
       const user = userMap[row.id] || { user_nome: 'Desconhecido', user_avatar: null };
       
       const avatarHtml = user.user_avatar 
-        ? `<img src="${user.user_avatar}" style="width:24px;height:24px;object-fit:cover;border-radius:50%;margin-right:8px;vertical-align:middle;">`
-        : `<div class="rel-table-avatar" style="display:inline-flex;width:24px;height:24px;font-size:11px;border-radius:50%;margin-right:8px;vertical-align:middle;justify-content:center;align-items:center;background:var(--card-bg-hover);color:var(--text-color);">${user.user_nome.charAt(0).toUpperCase()}</div>`;
+        ? `<img src="${user.user_avatar}" style="width:26px;height:26px;object-fit:cover;border-radius:50%;margin-right:8px;vertical-align:middle;">`
+        : `<div class="rel-table-avatar" style="display:inline-flex;width:26px;height:26px;font-size:11px;border-radius:50%;margin-right:8px;vertical-align:middle;justify-content:center;align-items:center;">${user.user_nome.charAt(0).toUpperCase()}</div>`;
 
-      // Cada nota de 0 a 10 vira 0 a 100 para o miniBar
       const pctCom = Math.round(row.avgCom * 10);
       const pctEnt = Math.round(row.avgEnt * 10);
       const pctPerf = Math.round(row.avgPerf * 10);
       
       const el = document.createElement('div');
       el.className = 'rel-motivo-item';
+      el.dataset.gestorIdx = idx;
       el.style.flexDirection = 'column';
       el.style.alignItems = 'stretch';
-      el.style.padding = '12px 16px';
+      el.style.padding = '14px 16px';
       el.style.gap = '8px';
-      el.style.borderBottom = '1px solid var(--border)';
+      el.style.cursor = 'pointer';
+      el.style.borderRadius = '10px';
+      el.style.transition = 'background 0.2s';
       
       el.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; font-weight: 500;">
+          <div style="display: flex; align-items: center; font-weight: 600; font-size: 13.5px;">
             ${avatarHtml}
             ${user.user_nome}
           </div>
-          <div style="font-weight: 600; font-size: 14px;">Média Geral: ${row.mediaGeral.toFixed(1)}</div>
+          <div style="font-weight: 800; font-size: 14px; color: var(--cyan);">Score: ${row.mediaGeral.toFixed(1)} / 10</div>
         </div>
         
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px;">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 6px;">
           <div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Comunicação</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Comunicação</div>
             ${_miniBar(pctCom, 'purple', row.avgCom.toFixed(1))}
           </div>
           <div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Entrega</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Entrega</div>
             ${_miniBar(pctEnt, 'cyan', row.avgEnt.toFixed(1))}
           </div>
           <div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Performance</div>
-            ${_miniBar(pctPerf, 'blue', row.avgPerf.toFixed(1))}
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Performance</div>
+            ${_miniBar(pctPerf, 'green', row.avgPerf.toFixed(1))}
           </div>
         </div>
       `;
+
+      // Hover card para cada gestor
+      el.addEventListener('mouseenter', () => {
+        const items = row.clientes.slice(0, 10).map(c => ({
+          name: c.nome,
+          sub: `Com: ${c.com} · Ent: ${c.ent} · Perf: ${c.perf}`,
+          val: `${c.media} / 10`
+        }));
+
+        _showKpiPopover(el, {
+          title: `NPS: ${user.user_nome}`,
+          badge: `Score ${row.mediaGeral.toFixed(1)}`,
+          items,
+          footer: `<b>${row.clientes.length}</b> clientes avaliados sob este gestor`,
+          formula: 'Média ponderada por cliente atendido'
+        });
+      });
+
+      el.addEventListener('mouseleave', _hideKpiPopover);
+
       listaEl.appendChild(el);
     });
 
@@ -3902,6 +4269,7 @@ async function _aplicarPeriodo(inicio, fim, label = null) {
   _carregarNPSDetalhado(_dataInicio, _dataFim);
   // Snapshot: não depende de período, mas atualiza junto para consistência
   _carregarReceitaAberto();
+  _carregarCapacityOperacional();
   _carregarHealthScore();
   _carregarIndiceSilencio();
   _carregarCampanhasSemSaldo();
