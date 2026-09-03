@@ -2294,6 +2294,19 @@ export const FinanceiroReceitas = {
   async update(id, payload) {
     return supabase.from('financeiro_receitas').update(payload).eq('receita_id', id).select().single();
   },
+  async updateMensalidadePendente(clienteId, novoValor) {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const startOfMonth = `${y}-${m}-01`;
+    return supabase
+      .from('financeiro_receitas')
+      .update({ receita_valor: novoValor })
+      .eq('cliente_id', clienteId)
+      .eq('receita_tipo', 'Recorrente')
+      .eq('receita_status', 'Pendente')
+      .gte('data_vencimento', startOfMonth);
+  },
   async delete(id) {
     return supabase.from('financeiro_receitas').delete().eq('receita_id', id);
   }

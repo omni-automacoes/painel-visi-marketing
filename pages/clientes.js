@@ -5,7 +5,7 @@
  */
 
 import UserStore  from '../js/userStore.js';
-import { Clientes, Tarefas, Negocios, Usuarios, Reunioes, ClienteFeedback, FaturamentoCliente, FeedbackCampanhas, ContatoClientes } from '../js/db.js';
+import { Clientes, FinanceiroReceitas, Tarefas, Negocios, Usuarios, Reunioes, ClienteFeedback, FaturamentoCliente, FeedbackCampanhas, ContatoClientes } from '../js/db.js';
 
 
 import router      from '../js/router.js';
@@ -1559,6 +1559,10 @@ export default {
               </select>
             </div>
             <div class="cl-field">
+              <label class="cl-label">Mensalidade Recorrente (R$)</label>
+              <input id="cl-mensalidade" class="cl-input" type="number" min="0" step="0.01" placeholder="Ex: 1500,00" autocomplete="off">
+            </div>
+            <div class="cl-field">
               <label class="cl-label">Investimento de Mídia (R$)</label>
               <input id="cl-midia" class="cl-input" type="number" min="0" step="0.01" placeholder="0,00" autocomplete="off">
             </div>
@@ -2062,6 +2066,7 @@ export default {
         cliente_status:     'Ativado',
         negocio_id:         negocioId ? Number(negocioId) : null,
         user_id:            targetUserId,
+        cliente_mensalidade: parseFloat(document.getElementById('cl-mensalidade')?.value) || 0,
         investimento_midia: parseFloat(document.getElementById('cl-midia').value) || 0,
         cliente_contrato:   hasContrato,
         contrato_duracao:   hasContrato ? (parseInt(document.getElementById('cl-contrato-duracao').value, 10) || null) : null,
@@ -3107,7 +3112,11 @@ export default {
       })()}
 
       <!-- Financeiro -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Mensalidade</div>
+          <div style="font-size:15px;font-weight:800;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fmtBRL(c.cliente_mensalidade)}</div>
+        </div>
         <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Inv. Mídia</div>
           <div style="font-size:15px;font-weight:800;color:var(--black);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fmtBRL(c.investimento_midia)}</div>
@@ -3127,13 +3136,18 @@ export default {
       fld('Telefone', inp('e-tel',c.cliente_telefone,'text','Telefone')) +
       fld('E-mail', inp('e-email',c.cliente_email,'email','E-mail')) +
       fld('Segmento', inp('e-seg',c.segmento,'text','Segmento')) +
+      fld('Mensalidade (R$)', inp('e-ident-mensalidade', c.cliente_mensalidade ?? '', 'number', '0.00')) +
       fld('Inv. Mídia (R$)', inp('e-midia',c.investimento_midia,'number','0')) +
       (_isAdmin ? fld('Responsável', sel('e-user-id', [{ v: '', l: '— Sem gestor —' }, ...userOpts], c.user_id || '')) : '')
     );
 
     // ── Card Contrato (seção financeira) ─────────────────────────────────────────────
     const contratoView = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;grid-column:1/-1">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;grid-column:1/-1">
+        <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Mensalidade</div>
+          <div style="font-size:15px;font-weight:800;color:var(--cyan)">${fmtBRL(c.cliente_mensalidade)}</div>
+        </div>
         <div style="padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--border-light);display:flex;flex-direction:column;gap:3px">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Possui Contrato?</div>
           <div style="font-size:15px;font-weight:800;color:var(--black)">${c.cliente_contrato ? 'Sim' : 'Não'}</div>
@@ -3145,8 +3159,9 @@ export default {
       </div>
     `;
 
-    const cardContrato = renderCard('contrato', '💼', 'Informações de Contrato',
+    const cardContrato = renderCard('contrato', '💼', 'Informações de Contrato & Mensalidade',
       contratoView,
+      fld('Mensalidade Recorrente (R$)', inp('e-mensalidade', c.cliente_mensalidade ?? '', 'number', '0.00')) +
       fld('Contrato', `<div style="display:flex;align-items:center;gap:8px;margin-top:10px">
         <input type="checkbox" id="e-contrato" ${c.cliente_contrato ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer">
         <label for="e-contrato" style="font-size:13px;cursor:pointer;user-select:none;color:var(--black)">Possui Contrato</label>
@@ -3933,6 +3948,7 @@ export default {
             cliente_telefone: g('e-tel') || null,
             cliente_email: g('e-email') || null,
             segmento: g('e-seg') || null,
+            cliente_mensalidade: parseFloat(g('e-ident-mensalidade')) || 0,
             investimento_midia: parseFloat(g('e-midia')) || 0,
           };
           if (_isAdmin) {
@@ -3947,6 +3963,7 @@ export default {
             return;
           }
           payload = {
+            cliente_mensalidade: parseFloat(g('e-mensalidade')) || 0,
             cliente_contrato: hasContrato,
             contrato_duracao: hasContrato ? (parseInt(g('e-contrato-duracao'), 10) || null) : null,
           };
@@ -3986,11 +4003,18 @@ export default {
           return;
         }
 
+        if (payload.cliente_mensalidade !== undefined) {
+          FinanceiroReceitas.updateMensalidadePendente(c.cliente_id, payload.cliente_mensalidade).catch(err => {
+            console.warn('[Clientes] Não foi possível sincronizar receita pendente:', err);
+          });
+        }
+
         const idx = _todosClientes.findIndex(x => x.cliente_id === c.cliente_id);
         if (idx !== -1) _todosClientes[idx] = { ..._todosClientes[idx], ...payload, ...(updated||{}) };
+        Object.assign(c, payload, updated || {});
         
         // Atualiza UI da gaveta com os novos dados
-        this._openClientDrawer(_todosClientes[idx] || { ...c, ...payload });
+        this._openClientDrawer(_todosClientes[idx] || c);
       });
     });
 
