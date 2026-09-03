@@ -299,7 +299,7 @@ function _htmlTabs() {
     },
     {
       key: 'master',
-      label: 'Master / ADM',
+      label: 'Diretoria & Financeiro',
       icon: `<svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
     },
   ];
@@ -1197,7 +1197,12 @@ function _htmlSectionMaster() {
             <span style="font-size:11px;color:var(--text-muted);font-weight:600;">Taxa de Recebimento</span>
             <span style="font-size:11px;font-weight:700;color:var(--black);" id="rel-taxa-recebimento">—%</span>
           </div>
-          ${_miniBar(0, 'green')}
+          <div class="rel-mini-bar-wrap">
+            <div class="rel-mini-bar">
+              <div class="rel-mini-bar-fill rel-mini-bar-fill--green" id="rel-bar-recebimento" style="width:0%"></div>
+            </div>
+            <span class="rel-mini-bar-pct" id="rel-bar-recebimento-pct">0%</span>
+          </div>
         </div>
       </div>
 
@@ -1213,8 +1218,8 @@ function _htmlSectionMaster() {
           <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         </div>
         <div class="rel-section-title">
-          <h2>Setor Master — Gestão Executiva</h2>
-          <p>Financeiro, MRR, LTV, EBITDA e visão estratégica da agência</p>
+          <h2>Diretoria Executiva & Financeiro</h2>
+          <p>Métricas financeiras estratégicas, MRR, EBITDA, LTV e saúde patrimonial</p>
         </div>
         <span class="rel-section-badge rel-section-badge--master">14 métricas</span>
       </div>
@@ -1678,7 +1683,7 @@ async function _carregarMRR() {
   try {
     const { data: clientes, error } = await supabase
       .from('clientes')
-      .select('cliente_mensalidade')
+      .select('cliente_id, cliente_nome, cliente_mensalidade')
       .eq('cliente_status', 'Ativado');
 
     if (error) throw error;
@@ -1700,13 +1705,35 @@ async function _carregarMRR() {
       trendEl.textContent = 'Tempo real';
       trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu';
     }
+
+    // Popula Hover Card com o Top 10 Clientes em MRR
+    const topClientes = (clientes ?? [])
+      .sort((a, b) => Number(b.cliente_mensalidade || 0) - Number(a.cliente_mensalidade || 0))
+      .slice(0, 10)
+      .map(c => ({
+        name: c.cliente_nome,
+        sub: 'Mensalidade Ativa',
+        val: `R$ ${_formatarBRL(c.cliente_mensalidade)}`
+      }));
+
+    const mediaMensalidade = qtdAtivos > 0 ? totalMrr / qtdAtivos : 0;
+
+    _kpiBreakdowns['rel-mrr'] = {
+      title: 'Maiores Contratos Ativos (MRR)',
+      badge: `R$ ${_formatarBRL(totalMrr)}/mês`,
+      items: topClientes,
+      footer: `Mensalidade média: <b>R$ ${_formatarBRL(mediaMensalidade)}</b> (${qtdAtivos} clientes)`,
+      formula: 'Soma de todas as mensalidades ativas (status Ativado)'
+    };
+    _bindKpiHover('rel-mrr');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar MRR:', err);
     if (valueEl) valueEl.textContent = 'Erro';
   }
 }
 
-// ─── Receita Total por Cliente ────────────────────────────────────────────────
+// ─── Receita Total por Cliente (ARPU) ─────────────────────────────────────────
 /**
  * Fórmula: MRR ÷ total de clientes com cliente_status = 'Ativado'
  */
@@ -1720,7 +1747,7 @@ async function _carregarReceitaCliente() {
   try {
     const { data: clientes, error } = await supabase
       .from('clientes')
-      .select('cliente_mensalidade')
+      .select('cliente_id, cliente_nome, cliente_mensalidade')
       .eq('cliente_status', 'Ativado');
 
     if (error) throw error;
@@ -1732,6 +1759,25 @@ async function _carregarReceitaCliente() {
     if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(media)}`;
     if (subEl)   subEl.textContent   = `MRR R$ ${_formatarBRL(mrr)} ÷ ${qtd} cliente${qtd !== 1 ? 's' : ''} ativo${qtd !== 1 ? 's' : ''}`;
     if (trendEl) { trendEl.textContent = `${qtd} ativos`; trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu'; }
+
+    // Segmentação por faixa de ticket
+    const faixaA = (clientes ?? []).filter(c => Number(c.cliente_mensalidade || 0) <= 1500);
+    const faixaB = (clientes ?? []).filter(c => Number(c.cliente_mensalidade || 0) > 1500 && Number(c.cliente_mensalidade || 0) <= 3000);
+    const faixaC = (clientes ?? []).filter(c => Number(c.cliente_mensalidade || 0) > 3000);
+
+    _kpiBreakdowns['rel-receita-cliente'] = {
+      title: 'Distribuição de Mensalidades (ARPU)',
+      badge: `Média R$ ${_formatarBRL(media)}`,
+      items: [
+        { name: '🥉 Até R$ 1.500/mês', sub: `${faixaA.length} clientes na faixa de entrada`, val: `${qtd > 0 ? Math.round((faixaA.length / qtd) * 100) : 0}%` },
+        { name: '🥈 R$ 1.500 a R$ 3.000/mês', sub: `${faixaB.length} clientes na faixa intermediária`, val: `${qtd > 0 ? Math.round((faixaB.length / qtd) * 100) : 0}%` },
+        { name: '🥇 Acima de R$ 3.000/mês', sub: `${faixaC.length} clientes na faixa premium`, val: `${qtd > 0 ? Math.round((faixaC.length / qtd) * 100) : 0}%` }
+      ],
+      footer: `Ticket médio recorrente: <b>R$ ${_formatarBRL(media)}</b> por cliente`,
+      formula: 'Receita Recorrente Total ÷ Total de Clientes Ativados'
+    };
+    _bindKpiHover('rel-receita-cliente');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Receita por Cliente:', err);
     if (valueEl) valueEl.textContent = 'Erro';
@@ -1741,7 +1787,6 @@ async function _carregarReceitaCliente() {
 // ─── Revenue Churn (Financial) ────────────────────────────────────────────────
 /**
  * Fórmula: Soma de receita_perdida dos clientes que deram churn no período
- * (data_churn BETWEEN inicio AND fim)
  */
 async function _carregarRevenueChurn(inicio, fim) {
   const cardEl  = document.getElementById('rel-revenue-churn');
@@ -1758,7 +1803,7 @@ async function _carregarRevenueChurn(inicio, fim) {
 
     const { data: churns, error } = await supabase
       .from('clientes')
-      .select('receita_perdida')
+      .select('cliente_id, cliente_nome, receita_perdida, motivo_churn, data_churn')
       .eq('cliente_churn', true)
       .gte('data_churn', inicioISO)
       .lte('data_churn', fimISO);
@@ -1774,6 +1819,24 @@ async function _carregarRevenueChurn(inicio, fim) {
       trendEl.textContent  = totalPerdido > 0 ? 'Atenção' : 'Nenhum churn';
       trendEl.className    = `rel-kpi-trend rel-kpi-trend--${totalPerdido > 0 ? 'down' : 'up'}`;
     }
+
+    const items = qtdChurn > 0
+      ? (churns ?? []).slice(0, 10).map(c => ({
+          name: c.cliente_nome,
+          sub: c.motivo_churn ? `Motivo: ${c.motivo_churn}` : 'Cancelamento',
+          val: `− R$ ${_formatarBRL(c.receita_perdida)}`
+        }))
+      : [{ name: 'Sem perdas no período', sub: 'Nenhum cancelamento de contrato registrado', val: 'R$ 0,00' }];
+
+    _kpiBreakdowns['rel-revenue-churn'] = {
+      title: 'Detalhamento do Revenue Churn',
+      badge: `R$ ${_formatarBRL(totalPerdido)} Perdidos`,
+      items,
+      footer: `Total de <b>${qtdChurn}</b> contrato(s) cancelado(s) no período`,
+      formula: 'Soma de receita_perdida com data_churn no período'
+    };
+    _bindKpiHover('rel-revenue-churn');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Revenue Churn:', err);
     if (valueEl) valueEl.textContent = 'Erro';
@@ -1783,7 +1846,6 @@ async function _carregarRevenueChurn(inicio, fim) {
 // ─── Quick Ratio ─────────────────────────────────────────────────────────────
 /**
  * Fórmula: MRR de novos clientes do período ÷ receita_perdida do período
- * Mede: cada R$1 perdido em churn, quantos R$ novos entraram
  * Meta: > 4×
  */
 async function _carregarQuickRatio(inicio, fim) {
@@ -1802,7 +1864,7 @@ async function _carregarQuickRatio(inicio, fim) {
     // Novos clientes no período → soma de mensalidade
     const { data: novos, error: novosErr } = await supabase
       .from('clientes')
-      .select('cliente_mensalidade')
+      .select('cliente_id, cliente_nome, cliente_mensalidade')
       .gte('criado_em', inicioISO)
       .lte('criado_em', fimISO);
 
@@ -1811,7 +1873,7 @@ async function _carregarQuickRatio(inicio, fim) {
     // Churns no período → soma de receita_perdida
     const { data: churns, error: churnsErr } = await supabase
       .from('clientes')
-      .select('receita_perdida')
+      .select('cliente_id, cliente_nome, receita_perdida')
       .eq('cliente_churn', true)
       .gte('data_churn', inicioISO)
       .lte('data_churn', fimISO);
@@ -1821,16 +1883,18 @@ async function _carregarQuickRatio(inicio, fim) {
     const mrrNovos    = novos?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
     const perdaChurn  = churns?.reduce((acc, c) => acc + Number(c.receita_perdida || 0), 0) ?? 0;
 
+    let ratioStr = '—×';
     if (perdaChurn === 0) {
-      if (valueEl) valueEl.textContent = mrrNovos > 0 ? '∞×' : '—×';
+      ratioStr = mrrNovos > 0 ? '∞×' : '—×';
+      if (valueEl) valueEl.textContent = ratioStr;
       if (subEl)   subEl.textContent   = mrrNovos > 0
         ? `R$ ${_formatarBRL(mrrNovos)} novos · Sem churn no período`
         : 'Sem novos clientes nem churn no período';
       if (trendEl) { trendEl.textContent = 'Sem churn'; trendEl.className = 'rel-kpi-trend rel-kpi-trend--up'; }
     } else {
       const ratio = mrrNovos / perdaChurn;
-      const ratioStr = ratio.toFixed(1).replace('.', ',');
-      if (valueEl) valueEl.textContent = `${ratioStr}×`;
+      ratioStr = `${ratio.toFixed(1).replace('.', ',')}×`;
+      if (valueEl) valueEl.textContent = ratioStr;
       if (subEl)   subEl.textContent   = `R$ ${_formatarBRL(mrrNovos)} novo ÷ R$ ${_formatarBRL(perdaChurn)} perdido`;
       const ok = ratio >= 4;
       if (trendEl) {
@@ -1838,6 +1902,19 @@ async function _carregarQuickRatio(inicio, fim) {
         trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
       }
     }
+
+    _kpiBreakdowns['rel-quick-ratio'] = {
+      title: 'Quick Ratio da Agência (Sustentabilidade)',
+      badge: ratioStr,
+      items: [
+        { name: '🟢 Novos Clientes (MRR)', sub: `${(novos ?? []).length} clientes conquistados`, val: `+ R$ ${_formatarBRL(mrrNovos)}` },
+        { name: '🔴 Cancelamentos (Churn)', sub: `${(churns ?? []).length} clientes perdidos`, val: `− R$ ${_formatarBRL(perdaChurn)}` }
+      ],
+      footer: `Para cada R$ 1 perdido, entraram <b>${ratioStr}</b> novos em receita (Meta: > 4×)`,
+      formula: 'Novas Receitas Adicionadas ÷ Receitas Perdidas por Churn'
+    };
+    _bindKpiHover('rel-quick-ratio');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Quick Ratio:', err);
     if (valueEl) valueEl.textContent = 'Erro';
@@ -1856,7 +1933,6 @@ async function _carregarFaturamentoColaborador() {
   if (valueEl) valueEl.textContent = 'R$ …';
 
   try {
-    // MRR total
     const { data: clientes, error: cliErr } = await supabase
       .from('clientes')
       .select('cliente_mensalidade')
@@ -1864,20 +1940,38 @@ async function _carregarFaturamentoColaborador() {
 
     if (cliErr) throw cliErr;
 
-    // Total de colaboradores (usuários cadastrados)
-    const { count: totalUsuarios, error: usuErr } = await supabase
+    const { data: usuarios, error: usuErr } = await supabase
       .from('usuarios')
-      .select('user_id', { count: 'exact', head: true });
+      .select('user_id, user_nome, user_cargo')
+      .eq('user_status', 'Ativo');
 
     if (usuErr) throw usuErr;
 
     const mrr  = clientes?.reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0) ?? 0;
-    const qtd  = totalUsuarios ?? 0;
+    const qtd  = usuarios?.length ?? 0;
     const fat  = qtd > 0 ? mrr / qtd : 0;
 
     if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(fat)}`;
-    if (subEl)   subEl.textContent   = `MRR R$ ${_formatarBRL(mrr)} ÷ ${qtd} colaborador${qtd !== 1 ? 'es' : ''}`;
-    if (trendEl) { trendEl.textContent = `${qtd} colaborador${qtd !== 1 ? 'es' : ''}`; trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu'; }
+    if (subEl)   subEl.textContent   = `MRR R$ ${_formatarBRL(mrr)} ÷ ${qtd} colaborador${qtd !== 1 ? 'es' : ''} ativo${qtd !== 1 ? 's' : ''}`;
+    if (trendEl) { trendEl.textContent = `${qtd} colaboradores`; trendEl.className = 'rel-kpi-trend rel-kpi-trend--neu'; }
+
+    const comCount = (usuarios ?? []).filter(u => u.user_cargo === 'Comercial').length;
+    const opCount = (usuarios ?? []).filter(u => u.user_cargo === 'Operações').length;
+    const admCount = (usuarios ?? []).filter(u => u.user_cargo === 'Administrador').length;
+
+    _kpiBreakdowns['rel-fat-colaborador'] = {
+      title: 'Produtividade por Colaborador',
+      badge: `R$ ${_formatarBRL(fat)}/pessoa`,
+      items: [
+        { name: 'Equipe Comercial', sub: `${comCount} colaboradores ativos`, val: 'Vendas' },
+        { name: 'Equipe de Operações', sub: `${opCount} colaboradores ativos`, val: 'Entrega' },
+        { name: 'Diretoria & Administração', sub: `${admCount} gestores ativos`, val: 'Gestão' }
+      ],
+      footer: `Receita gerada por pessoa: <b>R$ ${_formatarBRL(fat)}</b> (${qtd} membros no total)`,
+      formula: 'MRR Total ÷ Total de Colaboradores Ativos'
+    };
+    _bindKpiHover('rel-fat-colaborador');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Faturamento por Colaborador:', err);
     if (valueEl) valueEl.textContent = 'Erro';
@@ -1886,8 +1980,7 @@ async function _carregarFaturamentoColaborador() {
 
 // ─── EBITDA Aproximado ────────────────────────────────────────────────────────
 /**
- * Fórmula: MRR − Σ investimento_midia de todos os clientes ativos
- * (Aproximação: receita recorrente menos o total investido em mídia dos clientes)
+ * Fórmula: MRR − Σ investimento_midia dos clientes ativos
  */
 async function _carregarEbitda() {
   const cardEl  = document.getElementById('rel-ebitda');
@@ -1915,6 +2008,20 @@ async function _carregarEbitda() {
       trendEl.textContent = ebitda >= 0 ? `${margem}% margem` : 'Negativo';
       trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ebitda >= 0 ? 'up' : 'down'}`;
     }
+
+    _kpiBreakdowns['rel-ebitda'] = {
+      title: 'Demonstrativo Operacional (EBITDA)',
+      badge: `Margem ${margem}%`,
+      items: [
+        { name: 'Receita Operacional (MRR)', sub: 'Faturamento recorrente da carteira', val: `R$ ${_formatarBRL(mrr)}` },
+        { name: 'Investimento em Mídia das Contas', sub: 'Custos diretos de mídia alocada', val: `− R$ ${_formatarBRL(totalInvestMidia)}` },
+        { name: 'Resultado Operacional (EBITDA)', sub: 'Lucro operacional bruto', val: `R$ ${_formatarBRL(ebitda)}` }
+      ],
+      footer: `Margem de <b>${margem}%</b> sobre a receita recorrente da carteira`,
+      formula: 'Receita Recorrente (MRR) − Custos Operacionais'
+    };
+    _bindKpiHover('rel-ebitda');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar EBITDA:', err);
     if (valueEl) valueEl.textContent = 'Erro';
@@ -1938,17 +2045,15 @@ async function _carregarChurnClientes(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Churns no período
-    const { count: qtdChurn, error: churnErr } = await supabase
+    const { data: churnsList, error: churnErr } = await supabase
       .from('clientes')
-      .select('cliente_id', { count: 'exact', head: true })
+      .select('cliente_id, cliente_nome, motivo_churn, data_churn')
       .eq('cliente_churn', true)
       .gte('data_churn', inicioISO)
       .lte('data_churn', fimISO);
 
     if (churnErr) throw churnErr;
 
-    // Base de clientes no início do período (criado_em <= inicio)
     const { count: baseInicio, error: baseErr } = await supabase
       .from('clientes')
       .select('cliente_id', { count: 'exact', head: true })
@@ -1956,7 +2061,7 @@ async function _carregarChurnClientes(inicio, fim) {
 
     if (baseErr) throw baseErr;
 
-    const churns = qtdChurn ?? 0;
+    const churns = (churnsList ?? []).length;
     const base   = baseInicio ?? 0;
     const taxa   = base > 0 ? ((churns / base) * 100) : 0;
     const taxaStr = taxa.toFixed(1).replace('.', ',');
@@ -1968,6 +2073,24 @@ async function _carregarChurnClientes(inicio, fim) {
       trendEl.textContent = ok ? '✅ Abaixo de 3%' : taxa < 5 ? '⚠️ Atenção' : '🔴 Crítico';
       trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
     }
+
+    const items = churns > 0
+      ? churnsList.slice(0, 10).map(c => ({
+          name: c.cliente_nome,
+          sub: c.motivo_churn ? `Motivo: ${c.motivo_churn}` : 'Cancelamento',
+          val: c.data_churn ? _formatarExibicao(c.data_churn.substring(0, 10)) : '—'
+        }))
+      : [{ name: 'Sem cancelamentos no período', sub: 'Taxa de retenção em 100% no intervalo', val: '0,0%' }];
+
+    _kpiBreakdowns['rel-churn-clientes'] = {
+      title: 'Cancelamentos da Carteira (Churn Rate)',
+      badge: `${taxaStr}% Churn`,
+      items,
+      footer: `Meta da agência: Manter o Churn <b>abaixo de 3%</b> ao mês`,
+      formula: '(Clientes cancelados no período ÷ Base no início) × 100'
+    };
+    _bindKpiHover('rel-churn-clientes');
+
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar Churn de Clientes:', err);
     if (valueEl) valueEl.textContent = 'Erro';
@@ -1977,8 +2100,6 @@ async function _carregarChurnClientes(inicio, fim) {
 // ─── CAC Payback Period ───────────────────────────────────────────────────────
 /**
  * Fórmula: CAC ÷ (MRR médio por cliente)
- * = investimento_marketing ÷ novos_clientes ÷ (mrr_total ÷ ativos)
- * Resultado em meses
  */
 async function _carregarCacPayback(inicio, fim) {
   const cardEl  = document.getElementById('rel-cac-payback');
@@ -1988,14 +2109,11 @@ async function _carregarCacPayback(inicio, fim) {
   if (valueEl) valueEl.textContent = '…';
 
   try {
-    const userId = UserStore.getUserId();
-
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Investimento marketing fixo do mês
     const periodoKey = inicio.substring(0, 7);
     const { data: invData } = await supabase
       .from('relatorios_investimentos')
@@ -2004,7 +2122,6 @@ async function _carregarCacPayback(inicio, fim) {
       .maybeSingle();
     const investimento = Number(invData?.valor ?? 0);
 
-    // Novos clientes no período
     const { count: novos, error: novosErr } = await supabase
       .from('clientes')
       .select('cliente_id', { count: 'exact', head: true })
@@ -2013,7 +2130,6 @@ async function _carregarCacPayback(inicio, fim) {
 
     if (novosErr) throw novosErr;
 
-    // MRR médio
     const { data: ativos, error: ativosErr } = await supabase
       .from('clientes')
       .select('cliente_mensalidade')
@@ -2045,10 +2161,354 @@ async function _carregarCacPayback(inicio, fim) {
         trendEl.textContent = ok ? '✅ Abaixo de 12 meses' : '⚠️ Acima da meta';
         trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
       }
+
+      _kpiBreakdowns['rel-cac-payback'] = {
+        title: 'Tempo de Retorno do CAC (Payback)',
+        badge: `${paybackStr} Meses`,
+        items: [
+          { name: 'Custo de Aquisição (CAC)', sub: `Orçamento alocado de R$ ${_formatarBRL(investimento)}`, val: `R$ ${_formatarBRL(cac)}` },
+          { name: 'Mensalidade Média do Cliente', sub: 'Receita gerada por mês por cliente', val: `R$ ${_formatarBRL(mrrMedio)}` },
+          { name: 'Ponto de Amortização', sub: 'Tempo para recuperar o custo inicial', val: `${paybackStr} meses` }
+        ],
+        footer: `Meta da agência: Amortizar o CAC em <b>menos de 12 meses</b>`,
+        formula: 'CAC ÷ MRR Médio por Cliente'
+      };
+      _bindKpiHover('rel-cac-payback');
     }
   } catch (err) {
     console.error('[Relatórios] Erro ao carregar CAC Payback:', err);
     if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Taxa de Expansão de Base (Upsell) ────────────────────────────────────────
+/**
+ * Calcula a taxa de expansão da carteira (upsell de mensalidades / contratos adicionais).
+ */
+async function _carregarExpansaoBase(inicio, fim) {
+  const cardEl  = document.getElementById('rel-expansao-base');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+
+  if (valueEl) valueEl.textContent = '…%';
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    const { data: receitas, error: recErr } = await supabase
+      .from('financeiro_receitas')
+      .select('receita_id, receita_valor, receita_tipo, receita_descricao, cliente_id, clientes(cliente_nome, criado_em)')
+      .gte('data_vencimento', inicioISO)
+      .lte('data_vencimento', fimISO);
+
+    if (recErr) throw recErr;
+
+    const upsellList = (receitas ?? []).filter(r => {
+      if (!r.cliente_id || !r.clientes?.criado_em) return false;
+      const clienteCriado = new Date(r.clientes.criado_em).getTime();
+      const iniTimestamp = new Date(inicioISO).getTime();
+      return clienteCriado < iniTimestamp && (r.receita_tipo === 'Pontual' || (r.receita_descricao || '').toLowerCase().includes('upsell'));
+    });
+
+    const totalUpsell = upsellList.reduce((acc, r) => acc + Number(r.receita_valor || 0), 0);
+
+    const { data: ativos } = await supabase
+      .from('clientes')
+      .select('cliente_mensalidade')
+      .eq('cliente_status', 'Ativado');
+
+    const totalMrr = (ativos ?? []).reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0);
+    const pctExpansao = totalMrr > 0 ? (totalUpsell / totalMrr) * 100 : 0;
+    const pctStr = pctExpansao.toFixed(1).replace('.', ',');
+
+    if (valueEl) valueEl.textContent = `${pctStr}%`;
+    if (subEl) {
+      subEl.textContent = totalUpsell > 0
+        ? `R$ ${_formatarBRL(totalUpsell)} em upsell · ${upsellList.length} serviço(s) extra(s)`
+        : 'Nenhum upsell ou expansão registrado no período';
+    }
+    if (trendEl) {
+      const ok = pctExpansao >= 15;
+      trendEl.textContent = ok ? '✅ Meta atingida (> 15%)' : 'Meta: > 15%';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'neu'}`;
+    }
+
+    const items = upsellList.length > 0
+      ? upsellList.slice(0, 10).map(u => ({
+          name: u.clientes?.cliente_nome || 'Cliente',
+          sub: u.receita_descricao || 'Expansão de escopo',
+          val: `+ R$ ${_formatarBRL(u.receita_valor)}`
+        }))
+      : [{ name: 'Sem contratos de expansão', sub: 'Oportunidade para ofertas de upsell à carteira ativa', val: '0%' }];
+
+    _kpiBreakdowns['rel-expansao-base'] = {
+      title: 'Taxa de Expansão de Base (Upsell)',
+      badge: `${pctStr}% Expansão`,
+      items,
+      footer: `Total expandido: <b>R$ ${_formatarBRL(totalUpsell)}</b> no período`,
+      formula: '(Receitas de Expansão ÷ MRR da Carteira) × 100'
+    };
+    _bindKpiHover('rel-expansao-base');
+
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Expansão de Base:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Taxa de Inadimplência ────────────────────────────────────────────────────
+/**
+ * Calcula a taxa de inadimplência sobre as receitas com vencimento no período.
+ */
+async function _carregarInadimplencia(inicio, fim) {
+  const cardEl  = document.getElementById('rel-inadimplencia');
+  const valueEl = cardEl?.querySelector('.rel-kpi-value');
+  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
+  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
+
+  if (valueEl) valueEl.textContent = '…%';
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    const { data: receitas, error: recErr } = await supabase
+      .from('financeiro_receitas')
+      .select('receita_id, receita_valor, receita_status, data_vencimento, receita_nome, clientes(cliente_nome)')
+      .gte('data_vencimento', inicioISO)
+      .lte('data_vencimento', fimISO);
+
+    if (recErr) throw recErr;
+
+    const agora = Date.now();
+    const totalFaturado = (receitas ?? []).reduce((acc, r) => acc + Number(r.receita_valor || 0), 0);
+
+    const atrasadas = (receitas ?? []).filter(r => {
+      if (r.receita_status === 'Atrasado') return true;
+      if (r.receita_status === 'Pendente' && r.data_vencimento) {
+        return new Date(r.data_vencimento).getTime() < agora;
+      }
+      return false;
+    });
+
+    const totalAtrasado = atrasadas.reduce((acc, r) => acc + Number(r.receita_valor || 0), 0);
+    const taxa = totalFaturado > 0 ? (totalAtrasado / totalFaturado) * 100 : 0;
+    const taxaStr = taxa.toFixed(1).replace('.', ',');
+
+    if (valueEl) valueEl.textContent = `${taxaStr}%`;
+    if (subEl) {
+      subEl.textContent = totalAtrasado > 0
+        ? `R$ ${_formatarBRL(totalAtrasado)} em atraso (${atrasadas.length} cobrança${atrasadas.length !== 1 ? 's' : ''})`
+        : 'Nenhum pagamento em atraso no período';
+    }
+    if (trendEl) {
+      const ok = taxa <= 5;
+      trendEl.textContent = ok ? '✅ Meta atingida (≤ 5%)' : '⚠️ Atenção (> 5%)';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
+    }
+
+    const items = atrasadas.length > 0
+      ? atrasadas.slice(0, 10).map(r => {
+          const venc = r.data_vencimento ? _formatarExibicao(r.data_vencimento.substring(0, 10)) : '—';
+          return {
+            name: r.clientes?.cliente_nome || r.receita_nome || 'Cobrança',
+            sub: `Vencimento em ${venc}`,
+            val: `R$ ${_formatarBRL(r.receita_valor)}`
+          };
+        })
+      : [{ name: 'Sem cobranças atrasadas', sub: 'Todas as receitas do período foram pagas ou estão em dia', val: '0%' }];
+
+    _kpiBreakdowns['rel-inadimplencia'] = {
+      title: 'Contas em Inadimplência / Atraso',
+      badge: `${taxaStr}% Inadimplência`,
+      items,
+      footer: `Total pendente: <b>R$ ${_formatarBRL(totalAtrasado)}</b> de R$ ${_formatarBRL(totalFaturado)}`,
+      formula: '(Receitas Atrasadas ÷ Total de Receitas Vencidas) × 100'
+    };
+    _bindKpiHover('rel-inadimplencia');
+
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Inadimplência:', err);
+    if (valueEl) valueEl.textContent = 'Erro';
+  }
+}
+
+// ─── Avanço na Meta Mensal ───────────────────────────────────────────────────
+/**
+ * Calcula o avanço no faturamento em relação à meta configurada em meta_mensal.
+ */
+async function _carregarAvancoMeta() {
+  const currentEl  = document.getElementById('rel-meta-current');
+  const goalEl     = document.getElementById('rel-meta-goal');
+  const barEl      = document.getElementById('rel-meta-bar');
+  const pctEl      = document.getElementById('rel-meta-pct');
+  const restanteEl = document.getElementById('rel-meta-restante');
+  const statusEl   = document.getElementById('rel-meta-status');
+  const diasUteisEl= document.getElementById('rel-meta-dias-uteis');
+  const ritmoEl    = document.getElementById('rel-meta-ritmo');
+  const projecaoEl = document.getElementById('rel-meta-projecao');
+
+  if (!barEl) return;
+
+  try {
+    const hoje = new Date();
+    const anoAtual = hoje.getFullYear();
+    const mesAtual = hoje.getMonth() + 1;
+    const mesStr = String(mesAtual).padStart(2, '0');
+    const inicioMes = `${anoAtual}-${mesStr}-01T00:00:00.000Z`;
+
+    // 1. Busca meta cadastrada
+    const { data: metas } = await supabase
+      .from('meta_mensal')
+      .select('meta_valor, meta_data')
+      .order('meta_data', { ascending: false })
+      .limit(1);
+
+    const metaValor = Number(metas?.[0]?.meta_valor || 30000);
+
+    // 2. Calcula realizado no mês (vendas ganhas no mês + receitas recebidas)
+    const { data: vendasGanhas } = await supabase
+      .from('negocios')
+      .select('negocio_valor')
+      .eq('negocio_status', 'Ganho')
+      .gte('data_fechamento', inicioMes);
+
+    const totalRealizado = (vendasGanhas ?? []).reduce((acc, v) => acc + Number(v.negocio_valor || 0), 0);
+
+    const pctMeta = metaValor > 0 ? Math.min(200, Math.round((totalRealizado / metaValor) * 100)) : 0;
+    const restante = Math.max(0, metaValor - totalRealizado);
+
+    // Dias úteis no mês e restantes
+    const ultimoDiaMes = new Date(anoAtual, mesAtual, 0).getDate();
+    let diasUteisTotais = 0;
+    let diasUteisRestantes = 0;
+
+    for (let dia = 1; dia <= ultimoDiaMes; dia++) {
+      const d = new Date(anoAtual, mesAtual - 1, dia);
+      const diaSemana = d.getDay(); // 0 = Domingo, 6 = Sábado
+      if (diaSemana !== 0 && diaSemana !== 6) {
+        diasUteisTotais++;
+        if (dia >= hoje.getDate()) {
+          diasUteisRestantes++;
+        }
+      }
+    }
+
+    const ritmoDiario = diasUteisRestantes > 0 && restante > 0 ? restante / diasUteisRestantes : 0;
+    const diasPassados = Math.max(1, diasUteisTotais - diasUteisRestantes);
+    const ritmoAtual = totalRealizado / diasPassados;
+    const projecaoFinal = metaValor > 0 ? Math.round(((ritmoAtual * diasUteisTotais) / metaValor) * 100) : 0;
+
+    if (currentEl)  currentEl.textContent  = `R$ ${_formatarBRL(totalRealizado)}`;
+    if (goalEl)     goalEl.textContent     = `R$ ${_formatarBRL(metaValor)}`;
+    if (barEl)      barEl.style.width      = `${Math.min(100, pctMeta)}%`;
+    if (pctEl)      pctEl.textContent      = `${pctMeta}%`;
+
+    if (restanteEl) {
+      restanteEl.textContent = restante > 0
+        ? `Restam R$ ${_formatarBRL(restante)} para atingir a meta`
+        : `🎉 Meta superada em R$ ${_formatarBRL(totalRealizado - metaValor)}!`;
+    }
+
+    if (statusEl) {
+      if (pctMeta >= 100) {
+        statusEl.textContent = 'Meta Atingida! 🏆';
+        statusEl.className   = 'rel-pill rel-pill--green';
+      } else if (pctMeta >= 70) {
+        statusEl.textContent = 'Na reta final 🚀';
+        statusEl.className   = 'rel-pill rel-pill--cyan';
+      } else {
+        statusEl.textContent = 'Em andamento';
+        statusEl.className   = 'rel-pill rel-pill--amber';
+      }
+    }
+
+    if (diasUteisEl) diasUteisEl.textContent = `${diasUteisRestantes} dias`;
+    if (ritmoEl)     ritmoEl.textContent    = `R$ ${_formatarBRL(ritmoDiario)}/dia`;
+    if (projecaoEl)  projecaoEl.textContent = `${projecaoFinal}%`;
+
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Avanço na Meta:', err);
+  }
+}
+
+// ─── Vendido vs. Caixa (Recebido) ─────────────────────────────────────────────
+/**
+ * Compara o valor total de contratos fechados (Vendido) vs valor recebido em conta (Caixa).
+ */
+async function _carregarVendidoVsCaixa(inicio, fim) {
+  const valVendidoEl   = document.getElementById('rel-val-vendido');
+  const valCaixaEl     = document.getElementById('rel-val-caixa');
+  const valDiffEl      = document.getElementById('rel-val-diff');
+  const taxaRecebEl    = document.getElementById('rel-taxa-recebimento');
+
+  if (!valVendidoEl) return;
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    // 1. Valor Vendido (Contratos fechados no período em negócios)
+    const { data: vendas, error: venErr } = await supabase
+      .from('negocios')
+      .select('negocio_valor')
+      .eq('negocio_status', 'Ganho')
+      .gte('data_fechamento', inicioISO)
+      .lte('data_fechamento', fimISO);
+
+    if (venErr) throw venErr;
+
+    const totalVendido = (vendas ?? []).reduce((acc, v) => acc + Number(v.negocio_valor || 0), 0);
+
+    // 2. Valor Recebido no Caixa (Receitas com status Pago no período)
+    const { data: receitasPagas, error: recErr } = await supabase
+      .from('financeiro_receitas')
+      .select('receita_valor')
+      .eq('receita_status', 'Pago')
+      .gte('data_recebimento', inicioISO)
+      .lte('data_recebimento', fimISO);
+
+    if (recErr) throw recErr;
+
+    const totalCaixa = (receitasPagas ?? []).reduce((acc, r) => acc + Number(r.receita_valor || 0), 0);
+    const diferenca = totalVendido - totalCaixa;
+    const taxaRecebimento = totalVendido > 0 ? Math.round((totalCaixa / totalVendido) * 100) : (totalCaixa > 0 ? 100 : 0);
+
+    if (valVendidoEl) valVendidoEl.textContent = `R$ ${_formatarBRL(totalVendido)}`;
+    if (valCaixaEl)   valCaixaEl.textContent   = `R$ ${_formatarBRL(totalCaixa)}`;
+    
+    if (valDiffEl) {
+      if (diferenca > 0) {
+        valDiffEl.textContent = `R$ ${_formatarBRL(diferenca)} (a receber / compensar)`;
+        valDiffEl.style.color = 'var(--amber)';
+      } else if (diferenca < 0) {
+        valDiffEl.textContent = `+ R$ ${_formatarBRL(Math.abs(diferenca))} (excedente recebido)`;
+        valDiffEl.style.color = 'var(--cyan)';
+      } else {
+        valDiffEl.textContent = 'R$ 0,00 (100% conciliado)';
+        valDiffEl.style.color = 'var(--green)';
+      }
+    }
+
+    if (taxaRecebEl) {
+      taxaRecebEl.textContent = `${taxaRecebimento}%`;
+    }
+
+    const barRecebEl = document.getElementById('rel-bar-recebimento');
+    const pctRecebEl = document.getElementById('rel-bar-recebimento-pct');
+    if (barRecebEl) barRecebEl.style.width = `${Math.min(100, taxaRecebimento)}%`;
+    if (pctRecebEl) pctRecebEl.textContent = `${taxaRecebimento}%`;
+
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar Vendido vs Caixa:', err);
   }
 }
 
@@ -3147,6 +3607,34 @@ async function _carregarLtvMetrics(inicio, fim) {
       formula: `LTV ÷ CAC = ${ratio !== null ? ratio.toFixed(1).replace('.', ',') : '—'}×`
     };
     _bindKpiHover('rel-ltv-cac');
+
+    // 7. Popula Hover Card do LTV Médio
+    _kpiBreakdowns['rel-ltv-medio'] = {
+      title: 'LTV Médio por Contrato Fechado',
+      badge: `R$ ${_formatarBRL(ltvMedio)}`,
+      items: [
+        { name: 'Histórico de Vendas Ganhas', sub: 'Total de contratos fechados no CRM', val: `${totalGanhos} contratos` },
+        { name: 'Valor Total Fechado', sub: 'Soma de todas as negociações ganhas', val: `R$ ${_formatarBRL(somaGanhos)}` },
+        { name: 'Ticket Médio de Contratação', sub: 'Média por novo contrato', val: `R$ ${_formatarBRL(ltvMedio)}` }
+      ],
+      footer: `Média histórica de <b>${totalGanhos}</b> negócios fechados na agência`,
+      formula: 'Soma do valor de negócios Ganhos ÷ Total de negócios Ganhos'
+    };
+    _bindKpiHover('rel-ltv-medio');
+
+    // 8. Popula Hover Card do LTV Total
+    _kpiBreakdowns['rel-ltv-total'] = {
+      title: 'Patrimônio Estimado da Carteira (LTV Total)',
+      badge: `R$ ${_formatarBRL(ltvTotal)}`,
+      items: [
+        { name: 'LTV Médio do Cliente', sub: 'Valor médio gerado por contrato', val: `R$ ${_formatarBRL(ltvMedio)}` },
+        { name: 'Clientes Ativos na Carteira', sub: 'Contratos ativos sem churn', val: `${nAtivos} clientes` },
+        { name: 'Valor Total Patrimonial', sub: 'LTV Médio × Base Ativa', val: `R$ ${_formatarBRL(ltvTotal)}` }
+      ],
+      footer: `Valor patrimonial estimado em <b>R$ ${_formatarBRL(ltvTotal)}</b>`,
+      formula: 'LTV Médio Histórico × Total de Clientes Ativos'
+    };
+    _bindKpiHover('rel-ltv-total');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular LTV Métrics:', err.message);
@@ -4251,6 +4739,10 @@ async function _aplicarPeriodo(inicio, fim, label = null) {
   _carregarQuickRatio(_dataInicio, _dataFim);
   _carregarChurnClientes(_dataInicio, _dataFim);
   _carregarCacPayback(_dataInicio, _dataFim);
+  _carregarExpansaoBase(_dataInicio, _dataFim);
+  _carregarInadimplencia(_dataInicio, _dataFim);
+  _carregarAvancoMeta();
+  _carregarVendidoVsCaixa(_dataInicio, _dataFim);
   _carregarCAC(_dataInicio, _dataFim);
   _carregarCPQ(_dataInicio, _dataFim);
   _carregarTicketMedio(_dataInicio, _dataFim);
