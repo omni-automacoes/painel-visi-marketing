@@ -607,29 +607,66 @@ function _htmlSectionComercial() {
 
       <!-- Grupo: Atividade (Equipe) -->
       <div class="rel-metric-group-label">Atividade Diária (Equipe)</div>
-      <div class="card card-light" id="rel-atividade-card" style="margin-bottom: 20px;">
-        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="card card-light" id="rel-atividade-card" style="margin-bottom: 24px; padding: 22px;">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
           <div>
-            <div class="card-title" style="font-size:14px; font-weight:700;">Métricas de Contato</div>
-            <div class="card-subtitle" style="font-size:12px; color:var(--text-secondary);">Acompanhamento por membro</div>
+            <div class="card-title" style="font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px;">
+              <span>Métricas de Contato & Prospecção</span>
+              <span class="rel-section-badge rel-section-badge--comercial" id="rel-atividade-badge-total">Toda a Equipe</span>
+            </div>
+            <div class="card-subtitle" style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+              Visão consolidada e comparativa de todos os membros no período
+            </div>
           </div>
-          <div style="display:flex; gap:10px;">
-            <select class="form-input form-select" id="rel-atividade-vendedor" style="width:140px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
-              <option value="">Carregando...</option>
-            </select>
-            <input type="date" class="form-input" id="rel-atividade-inicio" value="${_hoje()}" style="width:115px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
-            <input type="date" class="form-input" id="rel-atividade-fim" value="${_hoje()}" style="width:115px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light);">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:11.5px; color:var(--text-secondary); font-weight:500;">Período:</span>
+            <input type="date" class="form-input" id="rel-atividade-inicio" value="${_dataInicio}" style="width:125px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light); border-radius:8px;">
+            <span style="color:var(--text-secondary); font-size:11px;">até</span>
+            <input type="date" class="form-input" id="rel-atividade-fim" value="${_dataFim}" style="width:125px; height:32px; padding:0 8px; font-size:12px; background-color: var(--bg); border: 1px solid var(--border-light); border-radius:8px;">
           </div>
         </div>
-        <div style="display:flex; gap: 30px; align-items:center; justify-content:center; padding: 24px 0;">
-          <div style="text-align:center;">
-            <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="rel-atividade-contatos">0</div>
-            <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Contatos Realizados</div>
+
+        <!-- Totais da Equipe (Consolidado) -->
+        <div class="rel-equipe-totais-bar" id="rel-atividade-totais-bar">
+          <div class="rel-equipe-total-item">
+            <div class="rel-equipe-total-icon rel-equipe-total-icon--cyan">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </div>
+            <div>
+              <div class="rel-equipe-total-val" id="rel-totais-contatos">0</div>
+              <div class="rel-equipe-total-lbl">Total de Contatos (Equipe)</div>
+            </div>
           </div>
-          <div style="width:1px; background:var(--border-light); height:50px;"></div>
-          <div style="text-align:center;">
-            <div style="font-size:36px; font-weight:900; color:var(--cyan); letter-spacing:-1.5px; line-height:1;" id="rel-atividade-prospecao">0</div>
-            <div style="font-size:12px; color:var(--text-secondary); margin-top:6px; font-weight:500;">Prospecções</div>
+
+          <div class="rel-equipe-total-sep"></div>
+
+          <div class="rel-equipe-total-item">
+            <div class="rel-equipe-total-icon rel-equipe-total-icon--purple">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/></svg>
+            </div>
+            <div>
+              <div class="rel-equipe-total-val" id="rel-totais-prospeccoes">0</div>
+              <div class="rel-equipe-total-lbl">Total de Prospecções (Equipe)</div>
+            </div>
+          </div>
+
+          <div class="rel-equipe-total-sep"></div>
+
+          <div class="rel-equipe-total-item">
+            <div class="rel-equipe-total-icon rel-equipe-total-icon--green">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+            <div>
+              <div class="rel-equipe-total-val" id="rel-totais-acoes">0</div>
+              <div class="rel-equipe-total-lbl">Volume Geral de Atividades</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grid de Cards de Cada Membro -->
+        <div class="rel-membros-grid" id="rel-membros-grid">
+          <div style="grid-column: 1 / -1; text-align:center; padding: 24px; color: var(--text-secondary); font-size:13px;">
+            Carregando métricas de todos os membros...
           </div>
         </div>
       </div>
@@ -3712,6 +3749,7 @@ function _aplicarPeriodo(inicio, fim, label = null) {
   _carregarPerformanceVendedor(_dataInicio, _dataFim);
   _carregarNoShow(_dataInicio, _dataFim);
   _carregarLtvMetrics(_dataInicio, _dataFim);
+  _carregarAtividadesEquipe(_dataInicio, _dataFim);
   _carregarSetupMedio(_dataInicio, _dataFim);
   _carregarNPS(_dataInicio, _dataFim);
   _carregarConclusaoAtividades(_dataInicio, _dataFim);
@@ -3868,43 +3906,194 @@ function _handleClickFora(e) {
   }
 }
 
-async function _carregarAtividadeAdmin(vendedorId, dataInicio, dataFim) {
-  const elContatos = document.getElementById('rel-atividade-contatos');
-  const elProps    = document.getElementById('rel-atividade-prospecao');
+async function _carregarAtividadesEquipe(dataInicio, dataFim) {
+  const gridEl = document.getElementById('rel-membros-grid');
+  const totContatosEl = document.getElementById('rel-totais-contatos');
+  const totPropsEl = document.getElementById('rel-totais-prospeccoes');
+  const totAcoesEl = document.getElementById('rel-totais-acoes');
+  const inputInicio = document.getElementById('rel-atividade-inicio');
+  const inputFim = document.getElementById('rel-atividade-fim');
 
-  if (!vendedorId || !dataInicio || !dataFim) {
-    if (elContatos) elContatos.textContent = '—';
-    if (elProps)    elProps.textContent    = '—';
-    return;
-  }
+  const ini = dataInicio || inputInicio?.value || _dataInicio;
+  const fim = dataFim || inputFim?.value || _dataFim;
 
-  const res = await DiaFinalizado.getEstatisticasCustom(vendedorId, dataInicio, dataFim);
-  if (res && !res.error) {
-    if (elContatos) elContatos.textContent = res.contatos || 0;
-    if (elProps)    elProps.textContent    = res.prospeccoes || 0;
+  if (inputInicio && ini) inputInicio.value = ini;
+  if (inputFim && fim) inputFim.value = fim;
+
+  if (!gridEl) return;
+
+  gridEl.innerHTML = `
+    <div style="grid-column: 1 / -1; text-align:center; padding: 28px 16px; color: var(--text-secondary); font-size:13px;">
+      Carregando métricas de todos os membros da equipe...
+    </div>
+  `;
+
+  try {
+    // 1. Busca todos os usuários ativos
+    const { data: users, error: userErr } = await supabase
+      .from('usuarios')
+      .select('user_id, user_nome, user_cargo, user_avatar')
+      .eq('user_status', 'Ativo')
+      .order('user_nome', { ascending: true });
+
+    if (userErr) throw userErr;
+
+    // 2. Busca todas as atividades registradas no período (passando userId = null para trazer todos)
+    const res = await DiaFinalizado.getEstatisticasCustom(null, ini, fim);
+    const rows = res?.rows || [];
+
+    // 3. Agrupa por user_id
+    const userStats = {};
+    let grandTotalContatos = 0;
+    let grandTotalProps = 0;
+
+    for (const r of rows) {
+      const uid = r.user_id;
+      if (!userStats[uid]) {
+        userStats[uid] = {
+          contatos: 0,
+          prospeccoes: 0,
+          dias: new Set(),
+          logs: []
+        };
+      }
+      const c = Number(r.quantidade_contatos_realizados) || 0;
+      const p = Number(r.quantidade_prospecao) || 0;
+      userStats[uid].contatos += c;
+      userStats[uid].prospeccoes += p;
+      grandTotalContatos += c;
+      grandTotalProps += p;
+
+      const dataStr = r.criado_em ? r.criado_em.substring(0, 10) : '';
+      if (dataStr) userStats[uid].dias.add(dataStr);
+
+      userStats[uid].logs.push({
+        data: dataStr,
+        contatos: c,
+        prospeccoes: p
+      });
+    }
+
+    // 4. Atualiza os totais consolidados da equipe
+    if (totContatosEl) totContatosEl.textContent = grandTotalContatos.toLocaleString('pt-BR');
+    if (totPropsEl) totPropsEl.textContent = grandTotalProps.toLocaleString('pt-BR');
+    if (totAcoesEl) totAcoesEl.textContent = (grandTotalContatos + grandTotalProps).toLocaleString('pt-BR');
+
+    // 5. Monta a lista com os dados de cada membro
+    const membros = (users || []).map(u => {
+      const st = userStats[u.user_id] || { contatos: 0, prospeccoes: 0, dias: new Set(), logs: [] };
+      const totalAcoes = st.contatos + st.prospeccoes;
+      return {
+        ...u,
+        contatos: st.contatos,
+        prospeccoes: st.prospeccoes,
+        totalAcoes,
+        diasCount: st.dias.size,
+        logs: st.logs.sort((a, b) => b.data.localeCompare(a.data))
+      };
+    });
+
+    // Ordena: maior volume de ações primeiro, depois por nome
+    membros.sort((a, b) => {
+      if (b.totalAcoes !== a.totalAcoes) return b.totalAcoes - a.totalAcoes;
+      return a.user_nome.localeCompare(b.user_nome);
+    });
+
+    const maxAcoes = Math.max(...membros.map(m => m.totalAcoes), 1);
+
+    if (membros.length === 0) {
+      gridEl.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding: 24px; color: var(--text-secondary);">Nenhum membro ativo encontrado</div>`;
+      return;
+    }
+
+    gridEl.innerHTML = membros.map((m, idx) => {
+      const iniciais = (m.user_nome || 'U').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+      const avatarHtml = m.user_avatar
+        ? `<img src="${m.user_avatar}" class="rel-membro-avatar-img" alt="${m.user_nome}">`
+        : `<div class="rel-membro-avatar-fallback">${iniciais}</div>`;
+
+      const pctContatos = m.totalAcoes > 0 ? Math.round((m.contatos / m.totalAcoes) * 100) : 50;
+
+      return `
+        <div class="rel-membro-card" data-membro-idx="${idx}">
+          <div class="rel-membro-top">
+            <div class="rel-membro-info">
+              ${avatarHtml}
+              <div style="min-width: 0;">
+                <div class="rel-membro-name" title="${m.user_nome}">${m.user_nome}</div>
+                <div class="rel-membro-cargo">${m.user_cargo || 'Comercial'}</div>
+              </div>
+            </div>
+            <span class="rel-membro-badge">${m.diasCount} dia${m.diasCount !== 1 ? 's' : ''}</span>
+          </div>
+
+          <div class="rel-membro-stats">
+            <div class="rel-membro-stat-box">
+              <span class="rel-membro-stat-val val--cyan">${m.contatos}</span>
+              <span class="rel-membro-stat-lbl">📞 Contatos</span>
+            </div>
+            <div class="rel-membro-stat-box">
+              <span class="rel-membro-stat-val val--purple">${m.prospeccoes}</span>
+              <span class="rel-membro-stat-lbl">🎯 Prospecções</span>
+            </div>
+          </div>
+
+          <div class="rel-membro-footer">
+            <div class="rel-membro-footer-line">
+              <span>Volume de Ações</span>
+              <b>${m.totalAcoes}</b>
+            </div>
+            <div class="rel-mini-bar" style="height: 6px; margin-top: 4px; background: rgba(139, 92, 246, 0.25);">
+              <div class="rel-mini-bar-fill rel-mini-bar-fill--cyan" style="width:${pctContatos}%;" title="${pctContatos}% Contatos"></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Atacha Hover Cards nos cards dos membros
+    gridEl.querySelectorAll('.rel-membro-card').forEach(card => {
+      const idx = parseInt(card.dataset.membroIdx, 10);
+      const m = membros[idx];
+      if (!m) return;
+
+      card.addEventListener('mouseenter', () => {
+        const items = m.logs.length > 0
+          ? m.logs.slice(0, 10).map(l => ({
+              name: `Dia ${_formatarExibicao(l.data)}`,
+              sub: `${l.contatos} contatos realizados`,
+              val: `${l.prospeccoes} prospecções`
+            }))
+          : [{ name: 'Sem registros no período', sub: 'Nenhum dia finalizado pelo vendedor', val: '0 ações' }];
+
+        _showKpiPopover(card, {
+          title: `Atividades: ${m.user_nome}`,
+          badge: `${m.totalAcoes} Ações`,
+          items,
+          footer: `<b>${m.contatos}</b> Contatos + <b>${m.prospeccoes}</b> Prospecções em <b>${m.diasCount}</b> dia${m.diasCount !== 1 ? 's' : ''}`,
+          formula: `Média diária: ${(m.totalAcoes / (m.diasCount || 1)).toFixed(1)} ações/dia`
+        });
+      });
+
+      card.addEventListener('mouseleave', _hideKpiPopover);
+    });
+
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar atividades da equipe:', err.message);
+    if (gridEl) gridEl.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding: 24px; color: var(--danger);">Erro ao carregar dados da equipe</div>`;
   }
 }
 
-function _bindAtividadeAdminEvents() {
-  const selVendedor = document.getElementById('rel-atividade-vendedor');
+function _bindAtividadesEquipeEvents() {
   const inputInicio = document.getElementById('rel-atividade-inicio');
   const inputFim    = document.getElementById('rel-atividade-fim');
 
-  if (!selVendedor || !inputInicio || !inputFim) return;
+  if (!inputInicio || !inputFim) return;
 
-  const update = () => _carregarAtividadeAdmin(selVendedor.value, inputInicio.value, inputFim.value);
-  
-  selVendedor.addEventListener('change', update);
+  const update = () => _carregarAtividadesEquipe(inputInicio.value, inputFim.value);
+
   inputInicio.addEventListener('change', update);
   inputFim.addEventListener('change', update);
-
-  Usuarios.getVendedoresAtivos().then(res => {
-    if (res.error || !res.data) return;
-    selVendedor.innerHTML = res.data.map(v => `<option value="${v.user_id}">${v.user_nome}</option>`).join('');
-    if (res.data.length > 0) {
-      update();
-    }
-  });
 }
 
 // ─── Módulo da página ────────────────────────────────────────
@@ -3923,7 +4112,7 @@ export default {
     _bindTabEvents();
     _bindPeriodEvents();
     _bindInvestimentoEvents();
-    _bindAtividadeAdminEvents();
+    _bindAtividadesEquipeEvents();
     // Carregar valor de investimento salvo primeiro
     await _carregarInvestimento();
     // Aplicar período padrão ao montar (dispara _carregarCAC e demais métricas)
