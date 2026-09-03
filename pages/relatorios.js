@@ -3979,19 +3979,29 @@ async function _carregarAtividadesEquipe(dataInicio, dataFim) {
     if (totPropsEl) totPropsEl.textContent = grandTotalProps.toLocaleString('pt-BR');
     if (totAcoesEl) totAcoesEl.textContent = (grandTotalContatos + grandTotalProps).toLocaleString('pt-BR');
 
-    // 5. Monta a lista com os dados de cada membro
-    const membros = (users || []).map(u => {
-      const st = userStats[u.user_id] || { contatos: 0, prospeccoes: 0, dias: new Set(), logs: [] };
-      const totalAcoes = st.contatos + st.prospeccoes;
-      return {
-        ...u,
-        contatos: st.contatos,
-        prospeccoes: st.prospeccoes,
-        totalAcoes,
-        diasCount: st.dias.size,
-        logs: st.logs.sort((a, b) => b.data.localeCompare(a.data))
-      };
-    });
+    // 5. Monta a lista com os membros que possuem ações > 0 no período
+    const membros = (users || [])
+      .map(u => {
+        const st = userStats[u.user_id] || { contatos: 0, prospeccoes: 0, dias: new Set(), logs: [] };
+        const totalAcoes = st.contatos + st.prospeccoes;
+        return {
+          ...u,
+          contatos: st.contatos,
+          prospeccoes: st.prospeccoes,
+          totalAcoes,
+          diasCount: st.dias.size,
+          logs: st.logs.sort((a, b) => b.data.localeCompare(a.data))
+        };
+      })
+      .filter(m => m.totalAcoes > 0);
+
+    // Atualiza badge de contagem de membros ativos
+    const badgeTotalEl = document.getElementById('rel-atividade-badge-total');
+    if (badgeTotalEl) {
+      badgeTotalEl.textContent = membros.length > 0
+        ? `${membros.length} Membro${membros.length !== 1 ? 's' : ''} com Atividade`
+        : 'Sem registros';
+    }
 
     // Ordena: maior volume de ações primeiro, depois por nome
     membros.sort((a, b) => {
@@ -4002,7 +4012,13 @@ async function _carregarAtividadesEquipe(dataInicio, dataFim) {
     const maxAcoes = Math.max(...membros.map(m => m.totalAcoes), 1);
 
     if (membros.length === 0) {
-      gridEl.innerHTML = `<div style="grid-column: 1 / -1; text-align:center; padding: 24px; color: var(--text-secondary);">Nenhum membro ativo encontrado</div>`;
+      gridEl.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align:center; padding: 32px 16px; color: var(--text-secondary);">
+          <div style="font-size: 26px; margin-bottom: 6px;">📋</div>
+          <div style="font-weight: 600; font-size: 13.5px; color: var(--black);">Nenhuma atividade registrada no período selecionado</div>
+          <div style="font-size: 11.5px; margin-top: 4px; color: var(--text-secondary);">Altere o filtro de datas acima para visualizar outros períodos da equipe.</div>
+        </div>
+      `;
       return;
     }
 
