@@ -10,7 +10,8 @@
 
 import UserStore from '../js/userStore.js';
 import { supabase } from '../js/supabase.js';
-import { DiaFinalizado, Usuarios } from '../js/db.js';
+import { DiaFinalizado, Usuarios, Negocios } from '../js/db.js';
+import DualLineChart from '../charts/DualLineChart.js';
 
 // ─── Estado local ───────────────────────────────────────────
 let _tabAtual              = 'comercial'; // 'comercial' | 'operacoes' | 'master'
@@ -18,6 +19,16 @@ let _dataInicio            = '';          // 'YYYY-MM-DD'
 let _dataFim               = '';          // 'YYYY-MM-DD'
 let _periodLabel           = '';          // texto exibido no badge
 let _investimentoMarketing = 0;           // numeric alocado por mês em relatorios_investimentos
+
+const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+// ─── Gráficos de evolução anual (por setor) ──────────────────
+let _chartComercial        = null;
+let _chartOperacoes        = null;
+let _chartMaster           = null;
+let _dadosGraficoComercial = null;
+let _dadosGraficoOperacoes = null;
+let _dadosGraficoMaster    = null;
 
 // ─── Helpers de data ────────────────────────────────────────
 
@@ -152,6 +163,36 @@ function _miniBar(pct, color = 'cyan', label = null) {
         <div class="rel-mini-bar-fill rel-mini-bar-fill--${color}" style="width:${pct}%"></div>
       </div>
       <span class="rel-mini-bar-pct">${displayLabel}</span>
+    </div>
+  `;
+}
+
+// ─── Card de Gráfico de Evolução Anual (por setor) ───────────
+function _htmlGraficoAnualCard({ id, canvasId, iconColor, icon, title, subtitle, legend }) {
+  return `
+    <div class="rel-detail-card" id="${id}" style="margin-bottom:24px;">
+      <div class="rel-detail-card-header">
+        <div class="rel-detail-card-title">
+          <div class="rel-kpi-icon rel-kpi-icon--${iconColor}">
+            ${icon}
+          </div>
+          <div>
+            <h3>${title}</h3>
+            <p>${subtitle}</p>
+          </div>
+        </div>
+        <div class="chart-legend">
+          ${legend.map(l => `
+            <span class="chart-legend-item">
+              <span class="chart-legend-line" style="background:${l.color}"></span>
+              ${l.label}
+            </span>
+          `).join('')}
+        </div>
+      </div>
+      <div style="position:relative; height:260px;">
+        <canvas id="${canvasId}"></canvas>
+      </div>
     </div>
   `;
 }
@@ -599,6 +640,21 @@ function _htmlSectionComercial() {
         <span class="rel-section-badge rel-section-badge--comercial">12 métricas</span>
       </div>
 
+      <!-- Grupo: Evolução Anual -->
+      <div class="rel-metric-group-label">Evolução Anual</div>
+      ${_htmlGraficoAnualCard({
+        id: 'rel-grafico-comercial',
+        canvasId: 'rel-chart-comercial',
+        iconColor: 'cyan',
+        icon: `<svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="14 6 21 6 21 13"/></svg>`,
+        title: `Faturamento & Ticket Médio — ${new Date().getFullYear()}`,
+        subtitle: 'Receita de negócios ganhos e valor médio por contrato, mês a mês',
+        legend: [
+          { label: 'Faturamento',  color: '#1ACEEE' },
+          { label: 'Ticket Médio', color: '#22c55e' },
+        ],
+      })}
+
       <!-- Card: Investimento em Marketing & Vendas -->
       ${investimentoCard}
 
@@ -887,6 +943,21 @@ function _htmlSectionOperacoes() {
         </div>
         <span class="rel-section-badge rel-section-badge--operacoes">9 métricas</span>
       </div>
+
+      <!-- Grupo: Evolução Anual -->
+      <div class="rel-metric-group-label">Evolução Anual</div>
+      ${_htmlGraficoAnualCard({
+        id: 'rel-grafico-operacoes',
+        canvasId: 'rel-chart-operacoes',
+        iconColor: 'blue',
+        icon: `<svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="14 6 21 6 21 13"/></svg>`,
+        title: `Clientes Ativos & Churn — ${new Date().getFullYear()}`,
+        subtitle: 'Tamanho da carteira de clientes e cancelamentos, mês a mês',
+        legend: [
+          { label: 'Número de Clientes', color: '#3b82f6' },
+          { label: 'Churn',              color: '#ef4444' },
+        ],
+      })}
 
       <!-- Grupo: Tempo & Capacidade -->
       <div class="rel-metric-group-label">Tempo & Capacidade</div>
@@ -1223,6 +1294,21 @@ function _htmlSectionMaster() {
         </div>
         <span class="rel-section-badge rel-section-badge--master">14 métricas</span>
       </div>
+
+      <!-- Grupo: Evolução Anual -->
+      <div class="rel-metric-group-label">Evolução Anual</div>
+      ${_htmlGraficoAnualCard({
+        id: 'rel-grafico-master',
+        canvasId: 'rel-chart-master',
+        iconColor: 'amber',
+        icon: `<svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="14 6 21 6 21 13"/></svg>`,
+        title: `Faturamento & Custo — ${new Date().getFullYear()}`,
+        subtitle: 'Receita faturada e despesas da agência, mês a mês',
+        legend: [
+          { label: 'Faturamento', color: '#1ACEEE' },
+          { label: 'Custo',       color: '#ef4444' },
+        ],
+      })}
 
       <!-- Grupo: Receita Recorrente -->
       <div class="rel-metric-group-label">Receita Recorrente & LTV</div>
@@ -4700,6 +4786,135 @@ async function _carregarNPSDetalhado(inicio, fim) {
   }
 }
 
+// ─── Gráficos de Evolução Anual (por setor) ─────────────────────────────────
+/**
+ * Independentes do período selecionado no topo — sempre mostram o ano corrente
+ * inteiro, um ponto por mês.
+ */
+
+async function _carregarGraficoComercial() {
+  try {
+    const { data: negocios, error } = await Negocios.getAnoAtualPorVendedor(null);
+    if (error) throw error;
+
+    const faturamento = Array(12).fill(0);
+    const contagem     = Array(12).fill(0);
+
+    (negocios ?? []).forEach(n => {
+      if (n.negocio_status !== 'Ganho' || !n.data_fechamento) return;
+      const mes = new Date(n.data_fechamento).getUTCMonth();
+      faturamento[mes] += Number(n.negocio_valor) || 0;
+      contagem[mes]++;
+    });
+
+    const ticketMedio = faturamento.map((val, i) => contagem[i] > 0 ? val / contagem[i] : 0);
+
+    _dadosGraficoComercial = { labels: MESES_ABREV, faturamento, ticketMedio };
+    if (_tabAtual === 'comercial') _renderizarGraficoComercial();
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar gráfico Comercial:', err.message);
+  }
+}
+
+function _renderizarGraficoComercial() {
+  if (!_dadosGraficoComercial || !document.getElementById('rel-chart-comercial')) return;
+  if (!_chartComercial) _chartComercial = new DualLineChart('rel-chart-comercial');
+  _chartComercial.init({
+    labels: _dadosGraficoComercial.labels,
+    series1: { data: _dadosGraficoComercial.faturamento,  label: 'Faturamento',  color: '#1ACEEE', format: 'currency', axis: 'y' },
+    series2: { data: _dadosGraficoComercial.ticketMedio,  label: 'Ticket Médio', color: '#22c55e', format: 'currency', axis: 'y1' },
+  });
+}
+
+async function _carregarGraficoOperacoes() {
+  try {
+    const { data: clientes, error } = await supabase
+      .from('clientes')
+      .select('cliente_id, criado_em, cliente_churn, data_churn');
+    if (error) throw error;
+
+    const ano      = new Date().getUTCFullYear();
+    const mesAtual = new Date().getUTCMonth();
+    const ativos   = Array(12).fill(null);
+    const churn    = Array(12).fill(null);
+
+    for (let m = 0; m <= mesAtual; m++) {
+      const fimMes = new Date(Date.UTC(ano, m + 1, 0, 23, 59, 59, 999));
+
+      ativos[m] = (clientes ?? []).filter(c => {
+        if (!c.criado_em || new Date(c.criado_em) > fimMes) return false;
+        if (c.cliente_churn && c.data_churn && new Date(c.data_churn) <= fimMes) return false;
+        return true;
+      }).length;
+
+      churn[m] = (clientes ?? []).filter(c => {
+        if (!c.cliente_churn || !c.data_churn) return false;
+        const d = new Date(c.data_churn);
+        return d.getUTCFullYear() === ano && d.getUTCMonth() === m;
+      }).length;
+    }
+
+    _dadosGraficoOperacoes = { labels: MESES_ABREV, ativos, churn };
+    if (_tabAtual === 'operacoes') _renderizarGraficoOperacoes();
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar gráfico Operacional:', err.message);
+  }
+}
+
+function _renderizarGraficoOperacoes() {
+  if (!_dadosGraficoOperacoes || !document.getElementById('rel-chart-operacoes')) return;
+  if (!_chartOperacoes) _chartOperacoes = new DualLineChart('rel-chart-operacoes');
+  _chartOperacoes.init({
+    labels: _dadosGraficoOperacoes.labels,
+    series1: { data: _dadosGraficoOperacoes.ativos, label: 'Número de Clientes', color: '#3b82f6', format: 'number', axis: 'y' },
+    series2: { data: _dadosGraficoOperacoes.churn,  label: 'Churn',              color: '#ef4444', format: 'number', axis: 'y1' },
+  });
+}
+
+async function _carregarGraficoMaster() {
+  try {
+    const ano       = new Date().getUTCFullYear();
+    const inicioISO = new Date(Date.UTC(ano, 0, 1)).toISOString();
+    const fimISO    = new Date(Date.UTC(ano, 11, 31, 23, 59, 59, 999)).toISOString();
+
+    const [{ data: receitas, error: errRec }, { data: despesas, error: errDes }] = await Promise.all([
+      supabase.from('financeiro_receitas').select('receita_valor, data_vencimento')
+        .gte('data_vencimento', inicioISO).lte('data_vencimento', fimISO),
+      supabase.from('financeiro_despesas').select('despesa_valor, data_vencimento')
+        .gte('data_vencimento', inicioISO).lte('data_vencimento', fimISO),
+    ]);
+    if (errRec) throw errRec;
+    if (errDes) throw errDes;
+
+    const faturamento = Array(12).fill(0);
+    const custo        = Array(12).fill(0);
+
+    (receitas ?? []).forEach(r => {
+      const mes = new Date(r.data_vencimento).getUTCMonth();
+      faturamento[mes] += Number(r.receita_valor) || 0;
+    });
+    (despesas ?? []).forEach(d => {
+      const mes = new Date(d.data_vencimento).getUTCMonth();
+      custo[mes] += Number(d.despesa_valor) || 0;
+    });
+
+    _dadosGraficoMaster = { labels: MESES_ABREV, faturamento, custo };
+    if (_tabAtual === 'master') _renderizarGraficoMaster();
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar gráfico Master:', err.message);
+  }
+}
+
+function _renderizarGraficoMaster() {
+  if (!_dadosGraficoMaster || !document.getElementById('rel-chart-master')) return;
+  if (!_chartMaster) _chartMaster = new DualLineChart('rel-chart-master');
+  _chartMaster.init({
+    labels: _dadosGraficoMaster.labels,
+    series1: { data: _dadosGraficoMaster.faturamento, label: 'Faturamento', color: '#1ACEEE', format: 'currency', axis: 'y' },
+    series2: { data: _dadosGraficoMaster.custo,        label: 'Custo',      color: '#ef4444', format: 'currency', axis: 'y' },
+  });
+}
+
 // ─── Aplicar período ─────────────────────────────────────────
 
 /**
@@ -4801,6 +5016,12 @@ function _bindTabEvents() {
       document.querySelectorAll('.rel-section').forEach(s => s.classList.remove('active'));
       const secao = document.getElementById(`rel-section-${tab}`);
       if (secao) secao.classList.add('active');
+
+      // Renderiza (ou re-renderiza) o gráfico anual da aba — o canvas só tem
+      // dimensões corretas depois que a section deixa de estar `display:none`.
+      if (tab === 'comercial') _renderizarGraficoComercial();
+      if (tab === 'operacoes') _renderizarGraficoOperacoes();
+      if (tab === 'master')    _renderizarGraficoMaster();
     });
   });
 }
@@ -5139,6 +5360,11 @@ export default {
     await _carregarInvestimento();
     // Aplicar período padrão ao montar (dispara _carregarCAC e demais métricas)
     _aplicarPeriodo(_dataInicio, _dataFim, _periodLabel);
+
+    // Gráficos de evolução anual — independentes do período selecionado
+    _carregarGraficoComercial();
+    _carregarGraficoOperacoes();
+    _carregarGraficoMaster();
   },
 
   onDestroy() {
@@ -5150,5 +5376,12 @@ export default {
     }
     const modal = document.getElementById('rel-invest-modal-overlay');
     if (modal) modal.remove();
+
+    _chartComercial?.destroy(); _chartComercial = null;
+    _chartOperacoes?.destroy(); _chartOperacoes = null;
+    _chartMaster?.destroy();    _chartMaster    = null;
+    _dadosGraficoComercial = null;
+    _dadosGraficoOperacoes = null;
+    _dadosGraficoMaster    = null;
   },
 };
