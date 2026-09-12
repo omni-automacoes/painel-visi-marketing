@@ -14,6 +14,7 @@ const ROUTES = {
   pipeline:          () => import('../pages/pipeline.js'),
   clientes:          () => import('../pages/clientes.js'),
   tarefas:           () => import('../pages/tarefas.js'),
+  agenda:            () => import('../pages/agenda.js'),
   relatorios:        () => import('../pages/relatorios.js'),
   'email-marketing': () => import('../pages/email-marketing.js'),
   configuracoes:     () => import('../pages/configuracoes.js'),

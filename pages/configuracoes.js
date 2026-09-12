@@ -4,9 +4,11 @@
  */
 
 import UserStore    from '../js/userStore.js';
+import router       from '../js/router.js';
 import { supabase } from '../js/supabase.js';
 import { Pipelines, EtapasPipeline, MotivosPerdas, Usuarios, Metas } from '../js/db.js';
 import { formatCurrency } from '../js/utils.js';
+import { iniciarConexao, getStatus, desconectar } from '../js/googleCalendar.js';
 
 // Bucket de avatares
 const AVATAR_BUCKET = 'visi-marketing';
@@ -54,13 +56,17 @@ export default {
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               Motivos de Perda
             </button>
+            <button class="config-nav-item" data-section="integracoes" id="config-nav-integracoes">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Integrações
+            </button>
           </div>
         </aside>
- 
+
         <div class="config-content" id="config-content">
           ${isAdmin
-            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMetas() + _renderSectionMeuPerfil(false) + _renderSectionMotivosPerdas(false)
-            : _renderSectionMeuPerfil(true) + _renderSectionMotivosPerdas(false)}
+            ? _renderSectionNovoUsuario() + _renderSectionFunil() + _renderSectionUsuarios() + _renderSectionMetas() + _renderSectionMeuPerfil(false) + _renderSectionMotivosPerdas(false) + _renderSectionIntegracoes()
+            : _renderSectionMeuPerfil(true) + _renderSectionMotivosPerdas(false) + _renderSectionIntegracoes()}
         </div>
       </div>
 
@@ -177,6 +183,7 @@ export default {
     if (!UserStore.isAdmin()) {
       _loadMotivos();
     }
+    _handleGoogleRedirect();
   },
 
   onDestroy() {
@@ -186,6 +193,31 @@ export default {
     _metasLoaded = false;
   },
 };
+
+/**
+ * Trata o retorno do fluxo OAuth do Google (redirect do n8n via
+ * `#configuracoes/google-conectado` ou `#configuracoes/google-erro`):
+ * abre a seção Integrações, mostra feedback e limpa o parâmetro do hash.
+ */
+function _handleGoogleRedirect() {
+  const param = router.currentParam();
+  if (param !== 'google-conectado' && param !== 'google-erro' && param !== 'integracoes') return;
+
+  document.querySelectorAll('.config-nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('config-nav-integracoes')?.classList.add('active');
+  document.querySelectorAll('.config-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-integracoes')?.classList.add('active');
+
+  _loadIntegracoes();
+
+  if (param === 'google-conectado') {
+    _showIntegracaoFeedback('success', 'Agenda do Google conectada com sucesso!');
+  } else if (param === 'google-erro') {
+    _showIntegracaoFeedback('error', 'Não foi possível conectar sua agenda do Google. Tente novamente.');
+  }
+
+  if (param !== 'integracoes') router.navigate('configuracoes');
+}
 
 // ── HTML das seções ────────────────────────────────────────────────
 
@@ -446,6 +478,137 @@ function _renderSectionFunil() {
       </button>
     </section>
   `;
+}
+
+// ── Integrações ────────────────────────────────────────────────────
+
+function _renderSectionIntegracoes() {
+  return `
+    <section class="config-section" id="section-integracoes">
+      <div class="config-section-header">
+        <div class="config-section-icon" style="background: rgba(26, 206, 238, 0.1); color: var(--cyan);">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div>
+          <h2 class="config-section-title">Integrações</h2>
+          <p class="config-section-desc">Conecte sua conta do Google para sincronizar sua agenda com o CRM.</p>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <div class="integracao-item">
+          <div class="integracao-item-info">
+            <div class="integracao-item-icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div>
+              <p class="integracao-item-titulo">Google Calendar</p>
+              <p class="integracao-item-status" id="integracao-google-status">Verificando conexão…</p>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-integracao-google" disabled>Verificando…</button>
+        </div>
+        <div class="config-form-feedback" id="integracao-feedback" aria-live="polite"></div>
+      </div>
+    </section>
+  `;
+}
+
+async function _loadIntegracoes() {
+  const statusEl = document.getElementById('integracao-google-status');
+  const btnEl    = document.getElementById('btn-integracao-google');
+  const userId   = UserStore.getUserId();
+  if (!statusEl || !btnEl || !userId) return;
+
+  statusEl.textContent = 'Verificando conexão…';
+  btnEl.disabled = true;
+  btnEl.textContent = 'Verificando…';
+
+  try {
+    const { conectado, google_email } = await getStatus(userId);
+    _renderIntegracaoEstado(conectado, google_email);
+  } catch (err) {
+    console.error('[Configurações] Erro ao verificar status do Google Calendar:', err);
+    statusEl.textContent = 'Não foi possível verificar a conexão agora.';
+    btnEl.disabled = false;
+    btnEl.textContent = 'Tentar novamente';
+    btnEl.onclick = () => _loadIntegracoes();
+  }
+}
+
+function _renderIntegracaoEstado(conectado, googleEmail) {
+  const statusEl = document.getElementById('integracao-google-status');
+  const btnEl    = document.getElementById('btn-integracao-google');
+  if (!statusEl || !btnEl) return;
+
+  btnEl.disabled = false;
+
+  if (conectado) {
+    statusEl.innerHTML = `<span class="integracao-badge integracao-badge--on">Conectado</span> como ${_esc(googleEmail || '')}`;
+    btnEl.textContent = 'Desconectar';
+    btnEl.className = 'btn btn-ghost';
+    btnEl.onclick = () => _desconectarGoogle();
+  } else {
+    statusEl.innerHTML = `<span class="integracao-badge integracao-badge--off">Não conectado</span>`;
+    btnEl.textContent = 'Conectar com Google';
+    btnEl.className = 'btn btn-primary';
+    btnEl.onclick = () => _conectarGoogle();
+  }
+}
+
+async function _conectarGoogle() {
+  const btnEl  = document.getElementById('btn-integracao-google');
+  const userId = UserStore.getUserId();
+  if (!userId || !btnEl) return;
+
+  btnEl.disabled = true;
+  btnEl.textContent = 'Redirecionando…';
+
+  try {
+    const url = await iniciarConexao(userId);
+    window.location.href = url;
+  } catch (err) {
+    console.error('[Configurações] Erro ao iniciar conexão com o Google:', err);
+    btnEl.disabled = false;
+    btnEl.textContent = 'Conectar com Google';
+    _showIntegracaoFeedback('error', 'Não foi possível iniciar a conexão. Tente novamente.');
+  }
+}
+
+async function _desconectarGoogle() {
+  if (!confirm('Desconectar sua agenda do Google? Você deixará de ver e editar seus eventos pelo CRM até reconectar.')) return;
+
+  const btnEl  = document.getElementById('btn-integracao-google');
+  const userId = UserStore.getUserId();
+  if (!userId || !btnEl) return;
+
+  btnEl.disabled = true;
+  btnEl.textContent = 'Desconectando…';
+
+  try {
+    await desconectar(userId);
+    _renderIntegracaoEstado(false, null);
+    _showIntegracaoFeedback('success', 'Agenda desconectada com sucesso.');
+  } catch (err) {
+    console.error('[Configurações] Erro ao desconectar Google:', err);
+    _renderIntegracaoEstado(true, null);
+    _showIntegracaoFeedback('error', 'Não foi possível desconectar agora. Tente novamente.');
+  }
+}
+
+function _showIntegracaoFeedback(type, msg) {
+  const el = document.getElementById('integracao-feedback');
+  if (!el) return;
+  const icons = {
+    success: `<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>`,
+    error:   `<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`,
+  };
+  el.innerHTML = `
+    <div class="config-feedback config-feedback--${type}" style="margin-top: 16px;">
+      <svg viewBox="0 0 24 24">${icons[type] || icons.success}</svg>
+      <span>${msg}</span>
+    </div>`;
+  setTimeout(() => { el.innerHTML = ''; }, 5000);
 }
 
 // ── Motivos de Perda ──────────────────────────────────────────────
@@ -1237,6 +1400,7 @@ function _bindEvents() {
       if (section === 'motivos-perda') _loadMotivos();
       if (section === 'usuarios') _loadUsuarios();
       if (section === 'metas') _loadMetas();
+      if (section === 'integracoes') _loadIntegracoes();
     });
   });
 
