@@ -19,7 +19,6 @@ let _eventos           = [];
 let _conectado         = false;
 let _googleEmail       = null;
 let _erro              = null;
-let _isAdmin           = false;
 let _usuarioAlvo       = null;
 let _usuarios          = [];
 
@@ -33,7 +32,6 @@ const MODOS = [
 
 export default {
   render() {
-    const isAdmin = UserStore.isAdmin();
     return `
       <div class="page-header">
         <div class="page-title-block">
@@ -66,10 +64,9 @@ export default {
               <button class="agenda-view-btn${_modoVisualizacao === m.valor ? ' active' : ''}" data-modo="${m.valor}">${m.label}</button>
             `).join('')}
           </div>
-          ${isAdmin ? `
           <div class="agenda-user-select-wrap">
             <select class="agenda-user-select" id="agenda-user-select"></select>
-          </div>` : ''}
+          </div>
         </div>
       </div>
 
@@ -80,7 +77,6 @@ export default {
   },
 
   async onMount() {
-    _isAdmin     = UserStore.isAdmin();
     _usuarioAlvo = UserStore.getUserId();
     if (!_usuarioAlvo) return;
 
@@ -97,20 +93,18 @@ export default {
       _carregarEventosERenderizar();
     });
 
-    if (_isAdmin) {
-      const { data } = await Usuarios.getVendedoresAtivos();
-      _usuarios = data || [];
-      const select = document.getElementById('agenda-user-select');
-      if (select) {
-        select.innerHTML = _usuarios
-          .map(u => `<option value="${u.user_id}">${_esc(u.user_nome)}</option>`)
-          .join('');
-        select.value = _usuarioAlvo;
-        select.addEventListener('change', () => {
-          _usuarioAlvo = select.value;
-          _carregarTudo();
-        });
-      }
+    const { data } = await Usuarios.getVendedoresAtivos();
+    _usuarios = data || [];
+    const select = document.getElementById('agenda-user-select');
+    if (select) {
+      select.innerHTML = _usuarios
+        .map(u => `<option value="${u.user_id}">${_esc(u.user_nome)}</option>`)
+        .join('');
+      select.value = _usuarioAlvo;
+      select.addEventListener('change', () => {
+        _usuarioAlvo = select.value;
+        _carregarTudo();
+      });
     }
 
     await _carregarTudo();
