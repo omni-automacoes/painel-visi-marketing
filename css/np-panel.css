@@ -689,6 +689,50 @@
 .np-noshow-toggle:hover:not(:disabled) { border-color: #F97316; color: #F97316; background: #FFF7ED; }
 .np-noshow-toggle--done { background: #FFF7ED; border-color: #F97316; color: #F97316; }
 
+/* ── Seção: Qualificação de Lead (SQL) ───────────────── */
+.np-qualificacao-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 18px 16px;
+  background: #FFFFFF;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  flex-shrink: 0;
+}
+
+.np-qualificacao-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #94A3B8;
+}
+
+.np-qualificado-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  background: #FFFFFF;
+  color: #475569;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+  width: 100%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  line-height: 1;
+}
+.np-qualificado-toggle:disabled { opacity: 0.6; cursor: not-allowed; }
+.np-qualificado-toggle:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; background: #F5F3FF; }
+.np-qualificado-toggle--done { background: #F5F3FF; border-color: #8B5CF6; color: #8B5CF6; }
+
 
 /* Status Buttons */
 .np-status-actions {
@@ -1690,6 +1734,11 @@
 [data-theme="dark"] .np-noshow-toggle { background: var(--white); border-color: var(--border-light); color: var(--text-secondary); }
 [data-theme="dark"] .np-noshow-toggle:hover:not(:disabled) { background: rgba(249,115,22,0.1); }
 [data-theme="dark"] .np-noshow-toggle--done { background: rgba(249,115,22,0.1); }
+
+[data-theme="dark"] .np-qualificacao-section { background: var(--white); border-bottom-color: var(--border-light); }
+[data-theme="dark"] .np-qualificado-toggle { background: var(--white); border-color: var(--border-light); color: var(--text-secondary); }
+[data-theme="dark"] .np-qualificado-toggle:hover:not(:disabled) { background: rgba(139,92,246,0.1); }
+[data-theme="dark"] .np-qualificado-toggle--done { background: rgba(139,92,246,0.1); }
 
 [data-theme="dark"] .np-status-btn { background: var(--white); border-color: var(--border-light); }
 [data-theme="dark"] .np-status-btn--ganho { color: #10B981; }

@@ -1255,6 +1255,7 @@ export const Negocios = {
     if (novoStatus === 'Ganho') {
       payload.data_fechamento   = nowBrasilia();
       payload.reuniao_realizada = true; // ganho implica reunião realizada
+      payload.negocio_lead_qualificado = true; // ganho implica lead qualificado
       payload.pipeline_id       = 1;   // move para o funil de clientes
       payload.etapa_id          = 12;  // etapa de entrada no funil de clientes
     } else if (novoStatus === 'Perdido') {
@@ -1273,13 +1274,32 @@ export const Negocios = {
 
   /**
    * Atualiza o campo reuniao_realizada de um negócio.
+   * Ao marcar a reunião (valor=true), o negócio também é marcado como Lead
+   * Qualificado (SQL) automaticamente — o usuário pode desmarcar depois em
+   * "Qualificação" sem que isso reverta ao desmarcar a reunião.
    * @param {number}  negocioId
-   * @param {boolean} valor - true = reunião feita, false = não feita
+   * @param {boolean} valor - true = reunião marcada, false = não marcada
    */
   async updateReuniaoRealizada(negocioId, valor) {
+    const payload = { reuniao_realizada: valor, ultima_atualizacao: nowBrasilia() };
+    if (valor) payload.negocio_lead_qualificado = true;
     return supabase
       .from('negocios')
-      .update({ reuniao_realizada: valor, ultima_atualizacao: nowBrasilia() })
+      .update(payload)
+      .eq('negocio_id', negocioId);
+  },
+
+  /**
+   * Atualiza o campo negocio_lead_qualificado (SQL) de um negócio.
+   * Controle manual e independente — não é revertido automaticamente por
+   * nenhuma outra ação (ex: desmarcar a reunião).
+   * @param {number}  negocioId
+   * @param {boolean} valor
+   */
+  async updateLeadQualificado(negocioId, valor) {
+    return supabase
+      .from('negocios')
+      .update({ negocio_lead_qualificado: valor, ultima_atualizacao: nowBrasilia() })
       .eq('negocio_id', negocioId);
   },
 
@@ -2328,6 +2348,27 @@ export const FinanceiroDespesas = {
   async delete(id) {
     return supabase.from('financeiro_despesas').delete().eq('despesa_id', id);
   }
+};
+
+// ══════════════════════════════════════════════════════════════════
+//  CONFIGURAÇÕES DA PÁGINA DE RELATÓRIOS (chave/valor)
+// ══════════════════════════════════════════════════════════════════
+
+export const RelatoriosConfiguracoes = {
+  async get(chave) {
+    return supabase
+      .from('relatorios_configuracoes')
+      .select('valor')
+      .eq('chave', chave)
+      .maybeSingle();
+  },
+  async set(chave, valor) {
+    return supabase
+      .from('relatorios_configuracoes')
+      .upsert({ chave, valor, atualizado_em: nowBrasilia() }, { onConflict: 'chave' })
+      .select()
+      .single();
+  },
 };
 
 export const NegociosResponsaveis = {

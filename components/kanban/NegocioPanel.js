@@ -505,6 +505,21 @@ export default class NegocioPanel {
             </div>
           </div>
 
+          <!-- Qualificação de Lead (SQL) -->
+          <div class="np-qualificacao-section">
+            <span class="np-qualificacao-label">Qualificação de Lead (SQL)</span>
+            <button
+              class="np-qualificado-toggle${neg.negocio_lead_qualificado ? ' np-qualificado-toggle--done' : ''}"
+              id="np-qualificado-toggle"
+              data-negocio-id="${neg.negocio_id}"
+              data-qualificado="${neg.negocio_lead_qualificado ? 'true' : 'false'}"
+              title="${neg.negocio_lead_qualificado ? 'Lead qualificado — clique para desmarcar' : 'Marcar como lead qualificado'}"
+            >
+              <svg class="np-toggle-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="np-qualificado-label">${neg.negocio_lead_qualificado ? 'Lead Qualificado' : 'Marcar como Qualificado'}</span>
+            </button>
+          </div>
+
           <!-- Tabs: Contatos | Tarefas | Anotações | Arquivos -->
           <div class="np-tabs-wrapper">
             <div class="np-tabs" role="tablist">
@@ -629,6 +644,7 @@ export default class NegocioPanel {
     this._bindContatosTab();
     this._bindReuniaoToggle();
     this._bindNoShowToggle();
+    this._bindQualificadoToggle();
     this._bindStatusActions(neg);
     this._bindNotesEvents();
     this._bindTaskEvents();
@@ -1102,6 +1118,16 @@ export default class NegocioPanel {
         }
       }
 
+      // Marcar reunião também qualifica o lead automaticamente (SQL) —
+      // desmarcar a reunião NÃO desqualifica (controle manual a partir daqui)
+      const qualificadoBtn = document.getElementById('np-qualificado-toggle');
+      if (novo && qualificadoBtn && qualificadoBtn.dataset.qualificado !== 'true') {
+        qualificadoBtn.classList.add('np-qualificado-toggle--done');
+        qualificadoBtn.dataset.qualificado = 'true';
+        qualificadoBtn.title = 'Lead qualificado — clique para desmarcar';
+        qualificadoBtn.querySelector('.np-qualificado-label').textContent = 'Lead Qualificado';
+      }
+
       const { error } = await Negocios.updateReuniaoRealizada(negId, novo);
       btn.disabled = false;
 
@@ -1138,6 +1164,34 @@ export default class NegocioPanel {
         // Reverte
         btn.classList.toggle('np-noshow-toggle--done', atual);
         btn.dataset.noshow = String(atual);
+      }
+    });
+  }
+
+  _bindQualificadoToggle() {
+    const btn = document.getElementById('np-qualificado-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const atual = btn.dataset.qualificado === 'true';
+      const novo = !atual;
+      const negId = parseInt(btn.dataset.negocioId, 10);
+
+      // Feedback imediato
+      btn.classList.toggle('np-qualificado-toggle--done', novo);
+      btn.dataset.qualificado = String(novo);
+      btn.title = novo ? 'Lead qualificado — clique para desmarcar' : 'Marcar como lead qualificado';
+      btn.querySelector('.np-qualificado-label').textContent = novo ? 'Lead Qualificado' : 'Marcar como Qualificado';
+      btn.disabled = true;
+
+      const { error } = await Negocios.updateLeadQualificado(negId, novo);
+      btn.disabled = false;
+
+      if (error) {
+        console.error('[NegocioPanel] Erro ao atualizar qualificação do lead:', error);
+        // Reverte
+        btn.classList.toggle('np-qualificado-toggle--done', atual);
+        btn.dataset.qualificado = String(atual);
+        btn.querySelector('.np-qualificado-label').textContent = atual ? 'Lead Qualificado' : 'Marcar como Qualificado';
       }
     });
   }

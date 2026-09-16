@@ -463,6 +463,49 @@
   margin-top: 0;
 }
 
+.rel-capacity-edit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--cyan);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.rel-capacity-edit-link:hover { opacity: 0.75; }
+
+.rel-vendas-conjuntas-toggle {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: var(--bg);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.rel-vendas-conjuntas-toggle:hover {
+  background: var(--black);
+  color: var(--white);
+  border-color: var(--black);
+}
+.rel-vendas-conjuntas-toggle.active {
+  background: var(--cyan-dim);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  font-weight: 600;
+}
+
 /* ---- KPI Grid — linha de cards resumo ---- */
 .rel-kpi-row {
   display: grid;
@@ -1394,6 +1437,7 @@ body.dark-mode .rel-motivo-item:hover {
    ============================================================ */
 
 @media (max-width: 1200px) {
+  .rel-kpi-row--5,
   .rel-kpi-row--4 { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -1405,6 +1449,7 @@ body.dark-mode .rel-motivo-item:hover {
 }
 
 @media (max-width: 600px) {
+  .rel-kpi-row--5,
   .rel-kpi-row--4,
   .rel-kpi-row--3,
   .rel-kpi-row--2 { grid-template-columns: 1fr 1fr; }

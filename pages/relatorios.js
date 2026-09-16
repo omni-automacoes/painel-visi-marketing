@@ -10,7 +10,7 @@
 
 import UserStore from '../js/userStore.js';
 import { supabase } from '../js/supabase.js';
-import { DiaFinalizado, Usuarios, Negocios } from '../js/db.js';
+import { DiaFinalizado, Usuarios, Negocios, RelatoriosConfiguracoes } from '../js/db.js';
 import DualLineChart from '../charts/DualLineChart.js';
 
 // ─── Estado local ───────────────────────────────────────────
@@ -19,6 +19,7 @@ let _dataInicio            = '';          // 'YYYY-MM-DD'
 let _dataFim               = '';          // 'YYYY-MM-DD'
 let _periodLabel           = '';          // texto exibido no badge
 let _investimentoMarketing = 0;           // numeric alocado por mês em relatorios_investimentos
+let _capacityPorGestorAtual = 20;         // número de contas saudável por gestor (editável, relatorios_configuracoes)
 
 const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -401,7 +402,7 @@ function _htmlSectionComercial() {
         accentColor: 'blue',
         value: 'R$ —',
         label: 'CPQ — Custo por Lead Qualificado',
-        sub: 'Fórmula: Orçamento de Marketing do Mês ÷ Total de SQLs (reuniões realizadas). Investimento fixo por mês salvo em relatorios_investimentos.',
+        sub: 'Fórmula: Orçamento de Marketing do Mês ÷ Total de SQLs (reuniões agendadas). Investimento fixo por mês salvo em relatorios_investimentos.',
         trend: 'neu',
         trendLabel: 'Período atual',
       })}
@@ -432,7 +433,7 @@ function _htmlSectionComercial() {
         accentColor: 'green',
         value: '—%',
         label: 'Taxa de Conversão',
-        sub: 'Fórmula: (Total de Negócios Ganhos ÷ SQLs) × 100. Ganhos = negocios com negocio_status = Ganho e data_fechamento no período. SQLs = negocios com reuniao_realizada = TRUE e criado_em no período.',
+        sub: 'Fórmula: (Total de Negócios Ganhos ÷ Reuniões Realizadas) × 100, ambos filtrados por data_fechamento no período. Ganhos = negocio_status = Ganho. Reuniões Realizadas = entre os negócios fechados (Ganho ou Perdido) no período, os com reuniao_realizada = TRUE e negocio_noshow = FALSE (exclui reunião apenas agendada e no-show).',
         trend: 'neu',
         trendLabel: 'Período atual',
       })}
@@ -444,7 +445,7 @@ function _htmlSectionComercial() {
         accentColor: 'purple',
         value: '—%',
         label: 'MQL para SQL Ratio',
-        sub: 'Fórmula: (SQLs ÷ MQLs) × 100. MQL = total de negócios criados no período (criado_em). SQL = negócios com reuniao_realizada = TRUE criados no período. Mede quantos leads que entraram avançaram até a etapa de reunião de qualificação.',
+        sub: 'Fórmula: (SQLs ÷ MQLs) × 100. MQL = total de negócios criados no período (criado_em). SQL = negócios marcados como "Lead Qualificado" criados no período — marcado automaticamente ao agendar a reunião, mas editável a qualquer momento na sessão de Qualificação do negócio.',
         trend: 'neu',
         trendLabel: 'Meta: 30%',
       })}
@@ -521,10 +522,12 @@ function _htmlSectionComercial() {
             </div>
             <div>
               <h3>Performance por Vendedor</h3>
-              <p>Ranking de conversão da equipe comercial</p>
+              <p id="rel-vendedor-subtitulo">Ranking de conversão da equipe comercial</p>
             </div>
           </div>
-          <span class="rel-pill rel-pill--cyan">Equipe</span>
+          <button class="rel-vendas-conjuntas-toggle" id="rel-vendas-conjuntas-toggle" title="Quando ativado, negócios com mais de um responsável contam integralmente para cada um deles">
+            🤝 Vendas Conjuntas
+          </button>
         </div>
 
         <table class="rel-table">
@@ -745,7 +748,7 @@ function _htmlSectionComercial() {
 }
 
 // ============================================================
-// SETOR OPERACIONAL — Parte 2 — 9 métricas
+// SETOR OPERACIONAL — Parte 2 — 8 métricas
 // ============================================================
 
 function _htmlSectionOperacoes() {
@@ -824,21 +827,9 @@ function _htmlSectionOperacoes() {
     </div>
   `;
 
-  // ── Grupo 3: Eficiência — 2 KPI cards + 1 detalhe ─────────
+  // ── Grupo 3: Eficiência — 1 KPI card + 1 detalhe ─────────
   const rowEficiencia = `
     <div class="rel-kpi-row rel-kpi-row--2">
-
-      ${_kpiCard({
-        id: 'rel-campanhas-sem-saldo',
-        icon: `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-        iconColor: 'amber',
-        accentColor: 'amber',
-        value: '—%',
-        label: 'Taxa de Campanhas sem Saldo',
-        sub: 'Fórmula: (Clientes "Sem Saldo" ÷ Total de clientes Ativados) × 100.',
-        trend: 'neu',
-        trendLabel: 'Meta: < 5%',
-      })}
 
       ${_kpiCard({
         id: 'rel-otimizacoes',
@@ -850,6 +841,7 @@ function _htmlSectionOperacoes() {
         sub: 'Fórmula: Contagem de clientes Ativados com cliente_otimizacao = TRUE.',
         trend: 'neu',
         trendLabel: 'vs. mês ant.',
+        full: true,
       })}
 
     </div>
@@ -941,7 +933,7 @@ function _htmlSectionOperacoes() {
           <h2>Setor Operacional</h2>
           <p>Eficiência da equipe, saúde da carteira e qualidade do atendimento</p>
         </div>
-        <span class="rel-section-badge rel-section-badge--operacoes">9 métricas</span>
+        <span class="rel-section-badge rel-section-badge--operacoes">8 métricas</span>
       </div>
 
       <!-- Grupo: Evolução Anual -->
@@ -960,7 +952,13 @@ function _htmlSectionOperacoes() {
       })}
 
       <!-- Grupo: Tempo & Capacidade -->
-      <div class="rel-metric-group-label">Tempo & Capacidade</div>
+      <div class="rel-metric-group-label" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>Tempo & Capacidade</span>
+        <button id="rel-capacity-edit-btn" class="rel-capacity-edit-link" title="Editar número de contas saudável por gestor">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Editar capacidade por gestor
+        </button>
+      </div>
       ${rowTempo}
 
       <!-- Grupo: Saúde & Qualidade -->
@@ -980,14 +978,14 @@ function _htmlSectionOperacoes() {
 }
 
 // ============================================================
-// SETOR MASTER — Parte 3 — 14 métricas
+// SETOR MASTER — Parte 3 — 15 métricas
 // ============================================================
 
 function _htmlSectionMaster() {
 
   // ── Grupo 1: Receita Recorrente — 4 KPI cards ──────────────
   const rowMrr = `
-    <div class="rel-kpi-row rel-kpi-row--4">
+    <div class="rel-kpi-row rel-kpi-row--5">
 
       ${_kpiCard({
         id: 'rel-mrr',
@@ -1002,13 +1000,25 @@ function _htmlSectionMaster() {
       })}
 
       ${_kpiCard({
+        id: 'rel-tempo-permanencia',
+        icon: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+        iconColor: 'purple',
+        accentColor: 'purple',
+        value: '— meses',
+        label: 'Tempo Médio de Permanência',
+        sub: 'Fórmula: Média de (data_churn − criado_em) dos clientes que já deram churn, em meses. Base para o cálculo de LTV.',
+        trend: 'neu',
+        trendLabel: 'Histórico de churns',
+      })}
+
+      ${_kpiCard({
         id: 'rel-ltv-total',
         icon: `<svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
         iconColor: 'green',
         accentColor: 'green',
         value: 'R$ —',
         label: 'LTV Total da Carteira',
-        sub: 'Fórmula: LTV Médio × Total de Clientes Ativos. Representa o valor patrimonial estimado de toda a carteira de contratos ativos.',
+        sub: 'Fórmula: Ticket Médio da Carteira (MRR ativo ÷ clientes ativos) × Tempo Médio de Permanência. Representa o valor de vida estimado de um cliente médio da carteira.',
         trend: 'neu',
         trendLabel: 'Carteira ativa',
       })}
@@ -1019,8 +1029,8 @@ function _htmlSectionMaster() {
         iconColor: 'cyan',
         accentColor: 'cyan',
         value: 'R$ —',
-        label: 'LTV Médio',
-        sub: 'Fórmula: Média histórica de negocio_valor de todos os negócios Ganhos. Representa o valor médio que cada cliente traz para a Visi.',
+        label: 'LTV de Negócios Ganhos',
+        sub: 'Fórmula: Média de (cliente_mensalidade × contrato_duracao) de cada negócio ganho com contrato definido. Ex: mensalidade R$1.500 × 3 meses de contrato = R$4.500 de receita prevista daquele fechamento.',
         trend: 'neu',
         trendLabel: 'Média histórica',
       })}
@@ -1292,7 +1302,7 @@ function _htmlSectionMaster() {
           <h2>Diretoria Executiva & Financeiro</h2>
           <p>Métricas financeiras estratégicas, MRR, EBITDA, LTV e saúde patrimonial</p>
         </div>
-        <span class="rel-section-badge rel-section-badge--master">14 métricas</span>
+        <span class="rel-section-badge rel-section-badge--master">15 métricas</span>
       </div>
 
       <!-- Grupo: Evolução Anual -->
@@ -2691,7 +2701,7 @@ async function _carregarCAC(inicio, fim) {
  * Calcula e exibe o CPQ no período selecionado.
  *
  * Fórmula:
- *   CPQ = investimento_marketing ÷ SQLs (negócios com reunião realizada no período)
+ *   CPQ = investimento_marketing ÷ SQLs (negócios com reunião agendada no período)
  */
 async function _carregarCPQ(inicio, fim) {
   const cardEl  = document.getElementById('rel-cpq');
@@ -2712,7 +2722,7 @@ async function _carregarCPQ(inicio, fim) {
 
     const investimento = Number(invData?.valor ?? 0);
 
-    // 2. Busca negócios com reuniao_realizada = TRUE no período com join de vendedor
+    // 2. Busca negócios com reuniao_realizada = TRUE (reunião agendada) no período com join de vendedor
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
@@ -2770,7 +2780,7 @@ async function _carregarCPQ(inicio, fim) {
         sub: `Vendedor: ${s.usuarios?.user_nome || 'Equipe'} · Reunião em ${_formatarExibicao(s.criado_em?.substring(0, 10))}`,
         val: 'Qualificado 🎯'
       })),
-      footer: `Investimento: <b>R$ ${_formatarBRL(investimento)}</b> ÷ <b>${totalSQLs}</b> reuniões realizadas`,
+      footer: `Investimento: <b>R$ ${_formatarBRL(investimento)}</b> ÷ <b>${totalSQLs}</b> reuniões agendadas`,
       formula: `CPQ = R$ ${_formatarBRL(cpq)} por SQL`
     };
     _bindKpiHover('rel-cpq');
@@ -2875,10 +2885,14 @@ async function _carregarTaxaConversao(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. Busca negócios fechados (Ganho ou Perdido) no período
-    const { data: fechados, error: fechadosError } = await supabase
+    // Busca negócios fechados (Ganho ou Perdido) no período com dados da reunião.
+    // Usa a MESMA janela de data (data_fechamento) para o numerador e o
+    // denominador — evita uma taxa acima de 100% que aconteceria se a reunião
+    // fosse filtrada por criado_em (mês de criação) enquanto o fechamento cai
+    // em outro mês.
+    const { data: fechadosData, error: fechadosError } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento')
+      .select('negocio_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento, reuniao_realizada, negocio_noshow')
       .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicioISO)
       .lte('data_fechamento', fimISO)
@@ -2886,17 +2900,19 @@ async function _carregarTaxaConversao(inicio, fim) {
 
     if (fechadosError) throw fechadosError;
 
-    const lista = fechados ?? [];
-    const ganhos = lista.filter(n => n.negocio_status === 'Ganho');
-    const perdidos = lista.filter(n => n.negocio_status === 'Perdido');
-    const totalDecididos = lista.length;
+    const fechados = fechadosData ?? [];
+    const ganhos = fechados.filter(n => n.negocio_status === 'Ganho');
+    // Reuniões Realizadas = marcada (reuniao_realizada) E sem no-show — não
+    // confundir com apenas agendada ou com no-show
+    const reunioesRealizadas = fechados.filter(n => n.reuniao_realizada === true && n.negocio_noshow === false);
+    const totalReunioes = reunioesRealizadas.length;
 
-    // 2. Calcula a taxa de vitória real (Win Rate)
-    const taxa = totalDecididos > 0 ? (ganhos.length / totalDecididos) * 100 : 0;
+    // Calcula a taxa de conversão real
+    const taxa = totalReunioes > 0 ? (ganhos.length / totalReunioes) * 100 : 0;
     const taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
-    const subInfo = totalDecididos === 0
-      ? 'Nenhum fechamento (ganho ou perdido) no período'
-      : `${ganhos.length} ganho${ganhos.length !== 1 ? 's' : ''} de ${totalDecididos} decidido${totalDecididos !== 1 ? 's' : ''} (${perdidos.length} perdido${perdidos.length !== 1 ? 's' : ''})`;
+    const subInfo = totalReunioes === 0
+      ? 'Nenhuma reunião realizada entre os negócios fechados no período'
+      : `${ganhos.length} ganho${ganhos.length !== 1 ? 's' : ''} de ${totalReunioes} reunião/reuniões realizada${totalReunioes !== 1 ? 's' : ''}`;
 
     if (valueEl) valueEl.textContent = taxaFormatada;
 
@@ -2906,19 +2922,19 @@ async function _carregarTaxaConversao(inicio, fim) {
     if (infoSpan) infoSpan.title   = `Passe o mouse para ver o funil de decisões`;
 
     if (trendEl) {
-      trendEl.lastChild.textContent = `${ganhos.length} ganhos / ${totalDecididos} fechados`;
+      trendEl.lastChild.textContent = `${ganhos.length} ganhos / ${totalReunioes} reuniões realizadas`;
     }
 
-    // 3. Popula o Hover Card da Taxa de Conversão
+    // 4. Popula o Hover Card da Taxa de Conversão
     _kpiBreakdowns['rel-taxa-conversao'] = {
-      title: 'Taxa de Conversão (Win Rate)',
+      title: 'Taxa de Conversão (Reunião Realizada → Ganho)',
       badge: taxaFormatada,
-      items: lista.slice(0, 15).map(n => ({
+      items: ganhos.slice(0, 15).map(n => ({
         name: n.negocio_titulo || 'Oportunidade',
-        sub: `${n.negocio_status === 'Ganho' ? '✅ Ganho' : '❌ Perdido'} · ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}`,
-        val: n.negocio_status === 'Ganho' ? `R$ ${_formatarBRL(n.negocio_valor)}` : 'Perdido'
+        sub: `✅ Ganho · ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}`,
+        val: `R$ ${_formatarBRL(n.negocio_valor)}`
       })),
-      footer: `<b>${ganhos.length}</b> Ganhos ÷ <b>${totalDecididos}</b> Negócios Fechados (${perdidos.length} Perdidos)`,
+      footer: `<b>${ganhos.length}</b> Ganhos ÷ <b>${totalReunioes}</b> Reuniões Realizadas entre os negócios fechados no período (marcadas e sem no-show)`,
       formula: `Taxa de Conversão = ${taxaFormatada}`
     };
     _bindKpiHover('rel-taxa-conversao');
@@ -2938,7 +2954,10 @@ async function _carregarTaxaConversao(inicio, fim) {
  *   Ratio = (SQLs ÷ MQLs) × 100
  *
  *   MQL = total de oportunidades/leads criados no período (criado_em)
- *   SQL = negócios com reunião realizada criados no mesmo período
+ *   SQL = negócios com negocio_lead_qualificado = TRUE criados no mesmo período.
+ *         Esse campo é marcado automaticamente quando a reunião é agendada, mas
+ *         pode ser ativado/desativado manualmente pelo usuário na sessão de
+ *         Qualificação do negócio (ex: lead qualificado sem reunião ainda).
  */
 async function _carregarMqlSql(inicio, fim) {
   const cardEl  = document.getElementById('rel-mql-sql');
@@ -2956,7 +2975,7 @@ async function _carregarMqlSql(inicio, fim) {
     // 1. Busca todos os negócios criados no período
     const { data: leads, error: mqlError } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, reuniao_realizada, criado_em, negocio_origem')
+      .select('negocio_id, negocio_titulo, negocio_lead_qualificado, criado_em, negocio_origem')
       .gte('criado_em', inicioISO)
       .lte('criado_em', fimISO)
       .order('criado_em', { ascending: false });
@@ -2965,7 +2984,7 @@ async function _carregarMqlSql(inicio, fim) {
 
     const lista = leads ?? [];
     const totalMQL = lista.length;
-    const sqls = lista.filter(l => l.reuniao_realizada === true);
+    const sqls = lista.filter(l => l.negocio_lead_qualificado === true);
     const totalSQL = sqls.length;
 
     // 2. Calcula o ratio
@@ -2992,10 +3011,10 @@ async function _carregarMqlSql(inicio, fim) {
       badge: ratioFormatado,
       items: (sqls.length > 0 ? sqls : lista).slice(0, 15).map(l => ({
         name: l.negocio_titulo || 'Lead',
-        sub: l.reuniao_realizada
-          ? `🎯 Reunião de Qualificação Realizada · ${_formatarExibicao(l.criado_em?.substring(0, 10))}`
+        sub: l.negocio_lead_qualificado
+          ? `🎯 Lead Qualificado · ${_formatarExibicao(l.criado_em?.substring(0, 10))}`
           : `Lead Criado no Período · Origem: ${l.negocio_origem || 'Não informada'}`,
-        val: l.reuniao_realizada ? 'SQL ✅' : 'MQL'
+        val: l.negocio_lead_qualificado ? 'SQL ✅' : 'MQL'
       })),
       footer: `<b>${totalSQL}</b> SQLs qualificados ÷ <b>${totalMQL}</b> MQLs que entraram no período`,
       formula: `Eficiência de Qualificação = ${ratioFormatado}`
@@ -3363,8 +3382,23 @@ async function _carregarMotivosPerda(inicio, fim) {
 
 // ─── Performance por Vendedor ───────────────────────────────
 
+let _verVendasConjuntas = false; // false = crédito só pro vendedor_id · true = crédito cheio p/ todos os responsáveis
+
+function _bindPerformanceVendedorEvents() {
+  const btn = document.getElementById('rel-vendas-conjuntas-toggle');
+  if (!btn) return;
+  btn.classList.toggle('active', _verVendasConjuntas);
+  btn.addEventListener('click', () => {
+    _verVendasConjuntas = !_verVendasConjuntas;
+    btn.classList.toggle('active', _verVendasConjuntas);
+    _carregarPerformanceVendedor(_dataInicio, _dataFim);
+  });
+}
+
 /**
  * Carrega e renderiza o ranking de Performance por Vendedor no período.
+ * Com "Vendas Conjuntas" ativado, negócios com 2+ responsáveis (negocios_responsaveis)
+ * dão crédito integral (fechamento + receita) para cada responsável, não só para o vendedor_id.
  */
 async function _carregarPerformanceVendedor(inicio, fim) {
   const tbody = document.getElementById('rel-vendedor-tbody');
@@ -3372,16 +3406,27 @@ async function _carregarPerformanceVendedor(inicio, fim) {
 
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>';
 
+  const subtituloEl = document.getElementById('rel-vendedor-subtitulo');
+  if (subtituloEl) {
+    subtituloEl.textContent = _verVendasConjuntas
+      ? 'Ranking de conversão — vendas conjuntas com crédito integral p/ todos os responsáveis'
+      : 'Ranking de conversão da equipe comercial';
+  }
+
   try {
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Busca negócios fechados (Ganho ou Perdido) no período com join de usuários
+    // Busca negócios fechados (Ganho ou Perdido) no período com join de usuários e co-responsáveis
     const { data, error } = await supabase
       .from('negocios')
-      .select('vendedor_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento, usuarios(user_nome, user_avatar)')
+      .select(`
+        vendedor_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento,
+        usuarios(user_nome, user_avatar),
+        negocios_responsaveis ( usuario_id, usuarios(user_nome, user_avatar) )
+      `)
       .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicioISO)
       .lte('data_fechamento', fimISO)
@@ -3396,25 +3441,45 @@ async function _carregarPerformanceVendedor(inicio, fim) {
       return;
     }
 
-    // Agrupa por vendedor_id
+    // Agrupa por vendedor — em modo "Vendas Conjuntas", credita integralmente
+    // cada responsável (vendedor_id + negocios_responsaveis), sem duplicar quando
+    // o mesmo usuário aparece em ambos.
     const vendedores = {};
     for (const n of negocios) {
-      const vid = n.vendedor_id || 'sem_vendedor';
-      if (!vendedores[vid]) {
-        vendedores[vid] = {
-          nome:   n.usuarios?.user_nome   ?? 'Não atribuído',
-          avatar: n.usuarios?.user_avatar ?? null,
-          ganhos: 0,
-          total:  0,
-          receita: 0,
-          contratos: []
-        };
+      const responsaveisMap = new Map();
+      if (n.vendedor_id) {
+        responsaveisMap.set(n.vendedor_id, n.usuarios ?? null);
       }
-      vendedores[vid].total++;
-      if (n.negocio_status === 'Ganho') {
-        vendedores[vid].ganhos++;
-        vendedores[vid].receita += Number(n.negocio_valor ?? 0);
-        vendedores[vid].contratos.push(n);
+      if (_verVendasConjuntas) {
+        for (const r of (n.negocios_responsaveis ?? [])) {
+          if (r.usuario_id && !responsaveisMap.has(r.usuario_id)) {
+            responsaveisMap.set(r.usuario_id, r.usuarios ?? null);
+          }
+        }
+      }
+      if (responsaveisMap.size === 0) responsaveisMap.set('sem_vendedor', null);
+
+      const ehVendaConjunta = responsaveisMap.size > 1;
+
+      for (const [vid, usuarioInfo] of responsaveisMap) {
+        if (!vendedores[vid]) {
+          vendedores[vid] = {
+            nome:   usuarioInfo?.user_nome   ?? 'Não atribuído',
+            avatar: usuarioInfo?.user_avatar ?? null,
+            ganhos: 0,
+            total:  0,
+            receita: 0,
+            contratos: [],
+            conjuntas: 0,
+          };
+        }
+        vendedores[vid].total++;
+        if (ehVendaConjunta) vendedores[vid].conjuntas++;
+        if (n.negocio_status === 'Ganho') {
+          vendedores[vid].ganhos++;
+          vendedores[vid].receita += Number(n.negocio_valor ?? 0);
+          vendedores[vid].contratos.push({ ...n, _conjunta: ehVendaConjunta });
+        }
       }
     }
 
@@ -3440,7 +3505,7 @@ async function _carregarPerformanceVendedor(inicio, fim) {
               <div class="rel-avatar-wrap">${avatarHtml}</div>
               <div>
                 <div class="rel-table-name">${v.nome}</div>
-                <div class="rel-table-sub">${v.ganhos} fechamento${v.ganhos !== 1 ? 's' : ''}</div>
+                <div class="rel-table-sub">${v.ganhos} fechamento${v.ganhos !== 1 ? 's' : ''}${v.conjuntas > 0 ? ` · 🤝 ${v.conjuntas} conjunta${v.conjuntas !== 1 ? 's' : ''}` : ''}</div>
               </div>
             </div>
           </td>
@@ -3473,7 +3538,7 @@ async function _carregarPerformanceVendedor(inicio, fim) {
           items: v.contratos.length > 0
             ? v.contratos.slice(0, 10).map(c => ({
                 name: c.negocio_titulo || 'Contrato Ganho',
-                sub: `Fechado em ${_formatarExibicao(c.data_fechamento?.substring(0, 10))}`,
+                sub: `${c._conjunta ? '🤝 Venda conjunta · ' : ''}Fechado em ${_formatarExibicao(c.data_fechamento?.substring(0, 10))}`,
                 val: `R$ ${_formatarBRL(c.negocio_valor)}`
               }))
             : [{ name: 'Sem contratos ganhos', sub: 'Apenas oportunidades perdidas ou em aberto', val: '—' }],
@@ -3582,6 +3647,7 @@ async function _carregarLtvMetrics(inicio, fim) {
   const ltvTotalEl  = document.getElementById('rel-ltv-total');
   const ltvMedioEl  = document.getElementById('rel-ltv-medio');
   const ltvCacEl    = document.getElementById('rel-ltv-cac');
+  const permanenciaEl = document.getElementById('rel-tempo-permanencia');
 
   const setValue = (cardEl, txt) => {
     const el = cardEl?.querySelector('.rel-kpi-value');
@@ -3599,37 +3665,72 @@ async function _carregarLtvMetrics(inicio, fim) {
   setValue(ltvTotalEl, 'R$ …');
   setValue(ltvMedioEl, 'R$ …');
   setValue(ltvCacEl,   '…×');
+  setValue(permanenciaEl, '… meses');
 
   try {
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
     const [fimY, fimM, fimD] = fim.split('-').map(Number);
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+    const DIAS_POR_MES = 30.44;
 
-    // 1. LTV Médio: média histórica de todos os contratos Ganhos
-    const { data: ganhos, error: ganhosErr } = await supabase
-      .from('negocios')
-      .select('negocio_valor')
-      .eq('negocio_status', 'Ganho');
+    // 1. Tempo Médio de Permanência: média de (data_churn − criado_em) dos clientes
+    //    que já deram churn, em meses. Base para o LTV Total da Carteira.
+    const { data: churnados, error: churnadosErr } = await supabase
+      .from('clientes')
+      .select('cliente_id, cliente_nome, criado_em, data_churn')
+      .eq('cliente_churn', true)
+      .not('data_churn', 'is', null);
 
-    if (ganhosErr) throw ganhosErr;
+    if (churnadosErr) throw churnadosErr;
 
-    const totalGanhos = (ganhos ?? []).length;
-    const somaGanhos  = (ganhos ?? []).reduce((s, n) => s + Number(n.negocio_valor ?? 0), 0);
+    const permanencias = (churnados ?? [])
+      .map(c => ({
+        ...c,
+        meses: (new Date(c.data_churn).getTime() - new Date(c.criado_em).getTime()) / (1000 * 60 * 60 * 24 * DIAS_POR_MES),
+      }))
+      .filter(c => c.meses >= 0);
+
+    const totalChurnados = permanencias.length;
+    const tempoMedioPermanencia = totalChurnados > 0
+      ? permanencias.reduce((s, c) => s + c.meses, 0) / totalChurnados
+      : 0;
+
+    // 2. Ticket Médio da Carteira ativa: MRR ativo ÷ clientes ativos
+    const { data: carteiraAtiva, error: carteiraErr } = await supabase
+      .from('clientes')
+      .select('cliente_id, cliente_mensalidade')
+      .eq('cliente_status', 'Ativado');
+
+    if (carteiraErr) throw carteiraErr;
+
+    const nAtivos = (carteiraAtiva ?? []).length;
+    const mrrAtivos = (carteiraAtiva ?? []).reduce((s, c) => s + Number(c.cliente_mensalidade ?? 0), 0);
+    const ticketMedioCarteira = nAtivos > 0 ? mrrAtivos / nAtivos : 0;
+
+    // LTV Total da Carteira = Ticket Médio da Carteira × Tempo Médio de Permanência
+    const ltvTotal = ticketMedioCarteira * tempoMedioPermanencia;
+
+    // 3. LTV de Negócios Ganhos (LTV Médio): média de (mensalidade × duração do
+    //    contrato) de cada negócio ganho com contrato definido
+    const { data: contratados, error: contratadosErr } = await supabase
+      .from('clientes')
+      .select('cliente_id, cliente_nome, cliente_mensalidade, contrato_duracao, criado_em')
+      .not('contrato_duracao', 'is', null)
+      .not('cliente_mensalidade', 'is', null);
+
+    if (contratadosErr) throw contratadosErr;
+
+    const ltvPorContrato = (contratados ?? []).map(c => ({
+      ...c,
+      ltv: Number(c.cliente_mensalidade) * Number(c.contrato_duracao),
+    }));
+
+    const totalGanhos = ltvPorContrato.length;
+    const somaGanhos  = ltvPorContrato.reduce((s, c) => s + c.ltv, 0);
     const ltvMedio    = totalGanhos > 0 ? somaGanhos / totalGanhos : 0;
 
-    // 2. Clientes ativos na carteira (sem churn)
-    const { count: clientesAtivos, error: clientesErr } = await supabase
-      .from('clientes')
-      .select('cliente_id', { count: 'exact', head: true })
-      .eq('cliente_churn', false);
-
-    if (clientesErr) throw clientesErr;
-
-    const nAtivos  = clientesAtivos ?? 0;
-    const ltvTotal = ltvMedio * nAtivos;
-
-    // 3. CAC do período: investimento fixo do mês / novos clientes
+    // 4. CAC do período: investimento fixo do mês / novos clientes
     const periodoKey = inicio.substring(0, 7);
     const { data: invData } = await supabase
       .from('relatorios_investimentos')
@@ -3648,16 +3749,23 @@ async function _carregarLtvMetrics(inicio, fim) {
     const novosClientesCount = novosClientes ?? 0;
     const cac = novosClientesCount > 0 && investimento > 0 ? investimento / novosClientesCount : 0;
 
-    // 4. LTV/CAC Ratio
+    // 5. LTV/CAC Ratio
     const ratio = cac > 0 ? ltvMedio / cac : null;
 
-    // 5. Atualiza DOM
+    // 6. Atualiza DOM
+    const permanenciaStr = tempoMedioPermanencia.toFixed(1).replace('.', ',');
+    setValue(permanenciaEl, `${permanenciaStr} meses`);
+    setSub(permanenciaEl, totalChurnados > 0
+      ? `Média de ${totalChurnados} cliente${totalChurnados !== 1 ? 's' : ''} que já deu/deram churn`
+      : 'Nenhum cliente com churn registrado ainda');
+    setTrend(permanenciaEl, `${totalChurnados} churn${totalChurnados !== 1 ? 's' : ''} no histórico`);
+
     setValue(ltvMedioEl, `R$ ${_formatarBRL(ltvMedio)}`);
     setSub(ltvMedioEl, `Média de ${totalGanhos} contrato${totalGanhos !== 1 ? 's' : ''} ganho${totalGanhos !== 1 ? 's' : ''} (histórico)`);
     setTrend(ltvMedioEl, `${totalGanhos} contratos`);
 
     setValue(ltvTotalEl, `R$ ${_formatarBRL(ltvTotal)}`);
-    setSub(ltvTotalEl, `LTV Médio × ${nAtivos} cliente${nAtivos !== 1 ? 's' : ''} ativo${nAtivos !== 1 ? 's' : ''}`);
+    setSub(ltvTotalEl, `R$ ${_formatarBRL(ticketMedioCarteira)} (ticket médio) × ${permanenciaStr} meses de permanência`);
     setTrend(ltvTotalEl, `${nAtivos} cliente${nAtivos !== 1 ? 's' : ''} ativos`);
 
     if (ratio === null) {
@@ -3677,15 +3785,15 @@ async function _carregarLtvMetrics(inicio, fim) {
       setTrend(ltvCacEl, ratio >= 3 ? 'Meta atingida' : 'Abaixo da meta');
     }
 
-    // 6. Popula Hover Card do LTV/CAC Ratio
+    // 7. Popula Hover Card do LTV/CAC Ratio
     _kpiBreakdowns['rel-ltv-cac'] = {
       title: 'LTV / CAC Ratio (Retorno sobre Aquisição)',
       badge: ratio !== null ? `${ratio.toFixed(1).replace('.', ',')}×` : '—×',
       items: [
-        { name: 'LTV Médio da Carteira', sub: `Média de ${totalGanhos} contratos fechados`, val: `R$ ${_formatarBRL(ltvMedio)}` },
+        { name: 'LTV de Negócios Ganhos', sub: `Média de ${totalGanhos} contratos fechados`, val: `R$ ${_formatarBRL(ltvMedio)}` },
         { name: 'CAC do Período', sub: `Custo médio para conquistar 1 cliente`, val: cac > 0 ? `R$ ${_formatarBRL(cac)}` : 'R$ —' },
         { name: 'Clientes Ativos na Carteira', sub: 'Base atual de clientes ativos', val: `${nAtivos} clientes` },
-        { name: 'Valor Total da Carteira (LTV Total)', sub: 'LTV Médio × Clientes Ativos', val: `R$ ${_formatarBRL(ltvTotal)}` }
+        { name: 'LTV Total da Carteira', sub: 'Ticket Médio × Tempo de Permanência', val: `R$ ${_formatarBRL(ltvTotal)}` }
       ],
       footer: ratio !== null && ratio >= 3
         ? `✅ <b>Saudável</b>: Para cada R$ 1 investido em aquisição, o cliente retorna R$ ${ratio.toFixed(1).replace('.', ',')} de LTV.`
@@ -3694,39 +3802,59 @@ async function _carregarLtvMetrics(inicio, fim) {
     };
     _bindKpiHover('rel-ltv-cac');
 
-    // 7. Popula Hover Card do LTV Médio
+    // 8. Popula Hover Card do LTV de Negócios Ganhos (LTV Médio)
     _kpiBreakdowns['rel-ltv-medio'] = {
-      title: 'LTV Médio por Contrato Fechado',
+      title: 'LTV de Negócios Ganhos',
       badge: `R$ ${_formatarBRL(ltvMedio)}`,
-      items: [
-        { name: 'Histórico de Vendas Ganhas', sub: 'Total de contratos fechados no CRM', val: `${totalGanhos} contratos` },
-        { name: 'Valor Total Fechado', sub: 'Soma de todas as negociações ganhas', val: `R$ ${_formatarBRL(somaGanhos)}` },
-        { name: 'Ticket Médio de Contratação', sub: 'Média por novo contrato', val: `R$ ${_formatarBRL(ltvMedio)}` }
-      ],
-      footer: `Média histórica de <b>${totalGanhos}</b> negócios fechados na agência`,
-      formula: 'Soma do valor de negócios Ganhos ÷ Total de negócios Ganhos'
+      items: ltvPorContrato.length > 0
+        ? ltvPorContrato.slice(0, 10).map(c => ({
+            name: c.cliente_nome || 'Cliente',
+            sub: `R$ ${_formatarBRL(c.cliente_mensalidade)}/mês × ${c.contrato_duracao} meses de contrato`,
+            val: `R$ ${_formatarBRL(c.ltv)}`
+          }))
+        : [{ name: 'Nenhum negócio com contrato definido', sub: 'Defina a duração do contrato ao ganhar um negócio', val: 'R$ 0,00' }],
+      footer: `Média de <b>${totalGanhos}</b> negócios ganhos com duração de contrato definida`,
+      formula: 'Média de (Mensalidade × Duração do Contrato) por negócio ganho'
     };
     _bindKpiHover('rel-ltv-medio');
 
-    // 8. Popula Hover Card do LTV Total
+    // 9. Popula Hover Card do LTV Total da Carteira
     _kpiBreakdowns['rel-ltv-total'] = {
-      title: 'Patrimônio Estimado da Carteira (LTV Total)',
+      title: 'LTV Total da Carteira',
       badge: `R$ ${_formatarBRL(ltvTotal)}`,
       items: [
-        { name: 'LTV Médio do Cliente', sub: 'Valor médio gerado por contrato', val: `R$ ${_formatarBRL(ltvMedio)}` },
-        { name: 'Clientes Ativos na Carteira', sub: 'Contratos ativos sem churn', val: `${nAtivos} clientes` },
-        { name: 'Valor Total Patrimonial', sub: 'LTV Médio × Base Ativa', val: `R$ ${_formatarBRL(ltvTotal)}` }
+        { name: 'Ticket Médio da Carteira', sub: 'MRR ativo ÷ Clientes ativos', val: `R$ ${_formatarBRL(ticketMedioCarteira)}` },
+        { name: 'Tempo Médio de Permanência', sub: `Histórico de ${totalChurnados} churn${totalChurnados !== 1 ? 's' : ''}`, val: `${permanenciaStr} meses` },
+        { name: 'Clientes Ativos na Carteira', sub: 'Base atual de clientes ativados', val: `${nAtivos} clientes` },
+        { name: 'LTV Total (valor de vida do cliente médio)', sub: 'Ticket Médio × Tempo de Permanência', val: `R$ ${_formatarBRL(ltvTotal)}` }
       ],
-      footer: `Valor patrimonial estimado em <b>R$ ${_formatarBRL(ltvTotal)}</b>`,
-      formula: 'LTV Médio Histórico × Total de Clientes Ativos'
+      footer: `Valor de vida estimado do cliente médio: <b>R$ ${_formatarBRL(ltvTotal)}</b>`,
+      formula: 'Ticket Médio da Carteira × Tempo Médio de Permanência'
     };
     _bindKpiHover('rel-ltv-total');
+
+    // 10. Popula Hover Card do Tempo Médio de Permanência
+    _kpiBreakdowns['rel-tempo-permanencia'] = {
+      title: 'Tempo Médio de Permanência',
+      badge: `${permanenciaStr} meses`,
+      items: permanencias.length > 0
+        ? permanencias.slice(0, 10).map(c => ({
+            name: c.cliente_nome || 'Cliente',
+            sub: `${_formatarExibicao(c.criado_em?.substring(0, 10))} → ${_formatarExibicao(c.data_churn?.substring(0, 10))}`,
+            val: `${c.meses.toFixed(1).replace('.', ',')} meses`
+          }))
+        : [{ name: 'Nenhum churn registrado ainda', sub: 'A métrica é calculada com base no histórico de cancelamentos', val: '—' }],
+      footer: `Base para o cálculo de LTV Total da Carteira`,
+      formula: 'Média de (data_churn − criado_em) dos clientes com churn'
+    };
+    _bindKpiHover('rel-tempo-permanencia');
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular LTV Métrics:', err.message);
     setValue(ltvTotalEl, 'Erro');
     setValue(ltvMedioEl, 'Erro');
     setValue(ltvCacEl,   'Erro');
+    setValue(permanenciaEl, 'Erro');
   }
 }
 
@@ -3870,6 +3998,93 @@ async function _carregarSetupMedio(inicio, fim) {
   }
 }
 
+// ─── Modal: Editar Capacidade por Gestor (Setor Operacional) ──────────
+
+async function _abrirModalCapacity() {
+  let modalOverlay = document.getElementById('rel-capacity-modal-overlay');
+  if (!modalOverlay) {
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = 'rel-capacity-modal-overlay';
+    modalOverlay.className = 'rel-invest-modal-overlay';
+    modalOverlay.innerHTML = `
+      <div class="rel-invest-modal" style="max-width:380px;">
+        <div class="rel-invest-modal-header">
+          <div>
+            <div class="rel-invest-modal-title">Capacidade por Gestor</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
+              Número de contas saudável por gestor operacional
+            </div>
+          </div>
+          <button class="rel-invest-modal-close" id="rel-capacity-modal-close">&times;</button>
+        </div>
+        <div class="rel-invest-modal-body">
+          <label style="display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+            Contas por gestor
+          </label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            id="rel-capacity-input"
+            class="form-input"
+            style="width:100%; height:38px; padding:0 12px; font-size:14px; border:1px solid var(--border-light); border-radius:10px; background:var(--bg); box-sizing:border-box;"
+          />
+          <div id="rel-capacity-status" style="font-size:12px; margin-top:10px; min-height:16px;"></div>
+        </div>
+        <div class="rel-invest-modal-footer">
+          <button class="btn btn-secondary" id="rel-capacity-cancel-btn" style="height:34px; font-size:12.5px;">Cancelar</button>
+          <button class="btn btn-primary" id="rel-capacity-save-btn" style="height:34px; font-size:12.5px;">Salvar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modalOverlay);
+
+    const fechar = () => modalOverlay.classList.remove('open');
+    modalOverlay.querySelector('#rel-capacity-modal-close')?.addEventListener('click', fechar);
+    modalOverlay.querySelector('#rel-capacity-cancel-btn')?.addEventListener('click', fechar);
+    modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) fechar(); });
+
+    modalOverlay.querySelector('#rel-capacity-save-btn')?.addEventListener('click', async () => {
+      const input  = document.getElementById('rel-capacity-input');
+      const status = document.getElementById('rel-capacity-status');
+      const btn    = document.getElementById('rel-capacity-save-btn');
+      const valor  = parseInt(input?.value, 10);
+
+      if (!valor || valor < 1) {
+        if (status) { status.textContent = 'Informe um número válido de contas.'; status.style.color = '#EF4444'; }
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Salvando…';
+
+      const { error } = await RelatoriosConfiguracoes.set('capacity_por_gestor', valor);
+
+      btn.disabled = false;
+      btn.textContent = 'Salvar';
+
+      if (error) {
+        console.error('[Relatórios] Erro ao salvar capacidade por gestor:', error.message);
+        if (status) { status.textContent = 'Erro ao salvar. Tente novamente.'; status.style.color = '#EF4444'; }
+        return;
+      }
+
+      fechar();
+      _carregarCapacityOperacional();
+    });
+  }
+
+  modalOverlay.classList.add('open');
+  const input = document.getElementById('rel-capacity-input');
+  if (input) input.value = _capacityPorGestorAtual;
+  const status = document.getElementById('rel-capacity-status');
+  if (status) status.textContent = '';
+}
+
+function _bindCapacityEditEvents() {
+  document.getElementById('rel-capacity-edit-btn')?.addEventListener('click', _abrirModalCapacity);
+}
+
 // ─── Capacity Operacional (Setor Operacional) ─────────────────────────
 
 /**
@@ -3885,7 +4100,12 @@ async function _carregarCapacityOperacional() {
   if (valueEl) valueEl.textContent = '…%';
 
   try {
-    // 1. Busca todos os usuários ativos
+    // 1. Busca a capacidade configurável por gestor (editável pelo admin)
+    const { data: configData } = await RelatoriosConfiguracoes.get('capacity_por_gestor');
+    const capacidadePadraoPorGestor = Number(configData?.valor) > 0 ? Number(configData.valor) : 20;
+    _capacityPorGestorAtual = capacidadePadraoPorGestor;
+
+    // 2. Busca todos os usuários ativos
     const { data: gestores, error: uErr } = await supabase
       .from('usuarios')
       .select('user_id, user_nome, user_cargo, user_avatar')
@@ -3893,7 +4113,7 @@ async function _carregarCapacityOperacional() {
 
     if (uErr) throw uErr;
 
-    // 2. Busca todos os clientes Ativados com user_id
+    // 3. Busca todos os clientes Ativados com user_id
     const { data: clientes, error: cErr } = await supabase
       .from('clientes')
       .select('cliente_id, cliente_nome, user_id')
@@ -3911,18 +4131,17 @@ async function _carregarCapacityOperacional() {
     }
 
     // Identifica gestores operacionais (cargo Operações ou que possuem clientes atribuídos)
-    const gestoresOp = (gestores || []).filter(u => 
+    const gestoresOp = (gestores || []).filter(u =>
       u.user_cargo === 'Operações' || contagemPorGestor[u.user_id] > 0
     );
 
     const numGestores = Math.max(gestoresOp.length, 1);
-    const capacidadePadraoPorGestor = 20;
     const capacidadeTotal = numGestores * capacidadePadraoPorGestor;
 
     const capacityPercent = Math.round((totalAtivos / capacidadeTotal) * 100);
 
     if (valueEl) valueEl.textContent = `${capacityPercent}%`;
-    if (subEl)   subEl.textContent   = `${totalAtivos} clientes ativos ÷ ${capacidadeTotal} vagas (${numGestores} gestor${numGestores !== 1 ? 'es' : ''} × 20 contas)`;
+    if (subEl)   subEl.textContent   = `${totalAtivos} clientes ativos ÷ ${capacidadeTotal} vagas (${numGestores} gestor${numGestores !== 1 ? 'es' : ''} × ${capacidadePadraoPorGestor} contas)`;
     
     if (trendEl) {
       if (capacityPercent <= 85) {
@@ -3954,7 +4173,7 @@ async function _carregarCapacityOperacional() {
       badge: `${capacityPercent}% Equipe`,
       items,
       footer: `Meta saudável da agência: <b>80%</b> de taxa de ocupação`,
-      formula: 'Clientes Ativos ÷ (Gestores de Operações × 20 contas)'
+      formula: `Clientes Ativos ÷ (Gestores de Operações × ${capacidadePadraoPorGestor} contas)`
     };
     _bindKpiHover('rel-capacity');
 
@@ -4309,74 +4528,6 @@ async function _carregarIndiceSilencio() {
 
   } catch (err) {
     console.error('[Relatórios] Erro ao calcular Índice de Silêncio:', err.message);
-    if (valueEl) valueEl.textContent = 'Erro';
-  }
-}
-
-// ─── Taxa de Campanhas sem Saldo (Setor Operacional) ──────────────────
-
-/**
- * Calcula a porcentagem de clientes ativados que estão com a campanha "Sem Saldo".
- */
-async function _carregarCampanhasSemSaldo() {
-  const cardEl  = document.getElementById('rel-campanhas-sem-saldo');
-  const valueEl = cardEl?.querySelector('.rel-kpi-value');
-  const subEl   = cardEl?.querySelector('.rel-kpi-sub');
-  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
-
-  if (valueEl) valueEl.textContent = '…%';
-
-  try {
-    const { data: clientes, error } = await supabase
-      .from('clientes')
-      .select('cliente_id, cliente_nome, cliente_campanha_status, investimento_midia, usuarios(user_nome)')
-      .eq('cliente_status', 'Ativado');
-
-    if (error) throw error;
-
-    const totalAtivos = (clientes ?? []).length;
-
-    if (totalAtivos === 0) {
-      if (valueEl) valueEl.textContent = '0%';
-      if (subEl)   subEl.textContent   = 'Nenhum cliente ativo na base';
-      if (trendEl) {
-        trendEl.textContent = 'Sem dados';
-        trendEl.className   = 'rel-kpi-trend rel-kpi-trend--neu';
-      }
-      return;
-    }
-
-    const semSaldoList = (clientes ?? []).filter(c => c.cliente_campanha_status === 'Sem Saldo');
-    const semSaldoCount = semSaldoList.length;
-    const pct = (semSaldoCount / totalAtivos) * 100;
-
-    if (valueEl) valueEl.textContent = `${pct.toFixed(1).replace('.', ',')}%`;
-    if (subEl)   subEl.textContent   = `${semSaldoCount} de ${totalAtivos} clientes ativados estão sem saldo de mídia`;
-    if (trendEl) {
-      const ok = pct <= 5;
-      trendEl.textContent = ok ? '✅ Meta atingida (≤ 5%)' : '⚠️ Alerta: Acima da meta (> 5%)';
-      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'down'}`;
-    }
-
-    const items = semSaldoList.length > 0
-      ? semSaldoList.slice(0, 10).map(c => ({
-          name: c.cliente_nome,
-          sub: `Gestor: ${c.usuarios?.user_nome || 'Não atribuído'}`,
-          val: c.investimento_midia ? `R$ ${_formatarBRL(c.investimento_midia)}/mês` : 'Sem Saldo'
-        }))
-      : [{ name: 'Todas as contas com saldo ativo', sub: 'Nenhum cliente pausado por falta de saldo', val: '100% Ok' }];
-
-    _kpiBreakdowns['rel-campanhas-sem-saldo'] = {
-      title: 'Contas de Anúncio Sem Saldo',
-      badge: `${semSaldoCount} Contas`,
-      items,
-      footer: `<b>${semSaldoCount}</b> de <b>${totalAtivos}</b> clientes ativados`,
-      formula: '(Clientes com status "Sem Saldo" ÷ Total de Ativados) × 100'
-    };
-    _bindKpiHover('rel-campanhas-sem-saldo');
-
-  } catch (err) {
-    console.error('[Relatórios] Erro ao calcular Campanhas sem Saldo:', err.message);
     if (valueEl) valueEl.textContent = 'Erro';
   }
 }
@@ -4979,7 +5130,6 @@ async function _aplicarPeriodo(inicio, fim, label = null) {
   _carregarCapacityOperacional();
   _carregarHealthScore();
   _carregarIndiceSilencio();
-  _carregarCampanhasSemSaldo();
   _carregarOtimizacoesRealizadas();
 }
 
@@ -5356,6 +5506,8 @@ export default {
     _bindPeriodEvents();
     _bindInvestimentoEvents();
     _bindAtividadesEquipeEvents();
+    _bindCapacityEditEvents();
+    _bindPerformanceVendedorEvents();
     // Carregar valor de investimento salvo primeiro
     await _carregarInvestimento();
     // Aplicar período padrão ao montar (dispara _carregarCAC e demais métricas)
@@ -5376,6 +5528,8 @@ export default {
     }
     const modal = document.getElementById('rel-invest-modal-overlay');
     if (modal) modal.remove();
+    const capacityModal = document.getElementById('rel-capacity-modal-overlay');
+    if (capacityModal) capacityModal.remove();
 
     _chartComercial?.destroy(); _chartComercial = null;
     _chartOperacoes?.destroy(); _chartOperacoes = null;
