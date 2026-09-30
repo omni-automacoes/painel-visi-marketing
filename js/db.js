@@ -102,6 +102,18 @@ export const Clientes = {
   },
 
   /**
+   * Retorna clientes Ativados para seleção (ex: GanhoModal → vincular upsell
+   * a um cliente já existente). Ordenados por nome.
+   */
+  async getAtivosParaSelecao() {
+    return supabase
+      .from('clientes')
+      .select('cliente_id, cliente_nome, cliente_mensalidade')
+      .eq('cliente_status', 'Ativado')
+      .order('cliente_nome', { ascending: true });
+  },
+
+  /**
    * Retorna todos os clientes com status 'Ativado' do usuário.
    * KPI: Clientes Ativos (Operações)
    */

@@ -946,10 +946,13 @@ async function _sincronizarMensalidadesPeriodo(periodStr, silencioso = false) {
     // Data de vencimento padrão para o período (dia 10)
     const dataVenc = _getDefaultDueDateForPeriod(periodStr);
 
-    // Mapeamento de receitas já existentes para o cliente no período alvo
+    // Mapeamento de mensalidades já geradas para o cliente no período alvo.
+    // Verifica especificamente receita_descricao = 'Mensalidade' (não qualquer
+    // receita do cliente no mês) para não pular a geração quando o cliente já
+    // tem outro lançamento no mês, como um upsell vindo do negócio Ganho.
     const jaCadastrados = new Set();
     (_state.receitas || []).forEach(r => {
-      if (!r.cliente_id || !r.data_vencimento) return;
+      if (!r.cliente_id || !r.data_vencimento || r.receita_descricao !== 'Mensalidade') return;
       const d = new Date(r.data_vencimento);
       if (d.getUTCFullYear() === targetYear && d.getUTCMonth() === targetMonthIdx) {
         jaCadastrados.add(Number(r.cliente_id));

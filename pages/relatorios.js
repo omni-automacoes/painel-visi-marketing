@@ -1114,11 +1114,11 @@ function _htmlSectionMaster() {
         icon: `<svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
         iconColor: 'green',
         accentColor: 'green',
-        value: '—%',
-        label: 'Taxa de Expansão de Base (Upsell)',
-        sub: 'Clientes que aumentaram plano ou mensalidade',
+        value: 'R$ —',
+        label: 'Expansão de Base (Upsell)',
+        sub: 'Fórmula: Soma da receita de negócios ganhos atribuídos a um Cliente Existente no modal de Ganho, com data de venda no período. Inclui vendas Pontuais e Aumentos de Mensalidade.',
         trend: 'neu',
-        trendLabel: 'Meta: > 15%',
+        trendLabel: 'Vendido à base ativa',
       })}
 
       ${_kpiCard({
@@ -2277,9 +2277,11 @@ async function _carregarCacPayback(inicio, fim) {
   }
 }
 
-// ─── Taxa de Expansão de Base (Upsell) ────────────────────────────────────────
+// ─── Expansão de Base (Upsell) ────────────────────────────────────────────────
 /**
- * Calcula a taxa de expansão da carteira (upsell de mensalidades / contratos adicionais).
+ * Soma a receita vendida à base ativa no período: negócios ganhos atribuídos a
+ * um "Cliente Existente" no modal de Ganho (Pontual ou Aumento de Mensalidade),
+ * identificados por financeiro_receitas.negocio_id preenchido.
  */
 async function _carregarExpansaoBase(inicio, fim) {
   const cardEl  = document.getElementById('rel-expansao-base');
@@ -2287,7 +2289,7 @@ async function _carregarExpansaoBase(inicio, fim) {
   const subEl   = cardEl?.querySelector('.rel-kpi-sub');
   const trendEl = cardEl?.querySelector('.rel-kpi-trend');
 
-  if (valueEl) valueEl.textContent = '…%';
+  if (valueEl) valueEl.textContent = 'R$ …';
 
   try {
     const [iniY, iniM, iniD] = inicio.split('-').map(Number);
@@ -2297,56 +2299,43 @@ async function _carregarExpansaoBase(inicio, fim) {
 
     const { data: receitas, error: recErr } = await supabase
       .from('financeiro_receitas')
-      .select('receita_id, receita_valor, receita_tipo, receita_descricao, cliente_id, clientes(cliente_nome, criado_em)')
+      .select('receita_id, receita_valor, receita_tipo, receita_descricao, cliente_id, negocio_id, clientes(cliente_nome)')
+      .not('negocio_id', 'is', null)
       .gte('data_vencimento', inicioISO)
       .lte('data_vencimento', fimISO);
 
     if (recErr) throw recErr;
 
-    const upsellList = (receitas ?? []).filter(r => {
-      if (!r.cliente_id || !r.clientes?.criado_em) return false;
-      const clienteCriado = new Date(r.clientes.criado_em).getTime();
-      const iniTimestamp = new Date(inicioISO).getTime();
-      return clienteCriado < iniTimestamp && (r.receita_tipo === 'Pontual' || (r.receita_descricao || '').toLowerCase().includes('upsell'));
-    });
-
+    const upsellList = receitas ?? [];
     const totalUpsell = upsellList.reduce((acc, r) => acc + Number(r.receita_valor || 0), 0);
+    const pontuais    = upsellList.filter(r => r.receita_tipo === 'Pontual');
+    const recorrentes = upsellList.filter(r => r.receita_tipo === 'Recorrente');
 
-    const { data: ativos } = await supabase
-      .from('clientes')
-      .select('cliente_mensalidade')
-      .eq('cliente_status', 'Ativado');
-
-    const totalMrr = (ativos ?? []).reduce((acc, c) => acc + Number(c.cliente_mensalidade || 0), 0);
-    const pctExpansao = totalMrr > 0 ? (totalUpsell / totalMrr) * 100 : 0;
-    const pctStr = pctExpansao.toFixed(1).replace('.', ',');
-
-    if (valueEl) valueEl.textContent = `${pctStr}%`;
+    if (valueEl) valueEl.textContent = `R$ ${_formatarBRL(totalUpsell)}`;
     if (subEl) {
       subEl.textContent = totalUpsell > 0
-        ? `R$ ${_formatarBRL(totalUpsell)} em upsell · ${upsellList.length} serviço(s) extra(s)`
-        : 'Nenhum upsell ou expansão registrado no período';
+        ? `${upsellList.length} venda${upsellList.length !== 1 ? 's' : ''} à base · ${pontuais.length} pontual/pontuais · ${recorrentes.length} aumento(s) de mensalidade`
+        : 'Nenhuma venda atribuída à base ativa no período';
     }
     if (trendEl) {
-      const ok = pctExpansao >= 15;
-      trendEl.textContent = ok ? '✅ Meta atingida (> 15%)' : 'Meta: > 15%';
-      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${ok ? 'up' : 'neu'}`;
+      trendEl.textContent = upsellList.length > 0 ? `${upsellList.length} venda${upsellList.length !== 1 ? 's' : ''}` : 'Sem vendas no período';
+      trendEl.className   = `rel-kpi-trend rel-kpi-trend--${upsellList.length > 0 ? 'up' : 'neu'}`;
     }
 
     const items = upsellList.length > 0
       ? upsellList.slice(0, 10).map(u => ({
           name: u.clientes?.cliente_nome || 'Cliente',
-          sub: u.receita_descricao || 'Expansão de escopo',
+          sub: `${u.receita_tipo === 'Recorrente' ? '🔁 Aumento de mensalidade' : '➕ Pontual'} · ${u.receita_descricao || 'Upsell'}`,
           val: `+ R$ ${_formatarBRL(u.receita_valor)}`
         }))
-      : [{ name: 'Sem contratos de expansão', sub: 'Oportunidade para ofertas de upsell à carteira ativa', val: '0%' }];
+      : [{ name: 'Sem vendas à base no período', sub: 'Atribua um negócio ganho a um Cliente Existente para computar aqui', val: 'R$ 0,00' }];
 
     _kpiBreakdowns['rel-expansao-base'] = {
-      title: 'Taxa de Expansão de Base (Upsell)',
-      badge: `${pctStr}% Expansão`,
+      title: 'Expansão de Base (Upsell)',
+      badge: `R$ ${_formatarBRL(totalUpsell)}`,
       items,
-      footer: `Total expandido: <b>R$ ${_formatarBRL(totalUpsell)}</b> no período`,
-      formula: '(Receitas de Expansão ÷ MRR da Carteira) × 100'
+      footer: `Total vendido à base ativa: <b>R$ ${_formatarBRL(totalUpsell)}</b> no período`,
+      formula: 'Soma de negócios ganhos atribuídos a um Cliente Existente (Pontual + Aumento de Mensalidade)'
     };
     _bindKpiHover('rel-expansao-base');
 

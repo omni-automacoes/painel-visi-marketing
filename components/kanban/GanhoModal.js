@@ -6,7 +6,7 @@
  *   const modal = new GanhoModal();
  *   modal.open(negocio, onConfirm, onCancel);
  */
-import { Usuarios } from '../../js/db.js';
+import { Usuarios, Clientes } from '../../js/db.js';
 
 export default class GanhoModal {
   constructor() {
@@ -17,16 +17,19 @@ export default class GanhoModal {
 
   /**
    * Abre o modal pré-preenchendo com os dados do negócio.
-   * Busca a lista de gestores (Operações/Administrador) antes de montar.
+   * Busca a lista de gestores (Operações/Administrador) e de clientes
+   * ativados (para o fluxo de upsell em cliente existente) antes de montar.
    */
   async open(negocio = {}, onConfirm, onCancel) {
     this._negocio   = negocio;
     this._onConfirm = onConfirm;
     this._onCancel  = onCancel;
 
-    // Busca gestores antes de montar
-    const { data: gestores } = await Usuarios.getGestores();
-    this._mount(gestores || []);
+    const [{ data: gestores }, { data: clientesAtivos }] = await Promise.all([
+      Usuarios.getGestores(),
+      Clientes.getAtivosParaSelecao(),
+    ]);
+    this._mount(gestores || [], clientesAtivos || []);
   }
 
   close(canceled = false) {
@@ -40,7 +43,7 @@ export default class GanhoModal {
 
   // ── Mount ─────────────────────────────────────────────────────
 
-  _mount(gestores = []) {
+  _mount(gestores = [], clientesAtivos = []) {
     document.getElementById('ganho-modal-overlay')?.remove();
 
     const neg = this._negocio || {};
@@ -57,6 +60,13 @@ export default class GanhoModal {
           `<option value="${this._esc(g.user_id)}">${this._esc(g.user_nome)} — ${this._esc(g.user_cargo)}</option>`
         ).join('')
       : '<option value="" disabled>Nenhum gestor encontrado</option>';
+
+    // Monta as <option> do select de cliente existente (upsell)
+    const clientesOptions = clientesAtivos.length
+      ? clientesAtivos.map(c =>
+          `<option value="${this._esc(String(c.cliente_id))}">${this._esc(c.cliente_nome)}</option>`
+        ).join('')
+      : '<option value="" disabled>Nenhum cliente ativo encontrado</option>';
 
     document.body.insertAdjacentHTML('beforeend', `
       <div class="ganho-modal-overlay" id="ganho-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="ganho-modal-title">
@@ -104,6 +114,10 @@ export default class GanhoModal {
                 <button type="button" class="ganho-tipo-btn" id="ganho-tipo-outros" data-tipo="Outros">
                   <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                   Outros
+                </button>
+                <button type="button" class="ganho-tipo-btn" id="ganho-tipo-existente" data-tipo="Existente">
+                  <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                  Cliente Existente
                 </button>
               </div>
               <input type="hidden" id="gf-tipo" name="gf_tipo" value="Assessoria">
@@ -337,6 +351,84 @@ export default class GanhoModal {
               </div>
             </div>
 
+            <!-- Seção: Upsell em Cliente Existente (apenas Cliente Existente) -->
+            <div class="ganho-form-section" id="ganho-secao-existente" style="display:none;">
+              <div class="ganho-form-section-title">
+                <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                Expansão de Base (Upsell)
+              </div>
+              <div class="ganho-form-grid ganho-form-grid--1">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-existente-cliente">
+                    Cliente
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <div class="ganho-form-select-wrap">
+                    <select
+                      class="ganho-form-input ganho-form-select"
+                      id="gf-existente-cliente"
+                      name="gf_existente_cliente"
+                    >
+                      <option value="">— Selecione o cliente —</option>
+                      ${clientesOptions}
+                    </select>
+                    <svg class="ganho-form-select-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </div>
+              </div>
+              <div class="ganho-form-grid ganho-form-grid--2" style="margin-top:12px">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-existente-valor">
+                    Valor Vendido
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <div class="ganho-form-input-prefix-wrap">
+                    <span class="ganho-form-input-prefix">R$</span>
+                    <input
+                      class="ganho-form-input ganho-form-input--prefixed"
+                      id="gf-existente-valor"
+                      name="gf_existente_valor"
+                      type="text"
+                      placeholder="0,00"
+                    >
+                  </div>
+                </div>
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-existente-tipo">
+                    Tipo de Venda
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <div class="ganho-form-select-wrap">
+                    <select
+                      class="ganho-form-input ganho-form-select"
+                      id="gf-existente-tipo"
+                      name="gf_existente_tipo"
+                    >
+                      <option value="">— Selecione —</option>
+                      <option value="Pontual">Pontual (venda avulsa)</option>
+                      <option value="Recorrente">Aumento de Mensalidade</option>
+                    </select>
+                    <svg class="ganho-form-select-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </div>
+              </div>
+              <div class="ganho-form-grid ganho-form-grid--1" style="margin-top:12px">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-existente-descricao">
+                    O que foi vendido
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <textarea
+                    class="ganho-form-textarea"
+                    id="gf-existente-descricao"
+                    name="gf_existente_descricao"
+                    rows="3"
+                    placeholder="Ex: Upgrade de plano, novo serviço contratado, aumento de escopo…"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
             <!-- Footer -->
             <div class="ganho-modal-footer">
               <button type="button" class="ganho-btn-cancel" id="ganho-btn-cancel">
@@ -424,6 +516,17 @@ export default class GanhoModal {
       });
     }
 
+    // Máscara de moeda — valor vendido (upsell em cliente existente)
+    const existenteValorInput = document.getElementById('gf-existente-valor');
+    if (existenteValorInput) {
+      existenteValorInput.addEventListener('input', () => {
+        let raw = existenteValorInput.value.replace(/\D/g, '');
+        if (!raw) { existenteValorInput.value = ''; return; }
+        const num = parseInt(raw, 10) / 100;
+        existenteValorInput.value = num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      });
+    }
+
     // Toggle da visibilidade da duração do contrato
     const contratoInput = document.getElementById('gf-contrato');
     const duracaoWrap = document.getElementById('gf-contrato-duracao-wrap');
@@ -453,10 +556,9 @@ export default class GanhoModal {
   }
 
   _toggleTipoView(tipo) {
-    const secaoCliente   = document.getElementById('ganho-secao-dados-cliente');
-    const secaoFinanceiro = document.querySelector('.ganho-form-section:nth-of-type(3)');
-    const secaoContexto  = document.getElementById('ganho-secao-contexto');
-    const secaoOutros    = document.getElementById('ganho-secao-outros');
+    const secaoCliente  = document.getElementById('ganho-secao-dados-cliente');
+    const secaoOutros   = document.getElementById('ganho-secao-outros');
+    const secaoExistente = document.getElementById('ganho-secao-existente');
 
     if (tipo === 'Outros') {
       // Esconde seções de Assessoria
@@ -471,9 +573,8 @@ export default class GanhoModal {
           fields.forEach((f, i) => { if (i > 0) f.style.display = 'none'; });
         }
       }
-      // Esconde seção de informações financeiras
-      const allSections = document.querySelectorAll('.ganho-form-section');
-      allSections.forEach(s => {
+      // Esconde as demais seções, mantém só Dados do Cliente (nome) e Descrição
+      document.querySelectorAll('.ganho-form-section').forEach(s => {
         if (s.id !== 'ganho-secao-dados-cliente' && s.id !== 'ganho-secao-outros' && !s.classList.contains('ganho-tipo-section')) {
           s.style.display = 'none';
         }
@@ -482,6 +583,14 @@ export default class GanhoModal {
       // Título da seção de dados
       const tituloSecao = secaoCliente?.querySelector('.ganho-form-section-title');
       if (tituloSecao) tituloSecao.style.display = 'none';
+    } else if (tipo === 'Existente') {
+      // Esconde todas as seções, mantém só a de Expansão de Base (Upsell)
+      document.querySelectorAll('.ganho-form-section').forEach(s => {
+        if (s.id !== 'ganho-secao-existente' && !s.classList.contains('ganho-tipo-section')) {
+          s.style.display = 'none';
+        }
+      });
+      if (secaoExistente) secaoExistente.style.display = '';
     } else {
       // Assessoria: restaura tudo
       if (secaoCliente) {
@@ -495,9 +604,9 @@ export default class GanhoModal {
         const tituloSecao = secaoCliente?.querySelector('.ganho-form-section-title');
         if (tituloSecao) tituloSecao.style.display = '';
       }
-      const allSections = document.querySelectorAll('.ganho-form-section');
-      allSections.forEach(s => { s.style.display = ''; });
+      document.querySelectorAll('.ganho-form-section').forEach(s => { s.style.display = ''; });
       if (secaoOutros) secaoOutros.style.display = 'none';
+      if (secaoExistente) secaoExistente.style.display = 'none';
       // Respeita checkbox de contrato
       const duracaoWrap = document.getElementById('gf-contrato-duracao-wrap');
       const contratoInput = document.getElementById('gf-contrato');
@@ -517,6 +626,13 @@ export default class GanhoModal {
       campos = [
         { id: 'gf-nome',             label: 'Nome do Cliente', tipo: 'input'    },
         { id: 'gf-outros-descricao', label: 'Descrição',       tipo: 'textarea' },
+      ];
+    } else if (tipo === 'Existente') {
+      campos = [
+        { id: 'gf-existente-cliente',   label: 'Cliente',         tipo: 'input'    },
+        { id: 'gf-existente-valor',     label: 'Valor Vendido',   tipo: 'input'    },
+        { id: 'gf-existente-tipo',      label: 'Tipo de Venda',   tipo: 'input'    },
+        { id: 'gf-existente-descricao', label: 'O que foi vendido', tipo: 'textarea' },
       ];
     } else {
       // Assessoria — todos os campos completos
@@ -577,6 +693,10 @@ export default class GanhoModal {
       contexto_geral:     document.getElementById('gf-contexto')?.value.trim()         || '',
       descricao_empresa:  document.getElementById('gf-descricao')?.value.trim()        || '',
       outros_descricao:   document.getElementById('gf-outros-descricao')?.value.trim() || '',
+      cliente_existente_id: document.getElementById('gf-existente-cliente')?.value      || '',
+      upsell_valor:         document.getElementById('gf-existente-valor')?.value.trim() || '',
+      upsell_tipo:           document.getElementById('gf-existente-tipo')?.value        || '',
+      upsell_descricao:     document.getElementById('gf-existente-descricao')?.value.trim() || '',
     };
 
     // Feedback visual no botão

@@ -6,7 +6,7 @@
  *   const panel = new NegocioPanel();
  *   panel.open(negocioId);
  */
-import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards, Usuarios, NegociosResponsaveis, EtapasPipeline } from '../../js/db.js';
+import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards, Usuarios, NegociosResponsaveis, EtapasPipeline, FinanceiroReceitas } from '../../js/db.js';
 import UserStore from '../../js/userStore.js';
 import GanhoModal from './GanhoModal.js';
 
@@ -704,6 +704,62 @@ export default class NegocioPanel {
             ]);
             if (cardRes.error)
               console.error('[NegocioPanel] Erro ao criar kanban_card (Outros):', cardRes.error);
+            if (statusRes.error)
+              console.error('[NegocioPanel] Erro ao marcar como Ganho:', statusRes.error);
+
+            this._atualizarBadgeStatus('Ganho');
+            this._atualizarBotoesStatus('Ganho', neg.negocio_id);
+            setTimeout(() => window.location.reload(), 800);
+            return;
+          }
+
+          // ── CLIENTE EXISTENTE: upsell — não cria cliente novo, vincula a
+          // receita ao cliente e ao negócio para a métrica de Expansão de Base ──
+          if (dados.tipo_cliente === 'Existente') {
+            const clienteId = parseInt(dados.cliente_existente_id, 10);
+            const valorStr  = (dados.upsell_valor || '').replace(/\./g, '').replace(',', '.');
+            const valor     = parseFloat(valorStr) || 0;
+            const isRecorrente = dados.upsell_tipo === 'Recorrente';
+
+            if (!clienteId || valor <= 0) {
+              console.error('[NegocioPanel] Dados de upsell inválidos:', dados);
+              return;
+            }
+
+            const { data: clienteAtual, error: clienteErr } = await Clientes.getById(clienteId);
+            if (clienteErr) console.error('[NegocioPanel] Erro ao buscar cliente para upsell:', clienteErr);
+
+            // Se for aumento de mensalidade, soma o valor à mensalidade atual do cliente
+            let clienteUpdateRes = { error: null };
+            if (isRecorrente && clienteAtual) {
+              const novaMensalidade = Number(clienteAtual.cliente_mensalidade || 0) + valor;
+              clienteUpdateRes = await Clientes.updateCliente(clienteId, { cliente_mensalidade: novaMensalidade });
+            }
+
+            const receitaPayload = {
+              cliente_id:        clienteId,
+              negocio_id:        neg.negocio_id ?? null,
+              receita_nome:      clienteAtual?.cliente_nome || null,
+              receita_descricao: dados.upsell_descricao || 'Upsell',
+              receita_tipo:      isRecorrente ? 'Recorrente' : 'Pontual',
+              receita_valor:     valor,
+              data_vencimento:   new Date().toISOString(),
+              data_recebimento:  null,
+              receita_status:    'Pendente',
+            };
+
+            const [receitaRes, valorRes, statusRes] = await Promise.all([
+              FinanceiroReceitas.create(receitaPayload),
+              Negocios.updateValor(neg.negocio_id, valor),
+              Negocios.updateStatus(neg.negocio_id, 'Ganho'),
+            ]);
+
+            if (clienteUpdateRes.error)
+              console.error('[NegocioPanel] Erro ao atualizar mensalidade do cliente:', clienteUpdateRes.error);
+            if (receitaRes.error)
+              console.error('[NegocioPanel] Erro ao lançar receita de upsell:', receitaRes.error);
+            if (valorRes.error)
+              console.error('[NegocioPanel] Erro ao atualizar valor do negócio:', valorRes.error);
             if (statusRes.error)
               console.error('[NegocioPanel] Erro ao marcar como Ganho:', statusRes.error);
 

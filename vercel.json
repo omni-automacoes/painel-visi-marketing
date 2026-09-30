@@ -1,7 +1,16 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "api.visimarketing.com.br" }],
+      "destination": "/api/v1?raw=:path*"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "destination": "/api/v1?raw=v1/:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
