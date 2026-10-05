@@ -1005,10 +1005,10 @@ function _htmlSectionMaster() {
         iconColor: 'purple',
         accentColor: 'purple',
         value: '— meses',
-        label: 'Tempo Médio de Permanência',
-        sub: 'Fórmula: Média de (data_churn − criado_em) dos clientes que já deram churn, em meses. Base para o cálculo de LTV.',
+        label: 'Tempo Médio de Permanência (clientes ativos)',
+        sub: 'Fórmula: Média de (hoje − data de entrada) dos clientes ativos, em meses. Base para o cálculo de LTV.',
         trend: 'neu',
-        trendLabel: 'Histórico de churns',
+        trendLabel: 'Carteira ativa',
       })}
 
       ${_kpiCard({
@@ -3663,36 +3663,32 @@ async function _carregarLtvMetrics(inicio, fim) {
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
     const DIAS_POR_MES = 30.44;
 
-    // 1. Tempo Médio de Permanência: média de (data_churn − criado_em) dos clientes
-    //    que já deram churn, em meses. Base para o LTV Total da Carteira.
-    const { data: churnados, error: churnadosErr } = await supabase
-      .from('clientes')
-      .select('cliente_id, cliente_nome, criado_em, data_churn')
-      .eq('cliente_churn', true)
-      .not('data_churn', 'is', null);
-
-    if (churnadosErr) throw churnadosErr;
-
-    const permanencias = (churnados ?? [])
-      .map(c => ({
-        ...c,
-        meses: (new Date(c.data_churn).getTime() - new Date(c.criado_em).getTime()) / (1000 * 60 * 60 * 24 * DIAS_POR_MES),
-      }))
-      .filter(c => c.meses >= 0);
-
-    const totalChurnados = permanencias.length;
-    const tempoMedioPermanencia = totalChurnados > 0
-      ? permanencias.reduce((s, c) => s + c.meses, 0) / totalChurnados
-      : 0;
-
-    // 2. Ticket Médio da Carteira ativa: MRR ativo ÷ clientes ativos
+    // 1. Carteira ativa (clientes Ativados)
     const { data: carteiraAtiva, error: carteiraErr } = await supabase
       .from('clientes')
-      .select('cliente_id, cliente_mensalidade')
+      .select('cliente_id, cliente_nome, cliente_mensalidade, criado_em')
       .eq('cliente_status', 'Ativado');
 
     if (carteiraErr) throw carteiraErr;
 
+    // 2. Tempo Médio de Permanência: média de (hoje − criado_em) dos clientes
+    //    ativos, em meses. Base para o LTV Total da Carteira.
+    const agora = Date.now();
+    const permanencias = (carteiraAtiva ?? [])
+      .filter(c => c.criado_em)
+      .map(c => ({
+        ...c,
+        meses: (agora - new Date(c.criado_em).getTime()) / (1000 * 60 * 60 * 24 * DIAS_POR_MES),
+      }))
+      .filter(c => c.meses >= 0)
+      .sort((a, b) => b.meses - a.meses);
+
+    const totalPermanencias = permanencias.length;
+    const tempoMedioPermanencia = totalPermanencias > 0
+      ? permanencias.reduce((s, c) => s + c.meses, 0) / totalPermanencias
+      : 0;
+
+    // 3. Ticket Médio da Carteira ativa: MRR ativo ÷ clientes ativos
     const nAtivos = (carteiraAtiva ?? []).length;
     const mrrAtivos = (carteiraAtiva ?? []).reduce((s, c) => s + Number(c.cliente_mensalidade ?? 0), 0);
     const ticketMedioCarteira = nAtivos > 0 ? mrrAtivos / nAtivos : 0;
@@ -3744,10 +3740,10 @@ async function _carregarLtvMetrics(inicio, fim) {
     // 6. Atualiza DOM
     const permanenciaStr = tempoMedioPermanencia.toFixed(1).replace('.', ',');
     setValue(permanenciaEl, `${permanenciaStr} meses`);
-    setSub(permanenciaEl, totalChurnados > 0
-      ? `Média de ${totalChurnados} cliente${totalChurnados !== 1 ? 's' : ''} que já deu/deram churn`
-      : 'Nenhum cliente com churn registrado ainda');
-    setTrend(permanenciaEl, `${totalChurnados} churn${totalChurnados !== 1 ? 's' : ''} no histórico`);
+    setSub(permanenciaEl, totalPermanencias > 0
+      ? `Média de ${totalPermanencias} cliente${totalPermanencias !== 1 ? 's' : ''} ativo${totalPermanencias !== 1 ? 's' : ''} (data de entrada até hoje)`
+      : 'Nenhum cliente ativo na carteira');
+    setTrend(permanenciaEl, `${totalPermanencias} cliente${totalPermanencias !== 1 ? 's' : ''} ativo${totalPermanencias !== 1 ? 's' : ''}`);
 
     setValue(ltvMedioEl, `R$ ${_formatarBRL(ltvMedio)}`);
     setSub(ltvMedioEl, `Média de ${totalGanhos} contrato${totalGanhos !== 1 ? 's' : ''} ganho${totalGanhos !== 1 ? 's' : ''} (histórico)`);
@@ -3813,7 +3809,7 @@ async function _carregarLtvMetrics(inicio, fim) {
       badge: `R$ ${_formatarBRL(ltvTotal)}`,
       items: [
         { name: 'Ticket Médio da Carteira', sub: 'MRR ativo ÷ Clientes ativos', val: `R$ ${_formatarBRL(ticketMedioCarteira)}` },
-        { name: 'Tempo Médio de Permanência', sub: `Histórico de ${totalChurnados} churn${totalChurnados !== 1 ? 's' : ''}`, val: `${permanenciaStr} meses` },
+        { name: 'Tempo Médio de Permanência', sub: `Média de ${totalPermanencias} cliente${totalPermanencias !== 1 ? 's' : ''} ativo${totalPermanencias !== 1 ? 's' : ''}`, val: `${permanenciaStr} meses` },
         { name: 'Clientes Ativos na Carteira', sub: 'Base atual de clientes ativados', val: `${nAtivos} clientes` },
         { name: 'LTV Total (valor de vida do cliente médio)', sub: 'Ticket Médio × Tempo de Permanência', val: `R$ ${_formatarBRL(ltvTotal)}` }
       ],
@@ -3824,17 +3820,17 @@ async function _carregarLtvMetrics(inicio, fim) {
 
     // 10. Popula Hover Card do Tempo Médio de Permanência
     _kpiBreakdowns['rel-tempo-permanencia'] = {
-      title: 'Tempo Médio de Permanência',
+      title: 'Tempo Médio de Permanência (clientes ativos)',
       badge: `${permanenciaStr} meses`,
       items: permanencias.length > 0
         ? permanencias.slice(0, 10).map(c => ({
             name: c.cliente_nome || 'Cliente',
-            sub: `${_formatarExibicao(c.criado_em?.substring(0, 10))} → ${_formatarExibicao(c.data_churn?.substring(0, 10))}`,
+            sub: `Cliente desde ${_formatarExibicao(c.criado_em?.substring(0, 10))}`,
             val: `${c.meses.toFixed(1).replace('.', ',')} meses`
           }))
-        : [{ name: 'Nenhum churn registrado ainda', sub: 'A métrica é calculada com base no histórico de cancelamentos', val: '—' }],
-      footer: `Base para o cálculo de LTV Total da Carteira`,
-      formula: 'Média de (data_churn − criado_em) dos clientes com churn'
+        : [{ name: 'Nenhum cliente ativo', sub: 'A métrica é calculada com base nos clientes ativos', val: '—' }],
+      footer: `Mostrando os 10 clientes ativos há mais tempo · Base para o cálculo de LTV Total da Carteira`,
+      formula: 'Média de (hoje − data de entrada) dos clientes ativos'
     };
     _bindKpiHover('rel-tempo-permanencia');
 
