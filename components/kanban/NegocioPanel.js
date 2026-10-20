@@ -157,7 +157,21 @@ export default class NegocioPanel {
         </button>
         <div class="np-header-main">
           <span class="np-badge ${status.cls}">${status.label}</span>
-          <h2 class="np-title">${neg.negocio_titulo || '(sem título)'}</h2>
+          <div class="np-title-wrap" id="np-title-wrap">
+            <h2 class="np-title" id="np-title-display">${this._escTitulo(neg.negocio_titulo) || '(sem título)'}</h2>
+            <button class="np-title-edit-btn" id="np-title-edit-btn" title="Editar nome do negócio">
+              <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+          </div>
+          <div class="np-title-field" id="np-title-field" style="display:none">
+            <input type="text" id="np-title-input" class="np-title-input" maxlength="150" placeholder="Nome do negócio" value="${this._escTitulo(neg.negocio_titulo)}" />
+            <button class="np-valor-save-btn" id="np-title-save-btn" title="Salvar">
+              <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button class="np-valor-cancel-btn" id="np-title-cancel-btn" title="Cancelar">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
           <div class="np-valor-wrap">
             ${neg.negocio_valor
               ? `<span class="np-valor" id="np-valor-display">${valor}</span>`
@@ -653,6 +667,7 @@ export default class NegocioPanel {
     this._bindRecontadoForm(neg.negocio_id);
     this._bindFaturamentoField(neg.negocio_id);
     this._bindValorField(neg.negocio_id);
+    this._bindTituloField(neg.negocio_id);
     this._bindResponsaveis(neg.negocio_id, neg);
 
     // Bind select etapa
@@ -2163,6 +2178,77 @@ export default class NegocioPanel {
 
     // Botão lápis (quando já tem valor)
     editBtn?.addEventListener('click', _openField);
+  }
+
+  // ── Nome do negócio ───────────────────────────────────────
+
+  _escTitulo(str) {
+    return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  _bindTituloField(negocioId) {
+    const wrap      = document.getElementById('np-title-wrap');
+    const display   = document.getElementById('np-title-display');
+    const editBtn   = document.getElementById('np-title-edit-btn');
+    const field     = document.getElementById('np-title-field');
+    const input     = document.getElementById('np-title-input');
+    const saveBtn   = document.getElementById('np-title-save-btn');
+    const cancelBtn = document.getElementById('np-title-cancel-btn');
+    if (!wrap || !input) return;
+
+    const _open = () => {
+      wrap.style.display  = 'none';
+      field.style.display = 'flex';
+      input.focus();
+      input.select();
+    };
+
+    const _close = () => {
+      field.style.display = 'none';
+      wrap.style.display  = '';
+    };
+
+    const _save = async () => {
+      const titulo = input.value.trim();
+      if (!titulo) {
+        input.classList.add('np-valor-input--error');
+        setTimeout(() => input.classList.remove('np-valor-input--error'), 1500);
+        return;
+      }
+
+      saveBtn.disabled = true;
+      const { error } = await Negocios.updateTitulo(negocioId, titulo);
+      saveBtn.disabled = false;
+
+      if (error) {
+        console.error('[NegocioPanel] Erro ao salvar nome do negócio:', error);
+        input.classList.add('np-valor-input--error');
+        setTimeout(() => input.classList.remove('np-valor-input--error'), 2000);
+        return;
+      }
+
+      display.textContent = titulo;
+      if (this._negocioData) this._negocioData.negocio_titulo = titulo;
+      _close();
+
+      // Atualiza o card no kanban, se estiver visível
+      const clientEl = document.querySelector(`#opp-${negocioId} .opp-client`);
+      if (clientEl) {
+        clientEl.textContent = titulo;
+        clientEl.title = titulo;
+      }
+    };
+
+    editBtn?.addEventListener('click', _open);
+    saveBtn?.addEventListener('click', _save);
+    cancelBtn?.addEventListener('click', () => {
+      input.value = display.textContent;
+      _close();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  _save();
+      if (e.key === 'Escape') cancelBtn?.click();
+    });
   }
 
   // ── Faturamento ───────────────────────────────────────────

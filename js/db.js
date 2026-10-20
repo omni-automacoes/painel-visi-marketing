@@ -1346,6 +1346,13 @@ export const Negocios = {
       .eq('negocio_id', negocioId);
   },
 
+  async updateTitulo(negocioId, titulo) {
+    return supabase
+      .from('negocios')
+      .update({ negocio_titulo: titulo, ultima_atualizacao: nowBrasilia() })
+      .eq('negocio_id', negocioId);
+  },
+
   async updateValor(negocioId, valor) {
     return supabase
       .from('negocios')

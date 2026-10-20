@@ -3263,10 +3263,16 @@ export default {
       fld('Descrição da Empresa', ta('e-descricao',c.descricao_empresa,'Descrição da empresa…'), true)
     );
 
+    const entradaInputValue = c.criado_em
+      ? new Date(c.criado_em).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+      : '';
+    const hojeInputValue = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     const cardHistorico = renderCard('historico', '🕐', 'Histórico',
-      vi('Criado em', fv(fmtDate(c.criado_em))) +
+      vi('Data de entrada (criado em)', fv(fmtDate(c.criado_em))) +
       vi('Última atualização', fv(fmtDate(c.ultima_atualizacao))),
-      null // Sem edição
+      fld('Data de entrada do cliente',
+        `<input id="e-criado-em" class="cl-input" type="date" value="${entradaInputValue}" max="${hojeInputValue}" style="font-size:13px;padding:7px 10px;width:100%">`,
+        true)
     );
 
     // ── Card Churn (somente se cliente_churn === true) ──────────────────────
@@ -3993,6 +3999,22 @@ export default {
             contexto_geral: g('e-contexto') || null,
             descricao_empresa: g('e-descricao') || null
           };
+        } else if (section === 'historico') {
+          const dataEntrada = g('e-criado-em');
+          const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+          const falha = msg => {
+            alert(msg);
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Salvar Alterações';
+          };
+          if (!dataEntrada) return falha('Informe a data de entrada do cliente.');
+          if (dataEntrada > hoje) return falha('A data de entrada não pode ser no futuro.');
+          // Meio-dia UTC: evita que fuso horário empurre a data para o mês vizinho nos relatórios
+          const novaData = `${dataEntrada}T12:00:00.000Z`;
+          if (c.data_churn && new Date(novaData) > new Date(c.data_churn)) {
+            return falha('A data de entrada não pode ser posterior à data de churn deste cliente.');
+          }
+          payload = { criado_em: novaData };
         }
 
         const { data: updated, error } = await Clientes.updateCliente(c.cliente_id, payload);
