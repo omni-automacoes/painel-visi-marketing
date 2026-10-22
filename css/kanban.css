@@ -1340,6 +1340,10 @@
   cursor: pointer;
   padding-right: 36px;
 }
+.form-select option {
+  background: var(--white);
+  color: var(--black);
+}
 .form-select-chevron {
   position: absolute;
   right: 12px;

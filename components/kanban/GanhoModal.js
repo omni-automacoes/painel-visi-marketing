@@ -259,21 +259,8 @@ export default class GanhoModal {
               </div>
               <div class="ganho-form-grid ganho-form-grid--1" style="margin-top:12px">
                 <div class="ganho-form-field">
-                  <label class="ganho-form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
-                    <input
-                      type="checkbox"
-                      id="gf-contrato"
-                      name="gf_contrato"
-                      style="width: 18px; height: 18px; accent-color: #059669; cursor: pointer; margin: 0;"
-                    >
-                    Possui Contrato?
-                  </label>
-                </div>
-              </div>
-              <div class="ganho-form-grid ganho-form-grid--1" id="gf-contrato-duracao-wrap" style="margin-top:12px; display:none;">
-                <div class="ganho-form-field">
                   <label class="ganho-form-label" for="gf-contrato-duracao">
-                    Duração do Contrato (meses)
+                    Tempo de Contrato (meses)
                     <span class="ganho-form-required">*</span>
                   </label>
                   <input
@@ -284,7 +271,24 @@ export default class GanhoModal {
                     min="1"
                     step="1"
                     placeholder="Quantidade de meses"
+                    required
                   >
+                  <span style="font-size: 11.5px; color: var(--text-muted, #94A3B8); margin-top: 4px;">
+                    Alimenta o LTV por canal na aba Diretoria &amp; Financeiro (valor mensal × meses).
+                  </span>
+                </div>
+              </div>
+              <div class="ganho-form-grid ganho-form-grid--1" style="margin-top:12px">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                    <input
+                      type="checkbox"
+                      id="gf-contrato"
+                      name="gf_contrato"
+                      style="width: 18px; height: 18px; accent-color: #059669; cursor: pointer; margin: 0;"
+                    >
+                    Possui Contrato?
+                  </label>
                 </div>
               </div>
             </div>
@@ -527,22 +531,6 @@ export default class GanhoModal {
       });
     }
 
-    // Toggle da visibilidade da duração do contrato
-    const contratoInput = document.getElementById('gf-contrato');
-    const duracaoWrap = document.getElementById('gf-contrato-duracao-wrap');
-    const duracaoInput = document.getElementById('gf-contrato-duracao');
-    contratoInput?.addEventListener('change', () => {
-      if (contratoInput.checked) {
-        duracaoWrap.style.display = 'grid';
-        duracaoInput.required = true;
-      } else {
-        duracaoWrap.style.display = 'none';
-        duracaoInput.required = false;
-        duracaoInput.value = '';
-        duracaoInput.classList.remove('ganho-form-input--error');
-      }
-    });
-
     // Toggle tipo: Assessoria / Outros
     document.querySelectorAll('.ganho-tipo-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -607,12 +595,6 @@ export default class GanhoModal {
       document.querySelectorAll('.ganho-form-section').forEach(s => { s.style.display = ''; });
       if (secaoOutros) secaoOutros.style.display = 'none';
       if (secaoExistente) secaoExistente.style.display = 'none';
-      // Respeita checkbox de contrato
-      const duracaoWrap = document.getElementById('gf-contrato-duracao-wrap');
-      const contratoInput = document.getElementById('gf-contrato');
-      if (duracaoWrap && contratoInput) {
-        duracaoWrap.style.display = contratoInput.checked ? 'grid' : 'none';
-      }
     }
   }
 
@@ -643,13 +625,11 @@ export default class GanhoModal {
         { id: 'gf-responsavel',  label: 'Responsável pelo Cliente',  tipo: 'input'    },
         { id: 'gf-investimento', label: 'Investimento em Mídia',     tipo: 'input'    },
         { id: 'gf-mensalidade',  label: 'Valor da Mensalidade',      tipo: 'input'    },
+        { id: 'gf-contrato-duracao', label: 'Tempo de Contrato (meses)', tipo: 'input' },
         { id: 'gf-segmento',     label: 'Segmento',                  tipo: 'input'    },
         { id: 'gf-contexto',     label: 'Contexto Geral do Cliente', tipo: 'textarea' },
         { id: 'gf-descricao',    label: 'Descrição Sobre a Empresa', tipo: 'textarea' },
       ];
-      if (isContrato) {
-        campos.push({ id: 'gf-contrato-duracao', label: 'Duração do Contrato', tipo: 'input' });
-      }
     }
 
     // Valida e coleta inválidos
@@ -659,7 +639,8 @@ export default class GanhoModal {
     campos.forEach(({ id, tipo: tipoCampo }) => {
       const el = document.getElementById(id);
       if (!el) return;
-      const vazio = !el.value.trim();
+      // Campo numérico (meses) também precisa ser um inteiro a partir de 1
+      const vazio = !el.value.trim() || (el.type === 'number' && !(parseInt(el.value, 10) >= 1));
       el.classList.toggle('ganho-form-input--error', vazio);
       if (tipoCampo === 'textarea') el.classList.toggle('ganho-form-textarea--error', vazio);
       if (vazio) {
@@ -687,7 +668,7 @@ export default class GanhoModal {
       investimento_midia: document.getElementById('gf-investimento')?.value.trim()     || '',
       mensalidade:        document.getElementById('gf-mensalidade')?.value.trim()      || '',
       cliente_contrato:   isContrato,
-      contrato_duracao:   isContrato ? (parseInt(document.getElementById('gf-contrato-duracao')?.value, 10) || null) : null,
+      contrato_duracao:   tipo === 'Assessoria' ? (parseInt(document.getElementById('gf-contrato-duracao')?.value, 10) || null) : null,
       segmento:           document.getElementById('gf-segmento')?.value.trim()         || '',
       origem_cliente:     this._negocio?.negocio_origem                                || '',
       contexto_geral:     document.getElementById('gf-contexto')?.value.trim()         || '',

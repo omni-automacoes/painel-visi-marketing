@@ -1419,6 +1419,627 @@ body.dark-mode .rel-motivo-item:hover {
   .rel-investimento-input      { width: 120px; }
 }
 
+.rel-atividade-canal-hint {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #d97706;
+}
+
+.rel-canais-table .rel-resultado-ltvcac {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* ---- Desempenho por vendedor ---- */
+.rel-vendedor-card {
+  margin-bottom: 24px;
+}
+
+.rel-vendedor-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.rel-detail-row--1 { grid-template-columns: 1fr; }
+
+.rel-vendedor-table th.rel-num,
+.rel-vendedor-table td.rel-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-vendedor-table td.rel-num {
+  white-space: nowrap;
+}
+
+.rel-vendedor-table th.rel-num {
+  white-space: normal; /* cabeçalhos longos quebram em duas linhas */
+  min-width: 56px;
+}
+
+/* 12 colunas: padding enxuto para caber sem rolagem em telas médias */
+.rel-vendedor-table th,
+.rel-vendedor-table td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.rel-vendedor-table th {
+  line-height: 1.3;
+  white-space: normal;
+  font-size: 10px;
+}
+
+.rel-vendedor-table .rel-table-name {
+  white-space: nowrap;
+}
+
+.rel-vendedor-table td.rel-num {
+  vertical-align: middle;
+}
+
+.rel-vend-qtd {
+  display: block;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.rel-vend-pct {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.rel-vend-verde {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* ---- Indicadores do canal ---- */
+.rel-metric-group-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.rel-kpi-nota {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  border-style: dashed;
+}
+
+/* ---- Card: Canais de aquisição ---- */
+.rel-canais-card {
+  margin-bottom: 24px;
+}
+
+.rel-canais-scroll {
+  overflow-x: auto;
+}
+
+.rel-canais-table th.rel-num,
+.rel-canais-table td.rel-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-canais-table .rel-canal-nome {
+  font-weight: 700;
+  color: var(--black);
+  white-space: nowrap;
+}
+
+.rel-canais-table .rel-canais-destaque {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.rel-canais-table tr.rel-canais-total td {
+  font-weight: 800;
+  color: var(--black);
+  border-top: 1px solid var(--border-light);
+}
+
+.rel-canais-nota {
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.rel-canais-table tbody tr[data-canal] {
+  cursor: pointer;
+}
+
+.rel-canais-table tr.rel-canal-ativo td {
+  background: rgba(26,206,238,0.08);
+}
+
+/* ---- Card: Conversão por canal e etapa ---- */
+.rel-funilcanal-card {
+  margin-bottom: 24px;
+}
+
+/* Seletor de canal (menu personalizado) */
+.rel-canalpicker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.rel-canalpicker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--black);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.rel-canalpicker-btn:hover,
+.rel-canalpicker-btn:focus-visible {
+  border-color: var(--cyan);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(26,206,238,0.1);
+}
+
+.rel-canalpicker-btn.has-canal {
+  background: rgba(26,206,238,0.1);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.rel-canalpicker-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rel-canalpicker-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  min-width: 250px;
+  padding: 8px;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+}
+
+.rel-canalpicker-panel.open {
+  display: block;
+}
+
+.rel-canalpicker-op {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--black);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rel-canalpicker-op:hover {
+  background: var(--bg);
+}
+
+.rel-canalpicker-op.active {
+  background: rgba(26,206,238,0.12);
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.rel-canalpicker-op.active::before {
+  content: '✓';
+  font-size: 12px;
+}
+
+.rel-funilcanal-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.rel-funil-etapas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rel-funil-linha {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 40px 52px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.rel-funil-nome {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.rel-funil-trilho {
+  height: 18px;
+  min-width: 0;
+}
+
+.rel-funil-barra,
+.rel-comp-barra {
+  height: 100%;
+  border-radius: 0 6px 6px 0;
+  transition: width 0.3s ease;
+}
+
+.rel-funil-barra {
+  background: linear-gradient(90deg, #0ea5c4, var(--cyan));
+}
+
+.rel-comp-barra {
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+.rel-funil-barra--perda {
+  background: linear-gradient(90deg, #b91c1c, #ef4444);
+}
+
+.rel-funil-linha--perda {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.rel-funil-qtd {
+  text-align: right;
+  font-weight: 700;
+  color: var(--black);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-funil-pct {
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-funil-vazio {
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.rel-funil-comp-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.rel-funil-comp-sub {
+  margin: 2px 0 14px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.rel-comp-linha {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  margin: 0 -6px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.rel-comp-linha.ativo {
+  background: rgba(26,206,238,0.08);
+}
+
+.rel-comp-nome {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.rel-comp-pct {
+  text-align: right;
+  font-weight: 700;
+  color: var(--black);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Canal escolhido vs média geral: taxa de passagem entre etapas */
+.rel-passagem-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 92px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 12.5px;
+}
+
+.rel-passagem-nome {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.rel-passagem-canal {
+  text-align: right;
+  font-weight: 700;
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-passagem-media {
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .rel-funilcanal-body { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- Card: Investimento por canal ---- */
+.rel-invcanal-card {
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+
+.rel-invcanal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.rel-invcanal-head .rel-investimento-card-right {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+/* Sem largura mínima: o status vazio não pode empurrar o botão Salvar para dentro */
+.rel-invcanal-card .rel-investimento-status {
+  min-width: 0;
+  text-align: right;
+}
+
+/* Seletor de mês */
+.rel-mespicker {
+  position: relative;
+}
+
+.rel-mespicker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--black);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.rel-mespicker-btn:hover,
+.rel-mespicker-btn:focus-visible {
+  border-color: var(--cyan);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(26,206,238,0.1);
+}
+
+.rel-mespicker-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rel-mespicker-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: 264px;
+  padding: 14px;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+}
+
+.rel-mespicker-panel.open {
+  display: block;
+}
+
+.rel-mespicker-year {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.rel-mespicker-nav {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rel-mespicker-nav:hover {
+  border-color: var(--cyan);
+  color: var(--black);
+}
+
+.rel-mespicker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.rel-mespicker-mes {
+  position: relative;
+  padding: 9px 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.rel-mespicker-mes:hover {
+  border-color: var(--cyan);
+  color: var(--black);
+}
+
+.rel-mespicker-mes.active {
+  background: var(--cyan);
+  color: #04202a;
+}
+
+.rel-mespicker-mes.has-data::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.rel-mespicker-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rel-mespicker-legend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.rel-invcanal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rel-invcanal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rel-invcanal-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rel-invcanal-field .rel-investimento-input {
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  padding-right: 10px;
+}
+
+.rel-invcanal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.rel-invcanal-legado {
+  color: #d97706;
+  font-weight: 500;
+}
+
+@media (max-width: 1200px) {
+  .rel-invcanal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .rel-invcanal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* ---- Skeleton ---- */
 .rel-skeleton {
   background: linear-gradient(90deg, var(--bg) 25%, rgba(0,0,0,0.06) 50%, var(--bg) 75%);

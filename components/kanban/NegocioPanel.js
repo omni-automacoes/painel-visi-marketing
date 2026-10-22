@@ -9,6 +9,7 @@
 import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards, Usuarios, NegociosResponsaveis, EtapasPipeline, FinanceiroReceitas } from '../../js/db.js';
 import UserStore from '../../js/userStore.js';
 import GanhoModal from './GanhoModal.js';
+import { opcoesOrigemHTML } from '../../js/canais.js';
 
 export default class NegocioPanel {
   constructor() {
@@ -271,7 +272,9 @@ export default class NegocioPanel {
               </div>
               <div class="np-sb-item">
                 <label class="np-sb-label" for="np-input-origem">Origem</label>
-                <input type="text" id="np-input-origem" class="np-contato-input-field" value="${neg.negocio_origem ?? ''}" placeholder="Ex: Instagram, Indicação">
+                <select id="np-input-origem" class="np-contato-input-field">
+                  ${opcoesOrigemHTML(neg.negocio_origem)}
+                </select>
               </div>
               <div class="np-sb-item">
                 <label class="np-sb-label" for="np-input-segmento">Segmento</label>
@@ -519,19 +522,20 @@ export default class NegocioPanel {
             </div>
           </div>
 
-          <!-- Qualificação de Lead (SQL) -->
+          <!-- Qualificação de Lead (MQL) -->
           <div class="np-qualificacao-section">
-            <span class="np-qualificacao-label">Qualificação de Lead (SQL)</span>
+            <span class="np-qualificacao-label">Qualificação de Lead (MQL)</span>
             <button
               class="np-qualificado-toggle${neg.negocio_lead_qualificado ? ' np-qualificado-toggle--done' : ''}"
               id="np-qualificado-toggle"
               data-negocio-id="${neg.negocio_id}"
               data-qualificado="${neg.negocio_lead_qualificado ? 'true' : 'false'}"
-              title="${neg.negocio_lead_qualificado ? 'Lead qualificado — clique para desmarcar' : 'Marcar como lead qualificado'}"
+              title="${neg.negocio_lead_qualificado ? 'MQL — clique para desmarcar' : 'Marcar como MQL (lead qualificado)'}"
             >
               <svg class="np-toggle-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="np-qualificado-label">${neg.negocio_lead_qualificado ? 'Lead Qualificado' : 'Marcar como Qualificado'}</span>
+              <span class="np-qualificado-label">${this._rotuloQualificado(neg.negocio_lead_qualificado, neg.negocio_lead_qualificado_em)}</span>
             </button>
+            <span class="np-qualificacao-hint">O SDR marca quando o lead tem faturamento e estrutura comercial.</span>
           </div>
 
           <!-- Tabs: Contatos | Tarefas | Anotações | Arquivos -->
@@ -1189,14 +1193,14 @@ export default class NegocioPanel {
         }
       }
 
-      // Marcar reunião também qualifica o lead automaticamente (SQL) —
+      // Marcar reunião também qualifica o lead automaticamente (MQL) —
       // desmarcar a reunião NÃO desqualifica (controle manual a partir daqui)
       const qualificadoBtn = document.getElementById('np-qualificado-toggle');
       if (novo && qualificadoBtn && qualificadoBtn.dataset.qualificado !== 'true') {
         qualificadoBtn.classList.add('np-qualificado-toggle--done');
         qualificadoBtn.dataset.qualificado = 'true';
-        qualificadoBtn.title = 'Lead qualificado — clique para desmarcar';
-        qualificadoBtn.querySelector('.np-qualificado-label').textContent = 'Lead Qualificado';
+        qualificadoBtn.title = 'MQL — clique para desmarcar';
+        qualificadoBtn.querySelector('.np-qualificado-label').textContent = this._rotuloQualificado(true, new Date().toISOString());
       }
 
       const { error } = await Negocios.updateReuniaoRealizada(negId, novo);
@@ -1247,11 +1251,14 @@ export default class NegocioPanel {
       const novo = !atual;
       const negId = parseInt(btn.dataset.negocioId, 10);
 
+      const labelEl = btn.querySelector('.np-qualificado-label');
+      const rotuloAnterior = labelEl.textContent;
+
       // Feedback imediato
       btn.classList.toggle('np-qualificado-toggle--done', novo);
       btn.dataset.qualificado = String(novo);
-      btn.title = novo ? 'Lead qualificado — clique para desmarcar' : 'Marcar como lead qualificado';
-      btn.querySelector('.np-qualificado-label').textContent = novo ? 'Lead Qualificado' : 'Marcar como Qualificado';
+      btn.title = novo ? 'MQL — clique para desmarcar' : 'Marcar como MQL (lead qualificado)';
+      labelEl.textContent = this._rotuloQualificado(novo, new Date().toISOString());
       btn.disabled = true;
 
       const { error } = await Negocios.updateLeadQualificado(negId, novo);
@@ -1262,7 +1269,7 @@ export default class NegocioPanel {
         // Reverte
         btn.classList.toggle('np-qualificado-toggle--done', atual);
         btn.dataset.qualificado = String(atual);
-        btn.querySelector('.np-qualificado-label').textContent = atual ? 'Lead Qualificado' : 'Marcar como Qualificado';
+        labelEl.textContent = rotuloAnterior;
       }
     });
   }
@@ -1951,6 +1958,13 @@ export default class NegocioPanel {
     return d.toLocaleDateString('pt-BR', opts).replace('.', '');
   }
 
+  /** Texto do botão de MQL: "Qualificado em dd/mm/aaaa" (ou só "Qualificado" sem data registrada) */
+  _rotuloQualificado(qualificado, dataIso) {
+    if (!qualificado) return 'Marcar como Qualificado';
+    const data = this._fmtDate(dataIso);
+    return data ? `Qualificado em ${data}` : 'Qualificado';
+  }
+
   _fmtDate(iso) {
     if (!iso) return null;
     return new Date(iso).toLocaleDateString('pt-BR', {
@@ -2468,7 +2482,7 @@ export default class NegocioPanel {
       // Reset values
       inputTelefone.value = neg.negocio_telefone ?? '';
       inputEmail.value = neg.negocio_email ?? '';
-      inputOrigem.value = neg.negocio_origem ?? '';
+      inputOrigem.innerHTML = opcoesOrigemHTML(neg.negocio_origem);
       inputSegmento.value = neg.negocio_segmento ?? '';
       inputInstagram.value = neg.link_instagram ?? '';
     });

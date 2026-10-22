@@ -735,12 +735,12 @@
 .np-noshow-toggle:hover:not(:disabled) { border-color: #F97316; color: #F97316; background: #FFF7ED; }
 .np-noshow-toggle--done { background: #FFF7ED; border-color: #F97316; color: #F97316; }
 
-/* ── Seção: Qualificação de Lead (SQL) ───────────────── */
+/* ── Seção: Qualificação de Lead (MQL) ───────────────── */
 .np-qualificacao-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 18px 16px;
+  padding: 14px 18px 16px;
   background: #FFFFFF;
   border-bottom: 1px solid rgba(0,0,0,0.05);
   flex-shrink: 0;
@@ -776,8 +776,14 @@
   line-height: 1;
 }
 .np-qualificado-toggle:disabled { opacity: 0.6; cursor: not-allowed; }
-.np-qualificado-toggle:hover:not(:disabled) { border-color: #8B5CF6; color: #8B5CF6; background: #F5F3FF; }
-.np-qualificado-toggle--done { background: #F5F3FF; border-color: #8B5CF6; color: #8B5CF6; }
+.np-qualificado-toggle:hover:not(:disabled) { border-color: #059669; color: #059669; background: #F0FDF4; }
+.np-qualificado-toggle--done { background: #F0FDF4; border-color: #059669; color: #059669; }
+
+.np-qualificacao-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #94A3B8;
+}
 
 
 /* Status Buttons */
@@ -1783,8 +1789,9 @@
 
 [data-theme="dark"] .np-qualificacao-section { background: var(--white); border-bottom-color: var(--border-light); }
 [data-theme="dark"] .np-qualificado-toggle { background: var(--white); border-color: var(--border-light); color: var(--text-secondary); }
-[data-theme="dark"] .np-qualificado-toggle:hover:not(:disabled) { background: rgba(139,92,246,0.1); }
-[data-theme="dark"] .np-qualificado-toggle--done { background: rgba(139,92,246,0.1); }
+[data-theme="dark"] .np-qualificado-toggle:hover:not(:disabled) { background: rgba(5,150,105,0.12); }
+[data-theme="dark"] .np-qualificado-toggle--done { background: rgba(5,150,105,0.12); }
+[data-theme="dark"] .np-qualificacao-hint { color: var(--text-muted); }
 
 [data-theme="dark"] .np-status-btn { background: var(--white); border-color: var(--border-light); }
 [data-theme="dark"] .np-status-btn--ganho { color: #10B981; }
@@ -2071,6 +2078,15 @@
 [data-theme="dark"] .np-contato-input-field {
   background: rgba(255,255,255,0.06);
   border-color: rgba(255,255,255,0.12);
+  color: #f1f5f9;
+}
+/* Menu aberto de <select>: o navegador desenha a lista com fundo próprio,
+   então fundo e cor das opções precisam ser definidos no tema escuro */
+[data-theme="dark"] select.np-contato-input-field {
+  color-scheme: dark;
+}
+[data-theme="dark"] .np-contato-input-field option {
+  background: #1A1A1A;
   color: #f1f5f9;
 }
 [data-theme="dark"] .np-contato-input-field:focus {

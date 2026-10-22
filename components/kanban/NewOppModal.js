@@ -12,6 +12,7 @@
  *   });
  */
 import { Negocios } from '../../js/db.js';
+import { opcoesOrigemHTML } from '../../js/canais.js';
 
 export default class NewOppModal {
   constructor() {
@@ -113,8 +114,12 @@ export default class NewOppModal {
             <div class="form-row">
               <div class="form-field">
                 <label class="form-label" for="opp-origem">Origem</label>
-                <input class="form-input" id="opp-origem" name="negocio_origem"
-                       type="text" placeholder="Ex: Indicação, Ads…">
+                <div class="form-select-wrap">
+                  <select class="form-input form-select" id="opp-origem" name="negocio_origem">
+                    ${opcoesOrigemHTML()}
+                  </select>
+                  <svg class="form-select-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
               </div>
               <div class="form-field">
                 <label class="form-label" for="opp-segmento">Segmento</label>

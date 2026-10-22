@@ -32,6 +32,20 @@ function nowBrasilia() {
     .replace(' ', 'T') + '-03:00';
 }
 
+/**
+ * Guarda a data de qualificação (MQL) quando o lead passa a ser qualificado
+ * por uma ação automática (marcar reunião, ganhar). Não sobrescreve uma data
+ * que o SDR já tenha registrado.
+ */
+async function registrarDataMql(negocioId) {
+  return supabase
+    .from('negocios')
+    .update({ negocio_lead_qualificado_em: nowBrasilia() })
+    .eq('negocio_id', negocioId)
+    .eq('negocio_lead_qualificado', true)
+    .is('negocio_lead_qualificado_em', null);
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  LEADS
 // ══════════════════════════════════════════════════════════════════
@@ -1277,17 +1291,19 @@ export const Negocios = {
       payload.data_fechamento = null;
       payload.motivo_perda    = null;
     }
-    return supabase
+    const res = await supabase
       .from('negocios')
       .update(payload)
       .eq('negocio_id', negocioId);
+    if (novoStatus === 'Ganho' && !res.error) await registrarDataMql(negocioId);
+    return res;
   },
 
 
   /**
    * Atualiza o campo reuniao_realizada de um negócio.
    * Ao marcar a reunião (valor=true), o negócio também é marcado como Lead
-   * Qualificado (SQL) automaticamente — o usuário pode desmarcar depois em
+   * Qualificado (MQL) automaticamente — o usuário pode desmarcar depois em
    * "Qualificação" sem que isso reverta ao desmarcar a reunião.
    * @param {number}  negocioId
    * @param {boolean} valor - true = reunião marcada, false = não marcada
@@ -1295,14 +1311,17 @@ export const Negocios = {
   async updateReuniaoRealizada(negocioId, valor) {
     const payload = { reuniao_realizada: valor, ultima_atualizacao: nowBrasilia() };
     if (valor) payload.negocio_lead_qualificado = true;
-    return supabase
+    const res = await supabase
       .from('negocios')
       .update(payload)
       .eq('negocio_id', negocioId);
+    if (valor && !res.error) await registrarDataMql(negocioId);
+    return res;
   },
 
   /**
-   * Atualiza o campo negocio_lead_qualificado (SQL) de um negócio.
+   * Atualiza o campo negocio_lead_qualificado (MQL) de um negócio e guarda a
+   * data da qualificação (limpa ao desmarcar).
    * Controle manual e independente — não é revertido automaticamente por
    * nenhuma outra ação (ex: desmarcar a reunião).
    * @param {number}  negocioId
@@ -1311,7 +1330,11 @@ export const Negocios = {
   async updateLeadQualificado(negocioId, valor) {
     return supabase
       .from('negocios')
-      .update({ negocio_lead_qualificado: valor, ultima_atualizacao: nowBrasilia() })
+      .update({
+        negocio_lead_qualificado: valor,
+        negocio_lead_qualificado_em: valor ? nowBrasilia() : null,
+        ultima_atualizacao: nowBrasilia(),
+      })
       .eq('negocio_id', negocioId);
   },
 

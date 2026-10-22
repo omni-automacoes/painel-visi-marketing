@@ -12,22 +12,20 @@ import UserStore from '../js/userStore.js';
 import { supabase } from '../js/supabase.js';
 import { DiaFinalizado, Usuarios, Negocios, RelatoriosConfiguracoes } from '../js/db.js';
 import DualLineChart from '../charts/DualLineChart.js';
+import { CANAIS, CANAL_OUTROS, canalDaOrigem } from '../js/canais.js';
 
 // ─── Estado local ───────────────────────────────────────────
 let _tabAtual              = 'comercial'; // 'comercial' | 'operacoes' | 'master'
 let _dataInicio            = '';          // 'YYYY-MM-DD'
 let _dataFim               = '';          // 'YYYY-MM-DD'
 let _periodLabel           = '';          // texto exibido no badge
-let _investimentoMarketing = 0;           // numeric alocado por mês em relatorios_investimentos
 let _capacityPorGestorAtual = 20;         // número de contas saudável por gestor (editável, relatorios_configuracoes)
 
 const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
 // ─── Gráficos de evolução anual (por setor) ──────────────────
-let _chartComercial        = null;
 let _chartOperacoes        = null;
 let _chartMaster           = null;
-let _dadosGraficoComercial = null;
 let _dadosGraficoOperacoes = null;
 let _dadosGraficoMaster    = null;
 
@@ -57,6 +55,18 @@ function _formatarExibicao(iso) {
   if (!iso) return '—';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
+}
+
+const MESES_NOME = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+/** 'YYYY-MM' → 'Outubro de 2026' */
+function _formatarNomeMes(periodoKey) {
+  if (!periodoKey || !periodoKey.includes('-')) return 'Período Atual';
+  const [ano, mes] = periodoKey.split('-');
+  return `${MESES_NOME[parseInt(mes, 10) - 1] || mes} de ${ano}`;
 }
 
 // ─── Helpers de moeda (BRL) ──────────────────────────────────
@@ -363,67 +373,12 @@ function _htmlTabs() {
 }
 
 // ============================================================
-// SETOR COMERCIAL — 12 métricas
+// SETOR COMERCIAL
 // ============================================================
 
 function _htmlSectionComercial() {
-  // ── Row 1: 4 KPIs principais de custo e conversão ──────────
-  const row1 = `
-    <div class="rel-kpi-row rel-kpi-row--4">
-
-      ${_kpiCard({
-        id: 'rel-cac',
-        icon: `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg>`,
-        iconColor: 'cyan',
-        accentColor: 'cyan',
-        value: 'R$ —',
-        label: 'CAC — Custo de Aquisição de Clientes',
-        sub: 'Fórmula: Orçamento de Marketing do Mês ÷ Total de Novos Clientes conquistados no período. Investimento fixo por mês salvo em relatorios_investimentos.',
-        trend: 'neu',
-        trendLabel: 'Período atual',
-      })}
-
-      ${_kpiCard({
-        id: 'rel-ltv-cac',
-        icon: `<svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
-        iconColor: 'green',
-        accentColor: 'green',
-        value: '—× ',
-        label: 'LTV / CAC Ratio',
-        sub: 'Saudável acima de 3×',
-        trend: 'neu',
-        trendLabel: 'Meta: 3×',
-      })}
-
-      ${_kpiCard({
-        id: 'rel-cpq',
-        icon: `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
-        iconColor: 'blue',
-        accentColor: 'blue',
-        value: 'R$ —',
-        label: 'CPQ — Custo por Lead Qualificado',
-        sub: 'Fórmula: Orçamento de Marketing do Mês ÷ Total de SQLs (reuniões agendadas). Investimento fixo por mês salvo em relatorios_investimentos.',
-        trend: 'neu',
-        trendLabel: 'Período atual',
-      })}
-
-      ${_kpiCard({
-        id: 'rel-ticket-medio',
-        icon: `<svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-        iconColor: 'amber',
-        accentColor: 'amber',
-        value: 'R$ —',
-        label: 'Ticket Médio de Novos Contratos',
-        sub: 'Fórmula: Soma do Valor dos Negócios Ganhos ÷ Total de Contratos Ganhos no período. Filtra negocios com negocio_status = Ganho e data_fechamento dentro do período selecionado; soma negocio_valor (numeric) e divide pela quantidade.',
-        trend: 'neu',
-        trendLabel: 'Período atual',
-      })}
-
-    </div>
-  `;
-
-  // ── Row 2: 4 KPIs de conversão e eficiência ──────────────
-  const row2 = `
+  // ── Indicadores do canal (acompanham o canal escolhido no funil) ──
+  const indicadoresCanal = `
     <div class="rel-kpi-row rel-kpi-row--4">
 
       ${_kpiCard({
@@ -439,18 +394,6 @@ function _htmlSectionComercial() {
       })}
 
       ${_kpiCard({
-        id: 'rel-mql-sql',
-        icon: `<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-        iconColor: 'purple',
-        accentColor: 'purple',
-        value: '—%',
-        label: 'MQL para SQL Ratio',
-        sub: 'Fórmula: (SQLs ÷ MQLs) × 100. MQL = total de negócios criados no período (criado_em). SQL = negócios marcados como "Lead Qualificado" criados no período — marcado automaticamente ao agendar a reunião, mas editável a qualquer momento na sessão de Qualificação do negócio.',
-        trend: 'neu',
-        trendLabel: 'Meta: 30%',
-      })}
-
-      ${_kpiCard({
         id: 'rel-noshow',
         icon: `<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
         iconColor: 'red',
@@ -461,25 +404,6 @@ function _htmlSectionComercial() {
         trend: 'neu',
         trendLabel: 'Meta: < 15%',
       })}
-
-      ${_kpiCard({
-        id: 'rel-churn-comercial',
-        icon: `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-        iconColor: 'red',
-        accentColor: 'red',
-        value: '—%',
-        label: 'Taxa de Churn Comercial',
-        sub: 'Fórmula: (Clientes que cancelaram ÷ Novos Clientes do período) × 100. Filtra clientes com cliente_churn = TRUE cuja data_churn ≤ fim do período e criado_em dentro do período, refletindo clientes que cancelaram antes mesmo de completar o ciclo.',
-        trend: 'neu',
-        trendLabel: 'Meta: < 5%',
-      })}
-
-    </div>
-  `;
-
-  // ── Row 3: Ciclo médio de vendas + Receita em Aberto ────
-  const row3 = `
-    <div class="rel-kpi-row rel-kpi-row--2">
 
       ${_kpiCard({
         id: 'rel-ciclo-vendas',
@@ -501,51 +425,99 @@ function _htmlSectionComercial() {
         value: 'R$ —',
         label: 'Receita em Aberto',
         sub: 'Fórmula: SUM(negocio_valor) de todos os negócios com negocio_status = Aberto. Snapshot atual do pipeline — não filtrado por período. Mede o potencial financeiro total das propostas ativas.',
-        wide: false,
         trend: 'neu',
         trendLabel: 'Pipeline ativo',
       })}
 
+      ${_kpiCard({
+        id: 'rel-ticket-medio',
+        icon: `<svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+        iconColor: 'amber',
+        accentColor: 'amber',
+        value: 'R$ —',
+        label: 'Ticket Médio de Novos Contratos',
+        sub: 'Fórmula: Soma do Valor dos Negócios Ganhos ÷ Total de Contratos Ganhos no período. Filtra negocios com negocio_status = Ganho e data_fechamento dentro do período selecionado; soma negocio_valor (numeric) e divide pela quantidade.',
+        trend: 'neu',
+        trendLabel: 'Período atual',
+      })}
+
+      ${_kpiCard({
+        id: 'rel-churn-comercial',
+        icon: `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+        iconColor: 'red',
+        accentColor: 'red',
+        value: '—%',
+        label: 'Taxa de Churn Comercial',
+        sub: 'Fórmula: (Contratos cancelados no período ÷ Clientes ativos do canal) × 100. Cancelados = clientes com cliente_churn = TRUE e data_churn dentro do período. O canal do cliente é a origem do negócio que o originou.',
+        trend: 'neu',
+        trendLabel: 'Meta: < 5%',
+      })}
+
+      ${_kpiCard({
+        id: 'rel-perda-pos-reuniao',
+        icon: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+        iconColor: 'red',
+        accentColor: 'red',
+        value: '—%',
+        label: 'Perda Pós-Reunião',
+        sub: 'Fórmula: (Negócios que tiveram reunião realizada e foram perdidos ÷ Reuniões Realizadas) × 100, entre os negócios fechados (Ganho ou Perdido) no período. Mostra quanto do que chegou à reunião não virou venda.',
+        trend: 'neu',
+        trendLabel: 'Período atual',
+      })}
+
+      <div class="rel-kpi-card rel-kpi-card--cyan rel-kpi-nota">
+        <div class="rel-kpi-label">Também filtrados pelo canal</div>
+        <div class="rel-kpi-sub">Motivo de perda e contatos da equipe acompanham o canal escolhido no funil. A prospecção segue sem filtro. O desempenho por vendedor tem seletor de canal próprio.</div>
+      </div>
+
     </div>
   `;
 
-  // ── Cards de detalhe: Performance por Vendedor + Motivo de Perda ──
+  // ── Cards de detalhe: Desempenho por Vendedor + Motivo de Perda ──
   const detailRow = `
-    <div class="rel-detail-row rel-detail-row--21">
-
-      <!-- Performance por Vendedor -->
-      <div class="rel-detail-card" id="rel-performance-vendedor">
-        <div class="rel-detail-card-header">
-          <div class="rel-detail-card-title">
-            <div class="rel-kpi-icon rel-kpi-icon--cyan">
-              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <div>
-              <h3>Performance por Vendedor</h3>
-              <p id="rel-vendedor-subtitulo">Ranking de conversão da equipe comercial</p>
-            </div>
+    <!-- Desempenho por Vendedor -->
+    <div class="rel-detail-card rel-vendedor-card" id="rel-performance-vendedor">
+      <div class="rel-detail-card-header">
+        <div class="rel-detail-card-title">
+          <div class="rel-kpi-icon rel-kpi-icon--cyan">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
+          <div>
+            <h3>Desempenho por vendedor</h3>
+            <p id="rel-vendedor-subtitulo">Mostra o funil de cada vendedor e o retorno das vendas dele</p>
+          </div>
+        </div>
+        <div class="rel-vendedor-acoes">
           <button class="rel-vendas-conjuntas-toggle" id="rel-vendas-conjuntas-toggle" title="Quando ativado, negócios com mais de um responsável contam integralmente para cada um deles">
             🤝 Vendas Conjuntas
           </button>
+          ${_htmlCanalPicker('rel-canalpicker-vendedor', 'Canal dos leads do vendedor')}
         </div>
+      </div>
 
-        <table class="rel-table">
+      <div class="rel-canais-scroll">
+        <table class="rel-table rel-vendedor-table">
           <thead>
             <tr>
-              <th>#</th>
               <th>Vendedor</th>
-              <th>Negócios</th>
-              <th>Convertidos</th>
-              <th>Taxa</th>
-              <th>Receita</th>
+              <th class="rel-num">Leads atendidos</th>
+              ${FUNIL_ETAPAS.slice(1).map(nome => `<th class="rel-num">${nome}</th>`).join('')}
+              <th class="rel-num">Valor vendido</th>
+              <th class="rel-num">LTV das vendas</th>
+              <th class="rel-num">CAC</th>
+              <th class="rel-num">ROAS</th>
             </tr>
           </thead>
           <tbody id="rel-vendedor-tbody">
-            <tr><td colspan="6" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>
+            <tr><td colspan="12" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
+
+      <p class="rel-canais-nota" id="rel-vendedor-nota"></p>
+    </div>
+
+    <div class="rel-detail-row rel-detail-row--1">
 
       <!-- Motivo de Perda Campeão -->
       <div class="rel-detail-card" id="rel-motivo-perda">
@@ -571,59 +543,135 @@ function _htmlSectionComercial() {
     </div>
   `;
 
-  // ── Card: Investimento em Marketing & Vendas ───────────────
-  const investimentoCard = `
-    <div class="rel-investimento-card" id="rel-investimento-card">
-      <div class="rel-investimento-card-left">
-        <div class="rel-kpi-icon rel-kpi-icon--cyan">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg>
-        </div>
-        <div class="rel-investimento-card-info">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="rel-investimento-card-title">Investimento em Marketing & Vendas</span>
-            <span class="rel-section-badge rel-section-badge--comercial" id="rel-investimento-badge-mes">Fixo por Mês</span>
+  // ── Card: Canais de aquisição ──────────────────────────────
+  const canaisCard = `
+    <div class="rel-detail-card rel-canais-card" id="rel-canais-card">
+      <div class="rel-detail-card-header">
+        <div class="rel-detail-card-title">
+          <div class="rel-kpi-icon rel-kpi-icon--purple">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </div>
-          <span class="rel-investimento-card-sub" id="rel-investimento-periodo-label">Carregando mês...</span>
+          <div>
+            <h3>Canais de aquisição</h3>
+            <p>Leads, MQLs, vendas, receita, CAC e ROAS por canal, no período selecionado</p>
+          </div>
         </div>
       </div>
-      <div class="rel-investimento-card-right">
 
-        <!-- Botão Gerenciar Todos os Meses -->
-        <button class="rel-investimento-btn rel-investimento-btn--outline" id="rel-investimento-todos-meses-btn" title="Defina o orçamento fixo de qualquer mês do ano" style="display:inline-flex; align-items:center; gap:6px;">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Todos os Meses
-        </button>
+      <div class="rel-canais-scroll">
+        <table class="rel-table rel-canais-table">
+          <thead>
+            <tr>
+              <th>Canal</th>
+              <th class="rel-num">Leads</th>
+              <th class="rel-num">MQLs</th>
+              <th class="rel-num">Taxa MQL</th>
+              <th class="rel-num">Vendas</th>
+              <th class="rel-num">Receita</th>
+              <th class="rel-num">% da receita</th>
+              <th class="rel-num">Ticket médio</th>
+              <th class="rel-num">Investimento</th>
+              <th class="rel-num">CAC</th>
+              <th class="rel-num">ROAS</th>
+            </tr>
+          </thead>
+          <tbody id="rel-canais-tbody">
+            <tr><td colspan="11" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
 
-        <!-- Valor exibido (modo visualização) -->
-        <span class="rel-investimento-val-display" id="rel-investimento-val-display" style="display:none"></span>
+      <p class="rel-canais-nota" id="rel-canais-nota"></p>
+    </div>
+  `;
 
-        <!-- Input (modo edição) -->
-        <div class="rel-investimento-input-wrap" id="rel-investimento-wrap">
-          <span class="rel-investimento-prefix">R$</span>
-          <input
-            type="text"
-            inputmode="numeric"
-            id="rel-investimento-input"
-            class="rel-investimento-input"
-            placeholder="0,00"
-            autocomplete="off"
-            value="${_formatarBRL(_investimentoMarketing)}"
-          />
+  // ── Card: Conversão por canal e etapa ──────────────────────
+  const funilCanalCard = `
+    <div class="rel-detail-card rel-funilcanal-card" id="rel-funilcanal-card">
+      <div class="rel-detail-card-header">
+        <div class="rel-detail-card-title">
+          <div class="rel-kpi-icon rel-kpi-icon--cyan">
+            <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          </div>
+          <div>
+            <h3>Conversão por canal e etapa</h3>
+            <p>Escolha o canal no seletor. O funil atualiza para o canal escolhido; em "Todos os canais", mostra a média geral.</p>
+          </div>
         </div>
+        ${_htmlCanalPicker('rel-canalpicker', 'Canal exibido no funil e nos indicadores')}
+      </div>
 
-        <!-- Botão Salvar (modo edição) -->
-        <button class="rel-investimento-btn" id="rel-investimento-save">
-          <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Salvar
-        </button>
+      <div class="rel-funilcanal-body">
+        <div class="rel-funil-etapas" id="rel-funil-etapas">
+          <div class="rel-funil-vazio">Carregando…</div>
+        </div>
+        <div class="rel-funil-comparativo">
+          <div class="rel-funil-comp-titulo" id="rel-funil-comp-titulo">Lead → Venda por canal</div>
+          <div class="rel-funil-comp-sub" id="rel-funil-comp-sub">Compare os canais lado a lado</div>
+          <div id="rel-funil-comparativo"></div>
+        </div>
+      </div>
 
-        <!-- Botão Editar (modo visualização) -->
-        <button class="rel-investimento-btn rel-investimento-btn--outline" id="rel-investimento-edit" style="display:none">
-          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Editar
-        </button>
+      <p class="rel-canais-nota">
+        Acompanha os leads criados no período, pela etapa em que estão hoje: quem está numa etapa passou por todas as anteriores. "Sem continuidade" não entra nas etapas, pois não dá para saber até onde o lead chegou; a linha mostra quantos leads estão lá e o % sobre o total de leads.
+      </p>
+    </div>
+  `;
 
-        <span class="rel-investimento-status" id="rel-investimento-status"></span>
+  // ── Card: Investimento por canal ───────────────────────────
+  const investimentoCard = `
+    <div class="rel-invcanal-card" id="rel-investimento-card">
+      <div class="rel-invcanal-head">
+        <div class="rel-investimento-card-left">
+          <div class="rel-kpi-icon rel-kpi-icon--cyan">
+            <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div class="rel-investimento-card-info">
+            <span class="rel-investimento-card-title">Investimento por canal</span>
+            <span class="rel-investimento-card-sub">Lançamento mensal do valor investido em cada canal, usado no CAC e no ROAS.</span>
+          </div>
+        </div>
+        <div class="rel-investimento-card-right">
+          <span class="rel-investimento-status" id="rel-investimento-status"></span>
+          <div class="rel-mespicker" id="rel-mespicker">
+            <input type="hidden" id="rel-invcanal-mes" value="${(_dataInicio || _hoje()).substring(0, 7)}" />
+            <button type="button" class="rel-mespicker-btn" id="rel-mespicker-btn" title="Escolher o mês do lançamento">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="rel-mespicker-label">${_formatarNomeMes((_dataInicio || _hoje()).substring(0, 7))}</span>
+              <svg class="rel-mespicker-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="rel-mespicker-panel" id="rel-mespicker-panel">
+              <div class="rel-mespicker-year">
+                <button type="button" class="rel-mespicker-nav" data-ano-delta="-1" title="Ano anterior">‹</button>
+                <span id="rel-mespicker-ano"></span>
+                <button type="button" class="rel-mespicker-nav" data-ano-delta="1" title="Próximo ano">›</button>
+              </div>
+              <div class="rel-mespicker-grid" id="rel-mespicker-grid"></div>
+              <div class="rel-mespicker-legend"><i></i> mês com investimento lançado</div>
+            </div>
+          </div>
+          <button class="rel-investimento-btn" id="rel-investimento-save">
+            <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Salvar
+          </button>
+        </div>
+      </div>
+
+      <div class="rel-invcanal-grid">
+        ${CANAIS.map(c => `
+          <label class="rel-invcanal-field">
+            <span class="rel-invcanal-label">${c.label}</span>
+            <div class="rel-investimento-input-wrap">
+              <span class="rel-investimento-prefix">R$</span>
+              <input type="text" inputmode="numeric" class="rel-investimento-input rel-invcanal-input" data-canal="${c.key}" placeholder="0,00" autocomplete="off" />
+            </div>
+          </label>
+        `).join('')}
+      </div>
+
+      <div class="rel-invcanal-foot">
+        <span id="rel-invcanal-total">Total do mês: R$ 0,00</span>
+        <span id="rel-invcanal-legado" class="rel-invcanal-legado"></span>
       </div>
     </div>
   `;
@@ -640,38 +688,20 @@ function _htmlSectionComercial() {
           <h2>Setor Comercial</h2>
           <p>Métricas de vendas, conversão e crescimento de receita</p>
         </div>
-        <span class="rel-section-badge rel-section-badge--comercial">12 métricas</span>
+        <span class="rel-section-badge rel-section-badge--comercial">Por canal</span>
       </div>
 
-      <!-- Grupo: Evolução Anual -->
-      <div class="rel-metric-group-label">Evolução Anual</div>
-      ${_htmlGraficoAnualCard({
-        id: 'rel-grafico-comercial',
-        canvasId: 'rel-chart-comercial',
-        iconColor: 'cyan',
-        icon: `<svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="14 6 21 6 21 13"/></svg>`,
-        title: `Faturamento & Ticket Médio — ${new Date().getFullYear()}`,
-        subtitle: 'Receita de negócios ganhos e valor médio por contrato, mês a mês',
-        legend: [
-          { label: 'Faturamento',  color: '#1ACEEE' },
-          { label: 'Ticket Médio', color: '#22c55e' },
-        ],
-      })}
-
-      <!-- Card: Investimento em Marketing & Vendas -->
+      <!-- Card: Investimento por canal -->
       ${investimentoCard}
 
-      <!-- Grupo: Custos & CAC -->
-      <div class="rel-metric-group-label">Custos & Aquisição</div>
-      ${row1}
+      <!-- Grupo: Desempenho por Canal -->
+      <div class="rel-metric-group-label">Desempenho por Canal</div>
+      ${canaisCard}
+      ${funilCanalCard}
 
-      <!-- Grupo: Conversão & Eficiência -->
-      <div class="rel-metric-group-label">Conversão & Eficiência</div>
-      ${row2}
-
-      <!-- Grupo: Pipeline & Tempo -->
-      <div class="rel-metric-group-label">Pipeline & Tempo de Ciclo</div>
-      ${row3}
+      <!-- Grupo: Indicadores do canal -->
+      <div class="rel-metric-group-label">Indicadores do canal: <span id="rel-indicadores-canal-label">Todos os canais</span> <span class="rel-metric-group-hint">atualizam junto com o seletor</span></div>
+      ${indicadoresCanal}
 
       <!-- Grupo: Atividade (Equipe) -->
       <div class="rel-metric-group-label">Atividade Diária (Equipe)</div>
@@ -685,6 +715,7 @@ function _htmlSectionComercial() {
             <div class="card-subtitle" style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
               Visão consolidada e comparativa de todos os membros no período
             </div>
+            <div class="card-subtitle rel-atividade-canal-hint" id="rel-atividade-canal-hint" style="display:none;"></div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:11.5px; color:var(--text-secondary); font-weight:500;">Período:</span>
@@ -1107,7 +1138,7 @@ function _htmlSectionMaster() {
 
   // ── Grupo 3: Crescimento & Retenção — 4 KPI cards ──────────
   const rowCrescimento = `
-    <div class="rel-kpi-row rel-kpi-row--4">
+    <div class="rel-kpi-row rel-kpi-row--5">
 
       ${_kpiCard({
         id: 'rel-expansao-base',
@@ -1131,6 +1162,18 @@ function _htmlSectionMaster() {
         sub: 'Tempo para recuperar o custo de aquisição',
         trend: 'neu',
         trendLabel: 'Meta: < 12 meses',
+      })}
+
+      ${_kpiCard({
+        id: 'rel-ltv-cac',
+        icon: `<svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+        iconColor: 'green',
+        accentColor: 'green',
+        value: '—× ',
+        label: 'LTV / CAC Ratio',
+        sub: 'Saudável acima de 3×',
+        trend: 'neu',
+        trendLabel: 'Meta: 3×',
       })}
 
       ${_kpiCard({
@@ -1290,6 +1333,45 @@ function _htmlSectionMaster() {
     </div>
   `;
 
+  // ── Resultado por canal: clientes, receita, LTV, CAC e ROAS ──
+  const resultadoCanalCard = `
+    <div class="rel-detail-card rel-canais-card" id="rel-resultado-canal-card">
+      <div class="rel-detail-card-header">
+        <div class="rel-detail-card-title">
+          <div class="rel-kpi-icon rel-kpi-icon--green">
+            <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          </div>
+          <div>
+            <h3>Clientes, receita, LTV, CAC e ROAS por canal</h3>
+            <p>LTV = valor mensal do contrato × tempo de contrato (média por canal)</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rel-canais-scroll">
+        <table class="rel-table rel-canais-table">
+          <thead>
+            <tr>
+              <th>Canal</th>
+              <th class="rel-num">Clientes</th>
+              <th class="rel-num">Receita</th>
+              <th class="rel-num">Ticket médio</th>
+              <th class="rel-num">LTV</th>
+              <th class="rel-num">CAC</th>
+              <th class="rel-num">LTV / CAC</th>
+              <th class="rel-num">ROAS</th>
+            </tr>
+          </thead>
+          <tbody id="rel-resultado-canal-tbody">
+            <tr><td colspan="8" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="rel-canais-nota" id="rel-resultado-canal-nota"></p>
+    </div>
+  `;
+
   return `
     <div class="rel-section" id="rel-section-master">
 
@@ -1302,8 +1384,12 @@ function _htmlSectionMaster() {
           <h2>Diretoria Executiva & Financeiro</h2>
           <p>Métricas financeiras estratégicas, MRR, EBITDA, LTV e saúde patrimonial</p>
         </div>
-        <span class="rel-section-badge rel-section-badge--master">15 métricas</span>
+        <span class="rel-section-badge rel-section-badge--master">16 métricas</span>
       </div>
+
+      <!-- Grupo: Resultado por Canal -->
+      <div class="rel-metric-group-label">Resultado por Canal</div>
+      ${resultadoCanalCard}
 
       <!-- Grupo: Evolução Anual -->
       <div class="rel-metric-group-label">Evolução Anual</div>
@@ -1432,328 +1518,213 @@ function _htmlPage() {
   `;
 }
 
-// ─── Investimento em Marketing & Vendas ──────────────────────
+// ─── Investimento por canal ──────────────────────────────────
 
-/** Alterna para o modo visualização (exibe valor + botão Editar) */
-function _modoViewInvestimento() {
-  const wrap    = document.getElementById('rel-investimento-wrap');
-  const btnSave = document.getElementById('rel-investimento-save');
-  const btnEdit = document.getElementById('rel-investimento-edit');
-  const display = document.getElementById('rel-investimento-val-display');
-
-  if (wrap)    wrap.style.display    = 'none';
-  if (btnSave) btnSave.style.display = 'none';
-  if (btnEdit) btnEdit.style.display = 'inline-flex';
-  if (display) {
-    display.textContent  = `R$ ${_formatarBRL(_investimentoMarketing)}`;
-    display.style.display = 'inline-flex';
-  }
+/** Mês (YYYY-MM) exibido no card de investimento por canal */
+function _mesDoCardInvestimento() {
+  return document.getElementById('rel-invcanal-mes')?.value
+    || (_dataInicio || _hoje()).substring(0, 7);
 }
 
-/** Alterna para o modo edição (exibe input + botão Salvar) */
-function _modoEditInvestimento() {
-  const wrap    = document.getElementById('rel-investimento-wrap');
-  const btnSave = document.getElementById('rel-investimento-save');
-  const btnEdit = document.getElementById('rel-investimento-edit');
-  const display = document.getElementById('rel-investimento-val-display');
-  const inputEl = document.getElementById('rel-investimento-input');
-
-  if (display) display.style.display = 'none';
-  if (btnEdit) btnEdit.style.display  = 'none';
-  if (wrap)    wrap.style.display     = 'flex';
-  if (btnSave) btnSave.style.display  = 'inline-flex';
-
-  if (inputEl) {
-    inputEl.value = _formatarBRL(_investimentoMarketing);
-    inputEl.focus();
-    // Posiciona cursor no final
-    const len = inputEl.value.length;
-    inputEl.setSelectionRange(len, len);
-  }
+function _inputsInvestimentoCanal() {
+  return [...document.querySelectorAll('.rel-invcanal-input')];
 }
 
-function _formatarNomeMes(periodoKey) {
-  if (!periodoKey || !periodoKey.includes('-')) return 'Período Atual';
-  const [ano, mes] = periodoKey.split('-');
-  const meses = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-  const idx = parseInt(mes, 10) - 1;
-  return `${meses[idx] || mes} de ${ano}`;
+function _atualizarTotalInvestimentoCard() {
+  const total = _inputsInvestimentoCanal().reduce((s, el) => s + _parseBRL(el.value), 0);
+  const el = document.getElementById('rel-invcanal-total');
+  if (el) el.textContent = `Total do mês: R$ ${_formatarBRL(total)}`;
+  // O aviso do total antigo deixa de valer assim que algum canal é preenchido
+  if (total > 0) {
+    const legadoEl = document.getElementById('rel-invcanal-legado');
+    if (legadoEl) legadoEl.textContent = '';
+  }
+  return total;
 }
 
 /**
- * Carrega o investimento fixo estritamente para o mês do período selecionado.
- * Isolamento total por chave de mês ('YYYY-MM').
+ * Preenche os campos do card com o investimento por canal do mês informado.
+ * Quando o mês só tem o total antigo (sem divisão por canal), avisa o usuário.
  */
-async function _carregarInvestimento(dataInicio = _dataInicio) {
-  const periodoKey = dataInicio ? dataInicio.substring(0, 7) : (_dataInicio ? _dataInicio.substring(0, 7) : new Date().toISOString().substring(0, 7));
+async function _preencherInvestimentoCanais(periodoKey) {
+  const inputs = _inputsInvestimentoCanal();
+  inputs.forEach(el => { el.value = ''; });
 
-  const labelEl = document.getElementById('rel-investimento-periodo-label');
-  if (labelEl) {
-    labelEl.textContent = `Orçamento Fixo: ${_formatarNomeMes(periodoKey)}`;
-  }
-
-  let valor = 0;
+  const porCanal = {};
+  let totalLegado = 0;
   try {
-    const { data: invData, error: invError } = await supabase
-      .from('relatorios_investimentos')
-      .select('valor')
-      .eq('periodo', periodoKey)
-      .maybeSingle();
-
-    if (!invError && invData?.valor !== undefined && invData?.valor !== null) {
-      valor = Number(invData.valor);
-    }
+    const [canaisRes, totalRes] = await Promise.all([
+      supabase.from('relatorios_investimentos_canal').select('canal, valor').eq('periodo', periodoKey),
+      supabase.from('relatorios_investimentos').select('valor').eq('periodo', periodoKey).maybeSingle(),
+    ]);
+    (canaisRes.data || []).forEach(r => { porCanal[r.canal] = Number(r.valor || 0); });
+    totalLegado = Number(totalRes.data?.valor ?? 0);
   } catch (err) {
-    console.warn('[Relatórios] Erro ao carregar investimento do mês:', err);
+    console.warn('[Relatórios] Erro ao carregar investimento por canal:', err);
   }
 
-  _investimentoMarketing = valor;
+  inputs.forEach(el => {
+    const v = porCanal[el.dataset.canal] || 0;
+    el.value = v > 0 ? _formatarBRL(v) : '';
+  });
 
-  if (valor > 0) {
-    _modoViewInvestimento();
-  } else {
-    const inputEl = document.getElementById('rel-investimento-input');
-    if (inputEl) inputEl.value = '';
-    _modoEditInvestimento();
+  const somaCanais = _atualizarTotalInvestimentoCard();
+
+  const legadoEl = document.getElementById('rel-invcanal-legado');
+  if (legadoEl) {
+    legadoEl.textContent = (somaCanais === 0 && totalLegado > 0)
+      ? `Este mês tem R$ ${_formatarBRL(totalLegado)} lançados sem divisão por canal. Preencha os canais para substituir.`
+      : '';
   }
 
-  return valor;
+}
+
+// ─── Seletor de mês do card de investimento ──────────────────
+
+let _mesPickerAno = new Date().getFullYear();
+let _mesesComInvestimento = new Set(); // 'YYYY-MM' com algum valor lançado por canal
+
+/** Atualiza o valor e o rótulo do seletor sem recarregar os campos */
+function _definirMesCardUI(periodoKey) {
+  const mesInput = document.getElementById('rel-invcanal-mes');
+  const label    = document.getElementById('rel-mespicker-label');
+  if (mesInput) mesInput.value = periodoKey;
+  if (label)    label.textContent = _formatarNomeMes(periodoKey);
+}
+
+async function _carregarMesesComInvestimento() {
+  try {
+    const { data } = await supabase
+      .from('relatorios_investimentos_canal')
+      .select('periodo')
+      .gt('valor', 0);
+    _mesesComInvestimento = new Set((data || []).map(r => r.periodo));
+  } catch (err) {
+    console.warn('[Relatórios] Erro ao listar meses com investimento:', err);
+  }
+}
+
+function _renderMesPicker() {
+  const anoEl  = document.getElementById('rel-mespicker-ano');
+  const gridEl = document.getElementById('rel-mespicker-grid');
+  if (!anoEl || !gridEl) return;
+
+  const selecionado = _mesDoCardInvestimento();
+  anoEl.textContent = _mesPickerAno;
+  gridEl.innerHTML = MESES_ABREV.map((nome, i) => {
+    const key = `${_mesPickerAno}-${String(i + 1).padStart(2, '0')}`;
+    const cls = [
+      'rel-mespicker-mes',
+      key === selecionado ? 'active' : '',
+      _mesesComInvestimento.has(key) ? 'has-data' : '',
+    ].join(' ').trim();
+    return `<button type="button" class="${cls}" data-mes="${key}">${nome}</button>`;
+  }).join('');
+}
+
+async function _abrirMesPicker() {
+  const panel = document.getElementById('rel-mespicker-panel');
+  if (!panel) return;
+  _mesPickerAno = parseInt(_mesDoCardInvestimento().substring(0, 4), 10) || new Date().getFullYear();
+  _renderMesPicker();
+  panel.classList.add('open');
+  await _carregarMesesComInvestimento();
+  _renderMesPicker();
+}
+
+function _fecharMesPicker() {
+  document.getElementById('rel-mespicker-panel')?.classList.remove('open');
+}
+
+/** Sincroniza o card com o mês do período selecionado na página */
+async function _carregarInvestimento(dataInicio = _dataInicio) {
+  const periodoKey = (dataInicio || _dataInicio || _hoje()).substring(0, 7);
+  _definirMesCardUI(periodoKey);
+  return _preencherInvestimentoCanais(periodoKey);
 }
 
 /**
- * Salva o orçamento fixo do mês em relatorios_investimentos.
- * Totalmente isolado por mês.
+ * Salva o investimento por canal do mês e espelha o total em
+ * relatorios_investimentos (usado por CAC/LTV das demais métricas).
  */
 async function _salvarInvestimento() {
-  const periodoKey = _dataInicio ? _dataInicio.substring(0, 7) : new Date().toISOString().substring(0, 7);
-
-  const input  = document.getElementById('rel-investimento-input');
+  const periodoKey = _mesDoCardInvestimento();
   const status = document.getElementById('rel-investimento-status');
   const btn    = document.getElementById('rel-investimento-save');
+  const agora  = new Date().toISOString();
 
-  const valor = _parseBRL(input?.value);
+  const linhas = _inputsInvestimentoCanal().map(el => ({
+    periodo: periodoKey,
+    canal: el.dataset.canal,
+    valor: _parseBRL(el.value),
+    atualizado_em: agora,
+  }));
+  const total = linhas.reduce((s, l) => s + l.valor, 0);
 
   if (btn)    btn.disabled = true;
   if (status) { status.textContent = 'Salvando…'; status.className = 'rel-investimento-status rel-investimento-status--saving'; }
 
   try {
-    const { error: invErr } = await supabase
+    const { error: canalErr } = await supabase
+      .from('relatorios_investimentos_canal')
+      .upsert(linhas);
+    if (canalErr) throw canalErr;
+
+    const { error: totalErr } = await supabase
       .from('relatorios_investimentos')
-      .upsert({
-        periodo: periodoKey,
-        valor: valor,
-        atualizado_em: new Date().toISOString()
-      });
+      .upsert({ periodo: periodoKey, valor: total, atualizado_em: agora });
+    if (totalErr) throw totalErr;
 
-    if (invErr) throw invErr;
+    const legadoEl = document.getElementById('rel-invcanal-legado');
+    if (legadoEl) legadoEl.textContent = '';
 
-    _investimentoMarketing = valor;
-
-    if (status) { status.textContent = 'Orçamento Salvo!'; status.className = 'rel-investimento-status rel-investimento-status--ok'; }
-    _modoViewInvestimento();
-
+    if (status) { status.textContent = 'Salvo!'; status.className = 'rel-investimento-status rel-investimento-status--ok'; }
     setTimeout(() => {
       if (status) { status.textContent = ''; status.className = 'rel-investimento-status'; }
     }, 2000);
 
-    if (btn) btn.disabled = false;
+    _carregarCanais(_dataInicio, _dataFim);
+    _carregarResultadoCanais(_dataInicio, _dataFim);
 
-    // Recalcula imediatamente as métricas que dependem do investimento
-    _carregarCAC(_dataInicio, _dataFim);
-    _carregarCPQ(_dataInicio, _dataFim);
-    _carregarLtvMetrics(_dataInicio, _dataFim);
-    _carregarCacPayback(_dataInicio, _dataFim);
-
+    if (periodoKey === (_dataInicio || '').substring(0, 7)) {
+      // Recalcula as métricas que dependem do investimento
+      _carregarLtvMetrics(_dataInicio, _dataFim);
+      _carregarCacPayback(_dataInicio, _dataFim);
+    }
   } catch (error) {
-    console.error('[Relatórios] Erro ao salvar investimento:', error.message);
+    console.error('[Relatórios] Erro ao salvar investimento por canal:', error.message);
     if (status) { status.textContent = 'Erro ao salvar'; status.className = 'rel-investimento-status rel-investimento-status--error'; }
+  } finally {
     if (btn) btn.disabled = false;
-  }
-}
-
-/**
- * Modal para visualizar e definir o orçamento de cada mês do ano de forma transparente.
- */
-async function _abrirModalMesesInvestimento() {
-  let modalOverlay = document.getElementById('rel-invest-modal-overlay');
-  if (!modalOverlay) {
-    modalOverlay = document.createElement('div');
-    modalOverlay.id = 'rel-invest-modal-overlay';
-    modalOverlay.className = 'rel-invest-modal-overlay';
-    modalOverlay.innerHTML = `
-      <div class="rel-invest-modal">
-        <div class="rel-invest-modal-header">
-          <div>
-            <div class="rel-invest-modal-title">Orçamento Mensal em Marketing & Vendas</div>
-            <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">
-              Defina o valor fixo investido em cada mês para cálculo exato de CAC e CPQ
-            </div>
-          </div>
-          <button class="rel-invest-modal-close" id="rel-invest-modal-close">&times;</button>
-        </div>
-        <div class="rel-invest-modal-body" id="rel-invest-modal-body">
-          <div style="text-align:center; padding:24px; color:var(--text-secondary);">Carregando meses...</div>
-        </div>
-        <div class="rel-invest-modal-footer">
-          <button class="btn btn-secondary" id="rel-invest-modal-fechar-btn" style="height:34px; font-size:12.5px;">Fechar</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modalOverlay);
-
-    const fechar = () => modalOverlay.classList.remove('open');
-    modalOverlay.querySelector('#rel-invest-modal-close')?.addEventListener('click', fechar);
-    modalOverlay.querySelector('#rel-invest-modal-fechar-btn')?.addEventListener('click', fechar);
-    modalOverlay.addEventListener('click', (e) => {
-      if (e.target === modalOverlay) fechar();
-    });
-  }
-
-  modalOverlay.classList.add('open');
-  const bodyEl = document.getElementById('rel-invest-modal-body');
-  if (!bodyEl) return;
-
-  const anoAtual = _dataInicio ? parseInt(_dataInicio.substring(0, 4), 10) : new Date().getFullYear();
-  const mesAtualKey = _dataInicio ? _dataInicio.substring(0, 7) : new Date().toISOString().substring(0, 7);
-
-  try {
-    const { data: rows, error } = await supabase
-      .from('relatorios_investimentos')
-      .select('periodo, valor')
-      .like('periodo', `${anoAtual}-%`);
-
-    const invMap = {};
-    (rows || []).forEach(r => {
-      invMap[r.periodo] = Number(r.valor || 0);
-    });
-
-    const meses = [
-      { num: '01', nome: 'Janeiro' },
-      { num: '02', nome: 'Fevereiro' },
-      { num: '03', nome: 'Março' },
-      { num: '04', nome: 'Abril' },
-      { num: '05', nome: 'Maio' },
-      { num: '06', nome: 'Junho' },
-      { num: '07', nome: 'Julho' },
-      { num: '08', nome: 'Agosto' },
-      { num: '09', nome: 'Setembro' },
-      { num: '10', nome: 'Outubro' },
-      { num: '11', nome: 'Novembro' },
-      { num: '12', nome: 'Dezembro' }
-    ];
-
-    bodyEl.innerHTML = meses.map(m => {
-      const pKey = `${anoAtual}-${m.num}`;
-      const valor = invMap[pKey] || 0;
-      const isActive = pKey === mesAtualKey;
-
-      return `
-        <div class="rel-invest-month-row ${isActive ? 'active-month' : ''}" data-periodo="${pKey}">
-          <div class="rel-invest-month-info">
-            <div class="rel-invest-month-name">
-              ${m.nome} / ${anoAtual}
-              ${isActive ? '<span class="rel-invest-month-tag">Mês Ativo</span>' : ''}
-            </div>
-            <span style="font-size:11px; color:var(--text-secondary);">
-              ${valor > 0 ? `R$ ${_formatarBRL(valor)} alocado` : 'Sem orçamento definido'}
-            </span>
-          </div>
-          <div class="rel-invest-month-actions">
-            <div class="rel-invest-month-input-wrap">
-              <span style="font-size:11px; color:var(--text-secondary); margin-right:4px;">R$</span>
-              <input type="text" inputmode="numeric" class="rel-invest-month-input" value="${_formatarBRL(valor)}" placeholder="0,00" />
-            </div>
-            <button class="rel-invest-month-save-btn" data-save-periodo="${pKey}">Salvar</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    // Aplica máscara BRL e evento salvar em cada linha
-    bodyEl.querySelectorAll('.rel-invest-month-row').forEach(row => {
-      const input = row.querySelector('.rel-invest-month-input');
-      const btn = row.querySelector('.rel-invest-month-save-btn');
-      const pKey = row.dataset.periodo;
-
-      if (input) {
-        input.addEventListener('input', () => _maskBRL(input));
-      }
-
-      if (btn && input) {
-        btn.addEventListener('click', async () => {
-          const val = _parseBRL(input.value);
-          btn.disabled = true;
-          btn.textContent = '…';
-
-          try {
-            const { error: saveErr } = await supabase
-              .from('relatorios_investimentos')
-              .upsert({
-                periodo: pKey,
-                valor: val,
-                atualizado_em: new Date().toISOString()
-              });
-
-            if (saveErr) throw saveErr;
-
-            btn.textContent = '✓';
-            setTimeout(() => {
-              btn.textContent = 'Salvar';
-              btn.disabled = false;
-            }, 1200);
-
-            const sub = row.querySelector('.rel-invest-month-info span');
-            if (sub) {
-              sub.textContent = val > 0 ? `R$ ${_formatarBRL(val)} alocado` : 'Sem orçamento definido';
-            }
-
-            // Se for o mês ativo na tela, sincroniza o card principal e recalcula métricas
-            if (pKey === mesAtualKey) {
-              _investimentoMarketing = val;
-              const cardInput = document.getElementById('rel-investimento-input');
-              if (cardInput) cardInput.value = _formatarBRL(val);
-              if (val > 0) _modoViewInvestimento(); else _modoEditInvestimento();
-              _carregarCAC(_dataInicio, _dataFim);
-              _carregarCPQ(_dataInicio, _dataFim);
-              _carregarLtvMetrics(_dataInicio, _dataFim);
-              _carregarCacPayback(_dataInicio, _dataFim);
-            }
-          } catch (e) {
-            console.error('Erro ao salvar mês:', e);
-            btn.textContent = 'Erro';
-            btn.disabled = false;
-          }
-        });
-      }
-    });
-
-  } catch (err) {
-    console.error('Erro ao listar meses:', err);
-    bodyEl.innerHTML = `<div style="text-align:center; padding:24px; color:var(--red);">Erro ao carregar meses.</div>`;
   }
 }
 
 function _bindInvestimentoEvents() {
-  const inputEl = document.getElementById('rel-investimento-input');
+  _inputsInvestimentoCanal().forEach(el => {
+    el.addEventListener('input', () => { _maskBRL(el); _atualizarTotalInvestimentoCard(); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') _salvarInvestimento(); });
+  });
 
-  // Máscara BRL em tempo real
-  inputEl?.addEventListener('input', () => _maskBRL(inputEl));
-
-  // Salvar via botão
   document.getElementById('rel-investimento-save')?.addEventListener('click', _salvarInvestimento);
 
-  // Editar: volta ao modo edição
-  document.getElementById('rel-investimento-edit')?.addEventListener('click', _modoEditInvestimento);
+  document.getElementById('rel-mespicker-btn')?.addEventListener('click', () => {
+    const aberto = document.getElementById('rel-mespicker-panel')?.classList.contains('open');
+    if (aberto) _fecharMesPicker(); else _abrirMesPicker();
+  });
 
-  // Abrir Modal Gerenciador de Todos os Meses
-  document.getElementById('rel-investimento-todos-meses-btn')?.addEventListener('click', _abrirModalMesesInvestimento);
+  document.querySelectorAll('.rel-mespicker-nav').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _mesPickerAno += Number(btn.dataset.anoDelta);
+      _renderMesPicker();
+    });
+  });
 
-  // Salvar com Enter
-  inputEl?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') _salvarInvestimento();
+  document.getElementById('rel-mespicker-grid')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.rel-mespicker-mes');
+    if (!btn) return;
+    _definirMesCardUI(btn.dataset.mes);
+    _fecharMesPicker();
+    _preencherInvestimentoCanais(btn.dataset.mes);
   });
 }
 
@@ -2597,189 +2568,6 @@ async function _carregarVendidoVsCaixa(inicio, fim) {
   }
 }
 
-async function _carregarCAC(inicio, fim) {
-  const cardEl = document.getElementById('rel-cac');
-  const valueEl = cardEl?.querySelector('.rel-kpi-value');
-  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
-
-  if (valueEl) valueEl.textContent = 'R$ …';
-
-  try {
-    const periodoKey = inicio.substring(0, 7);
-
-    // 1. Busca investimento fixo específico deste mês
-    const { data: invData } = await supabase
-      .from('relatorios_investimentos')
-      .select('valor')
-      .eq('periodo', periodoKey)
-      .maybeSingle();
-
-    const investimento = Number(invData?.valor ?? 0);
-    _investimentoMarketing = investimento;
-
-    // 2. Busca todos os novos clientes conquistados no período
-    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
-    const [fimY, fimM, fimD] = fim.split('-').map(Number);
-    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
-    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
-
-    const { data: clientes, error: clientError } = await supabase
-      .from('clientes')
-      .select('cliente_id, cliente_nome, cliente_mensalidade, criado_em, cliente_status')
-      .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO)
-      .order('criado_em', { ascending: false });
-
-    if (clientError) throw clientError;
-
-    const novosClientes = clientes?.length ?? 0;
-
-    // 3. Calcula o CAC
-    let cac = 0;
-    let cacFormatado = 'R$ —';
-    let subInfo = '';
-
-    if (novosClientes === 0) {
-      cacFormatado = 'R$ —';
-      subInfo = investimento > 0
-        ? `Investimento: R$ ${_formatarBRL(investimento)} · Sem novos clientes no período`
-        : 'Nenhum investimento ou cliente no período';
-    } else if (investimento === 0) {
-      cacFormatado = 'R$ 0,00';
-      subInfo = `${novosClientes} novo${novosClientes > 1 ? 's' : ''} cliente${novosClientes > 1 ? 's' : ''} · Investimento: R$ 0,00`;
-    } else {
-      cac = investimento / novosClientes;
-      cacFormatado = `R$ ${_formatarBRL(cac)}`;
-      subInfo = `Investimento: R$ ${_formatarBRL(investimento)} ÷ ${novosClientes} cliente${novosClientes > 1 ? 's' : ''}`;
-    }
-
-    if (valueEl) valueEl.textContent = cacFormatado;
-
-    const subEl = cardEl?.querySelector('.rel-kpi-sub');
-    const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
-    if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Passe o mouse para ver o detalhamento analítico`;
-
-    if (trendEl) {
-      trendEl.lastChild.textContent = `${novosClientes} novo${novosClientes !== 1 ? 's' : ''} cliente${novosClientes !== 1 ? 's' : ''}`;
-    }
-
-    // 4. Popula o Hover Card do CAC
-    _kpiBreakdowns['rel-cac'] = {
-      title: 'Custo de Aquisição de Clientes (CAC)',
-      badge: `${novosClientes} Novo${novosClientes !== 1 ? 's' : ''}`,
-      items: (clientes ?? []).map(c => ({
-        name: c.cliente_nome || 'Cliente sem nome',
-        sub: `Cadastrado em ${_formatarExibicao(c.criado_em?.substring(0, 10))} · Status: ${c.cliente_status || 'Ativo'}`,
-        val: c.cliente_mensalidade ? `R$ ${_formatarBRL(c.cliente_mensalidade)}/mês` : '—'
-      })),
-      footer: `Investimento: <b>R$ ${_formatarBRL(investimento)}</b> ÷ <b>${novosClientes}</b> novos clientes conquistados`,
-      formula: `CAC = R$ ${_formatarBRL(cac)} por cliente`
-    };
-    _bindKpiHover('rel-cac');
-
-  } catch (err) {
-    console.error('[Relatórios] Erro ao calcular CAC:', err.message);
-    if (valueEl) valueEl.textContent = 'Erro';
-  }
-}
-
-// ─── CPQ — Custo por Lead Qualificado (SQL) ───────────────────
-
-/**
- * Calcula e exibe o CPQ no período selecionado.
- *
- * Fórmula:
- *   CPQ = investimento_marketing ÷ SQLs (negócios com reunião agendada no período)
- */
-async function _carregarCPQ(inicio, fim) {
-  const cardEl  = document.getElementById('rel-cpq');
-  const valueEl = cardEl?.querySelector('.rel-kpi-value');
-  const trendEl = cardEl?.querySelector('.rel-kpi-trend');
-
-  if (valueEl) valueEl.textContent = 'R$ …';
-
-  try {
-    const periodoKey = inicio.substring(0, 7);
-
-    // 1. Busca investimento fixo específico deste mês
-    const { data: invData } = await supabase
-      .from('relatorios_investimentos')
-      .select('valor')
-      .eq('periodo', periodoKey)
-      .maybeSingle();
-
-    const investimento = Number(invData?.valor ?? 0);
-
-    // 2. Busca negócios com reuniao_realizada = TRUE (reunião agendada) no período com join de vendedor
-    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
-    const [fimY, fimM, fimD] = fim.split('-').map(Number);
-    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
-    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
-
-    const { data: sqls, error: negError } = await supabase
-      .from('negocios')
-      .select('negocio_id, negocio_titulo, criado_em, vendedor_id, usuarios(user_nome)')
-      .eq('reuniao_realizada', true)
-      .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO)
-      .order('criado_em', { ascending: false });
-
-    if (negError) throw negError;
-
-    const totalSQLs = sqls?.length ?? 0;
-
-    // 3. Calcula o CPQ
-    let cpq = 0;
-    let cpqFormatado;
-    let subInfo;
-
-    if (totalSQLs === 0 && investimento === 0) {
-      cpqFormatado = 'R$ 0,00';
-      subInfo = 'Nenhum investimento ou SQL registrado no período';
-    } else if (totalSQLs === 0 && investimento > 0) {
-      cpqFormatado = `R$ ${_formatarBRL(investimento)}`;
-      subInfo = `Investimento: R$ ${_formatarBRL(investimento)} · 0 SQLs — custo sem retorno`;
-    } else if (investimento === 0) {
-      cpqFormatado = 'R$ 0,00';
-      subInfo = `${totalSQLs} SQL${totalSQLs > 1 ? 's' : ''} · Investimento: R$ 0,00`;
-    } else {
-      cpq = investimento / totalSQLs;
-      cpqFormatado = `R$ ${_formatarBRL(cpq)}`;
-      subInfo = `Investimento: R$ ${_formatarBRL(investimento)} ÷ ${totalSQLs} SQL${totalSQLs > 1 ? 's' : ''}`;
-    }
-
-    if (valueEl) valueEl.textContent = cpqFormatado;
-
-    const subEl    = cardEl?.querySelector('.rel-kpi-sub');
-    const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
-    if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Passe o mouse para ver os leads qualificados`;
-
-    if (trendEl) {
-      trendEl.lastChild.textContent = `${totalSQLs} SQL${totalSQLs !== 1 ? 's' : ''} no período`;
-    }
-
-    // 4. Popula o Hover Card do CPQ
-    _kpiBreakdowns['rel-cpq'] = {
-      title: 'Custo por Lead Qualificado (CPQ)',
-      badge: `${totalSQLs} SQL${totalSQLs !== 1 ? 's' : ''}`,
-      items: (sqls ?? []).map(s => ({
-        name: s.negocio_titulo || 'Oportunidade',
-        sub: `Vendedor: ${s.usuarios?.user_nome || 'Equipe'} · Reunião em ${_formatarExibicao(s.criado_em?.substring(0, 10))}`,
-        val: 'Qualificado 🎯'
-      })),
-      footer: `Investimento: <b>R$ ${_formatarBRL(investimento)}</b> ÷ <b>${totalSQLs}</b> reuniões agendadas`,
-      formula: `CPQ = R$ ${_formatarBRL(cpq)} por SQL`
-    };
-    _bindKpiHover('rel-cpq');
-
-  } catch (err) {
-    console.error('[Relatórios] Erro ao calcular CPQ:', err.message);
-    if (valueEl) valueEl.textContent = 'Erro';
-  }
-}
-
 // ─── Ticket Médio de Novos Contratos ─────────────────────────
 
 /**
@@ -2802,15 +2590,16 @@ async function _carregarTicketMedio(inicio, fim) {
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
     // Busca negócios Ganhos com dados completos para o Hover Card
-    const { data: negocios, error } = await supabase
+    const { data: negociosBrutos, error } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_valor, data_fechamento, criado_em')
+      .select('negocio_id, negocio_titulo, negocio_valor, negocio_origem, data_fechamento, criado_em')
       .eq('negocio_status', 'Ganho')
       .gte('data_fechamento', inicioISO)
       .lte('data_fechamento', fimISO)
       .order('data_fechamento', { ascending: false });
 
     if (error) throw error;
+    const negocios = (negociosBrutos ?? []).filter(n => _passaCanal(n.negocio_origem));
 
     const total = negocios?.length ?? 0;
     const somaValor = (negocios ?? []).reduce((acc, n) => acc + Number(n.negocio_valor ?? 0), 0);
@@ -2881,7 +2670,7 @@ async function _carregarTaxaConversao(inicio, fim) {
     // em outro mês.
     const { data: fechadosData, error: fechadosError } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento, reuniao_realizada, negocio_noshow')
+      .select('negocio_id, negocio_titulo, negocio_status, negocio_valor, negocio_origem, data_fechamento, reuniao_realizada, negocio_noshow')
       .in('negocio_status', ['Ganho', 'Perdido'])
       .gte('data_fechamento', inicioISO)
       .lte('data_fechamento', fimISO)
@@ -2889,7 +2678,7 @@ async function _carregarTaxaConversao(inicio, fim) {
 
     if (fechadosError) throw fechadosError;
 
-    const fechados = fechadosData ?? [];
+    const fechados = (fechadosData ?? []).filter(n => _passaCanal(n.negocio_origem));
     const ganhos = fechados.filter(n => n.negocio_status === 'Ganho');
     // Reuniões Realizadas = marcada (reuniao_realizada) E sem no-show — não
     // confundir com apenas agendada ou com no-show
@@ -2934,22 +2723,16 @@ async function _carregarTaxaConversao(inicio, fim) {
   }
 }
 
-// ─── MQL para SQL Ratio ────────────────────────────────────
+// ─── Perda Pós-Reunião ───────────────────────────────────────
 
 /**
- * Calcula e exibe o MQL → SQL Ratio no período.
+ * Entre os negócios fechados no período que tiveram reunião realizada
+ * (marcada e sem no-show), quantos foram perdidos.
  *
- * Fórmula:
- *   Ratio = (SQLs ÷ MQLs) × 100
- *
- *   MQL = total de oportunidades/leads criados no período (criado_em)
- *   SQL = negócios com negocio_lead_qualificado = TRUE criados no mesmo período.
- *         Esse campo é marcado automaticamente quando a reunião é agendada, mas
- *         pode ser ativado/desativado manualmente pelo usuário na sessão de
- *         Qualificação do negócio (ex: lead qualificado sem reunião ainda).
+ * Fórmula: (Perdidos com reunião realizada ÷ Reuniões Realizadas) × 100
  */
-async function _carregarMqlSql(inicio, fim) {
-  const cardEl  = document.getElementById('rel-mql-sql');
+async function _carregarPerdaPosReuniao(inicio, fim) {
+  const cardEl  = document.getElementById('rel-perda-pos-reuniao');
   const valueEl = cardEl?.querySelector('.rel-kpi-value');
   const trendEl = cardEl?.querySelector('.rel-kpi-trend');
 
@@ -2961,57 +2744,49 @@ async function _carregarMqlSql(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. Busca todos os negócios criados no período
-    const { data: leads, error: mqlError } = await supabase
+    const { data, error } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_lead_qualificado, criado_em, negocio_origem')
-      .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO)
-      .order('criado_em', { ascending: false });
+      .select('negocio_id, negocio_titulo, negocio_status, negocio_valor, negocio_origem, data_fechamento, reuniao_realizada, negocio_noshow, motivos_perda(motivo_descricao)')
+      .in('negocio_status', ['Ganho', 'Perdido'])
+      .eq('reuniao_realizada', true)
+      .eq('negocio_noshow', false)
+      .gte('data_fechamento', inicioISO)
+      .lte('data_fechamento', fimISO)
+      .order('data_fechamento', { ascending: false });
 
-    if (mqlError) throw mqlError;
+    if (error) throw error;
 
-    const lista = leads ?? [];
-    const totalMQL = lista.length;
-    const sqls = lista.filter(l => l.negocio_lead_qualificado === true);
-    const totalSQL = sqls.length;
+    const reunioes = (data ?? []).filter(n => _passaCanal(n.negocio_origem));
+    const perdidos = reunioes.filter(n => n.negocio_status === 'Perdido');
 
-    // 2. Calcula o ratio
-    const ratio = totalMQL > 0 ? (totalSQL / totalMQL) * 100 : 0;
-    const ratioFormatado = `${ratio.toFixed(1).replace('.', ',')}%`;
-    const subInfo = totalMQL === 0
-      ? 'Nenhum MQL (lead) registrado no período'
-      : `${totalSQL} SQL${totalSQL !== 1 ? 's' : ''} ÷ ${totalMQL} MQL${totalMQL !== 1 ? 's' : ''}`;
+    const taxa = reunioes.length > 0 ? (perdidos.length / reunioes.length) * 100 : 0;
+    const taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
+    const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+    const subInfo = reunioes.length === 0
+      ? 'Nenhuma reunião realizada entre os negócios fechados no período'
+      : `${plural(perdidos.length, 'perdido', 'perdidos')} de ${plural(reunioes.length, 'reunião realizada', 'reuniões realizadas')}`;
 
-    if (valueEl) valueEl.textContent = ratioFormatado;
+    if (valueEl) valueEl.textContent = taxaFormatada;
 
-    const subEl    = cardEl?.querySelector('.rel-kpi-sub');
-    const infoSpan = cardEl?.querySelector('.rel-kpi-info-icon');
-    if (subEl)    subEl.textContent = subInfo;
-    if (infoSpan) infoSpan.title   = `Passe o mouse para ver a eficiência de qualificação`;
+    const subEl = cardEl?.querySelector('.rel-kpi-sub');
+    if (subEl) subEl.textContent = subInfo;
+    if (trendEl) trendEl.lastChild.textContent = `${perdidos.length} perdidos / ${reunioes.length} reuniões`;
 
-    if (trendEl) {
-      trendEl.lastChild.textContent = `${totalSQL} SQLs / ${totalMQL} MQLs`;
-    }
-
-    // 3. Popula o Hover Card de MQL para SQL
-    _kpiBreakdowns['rel-mql-sql'] = {
-      title: 'MQL para SQL Ratio (Qualificação)',
-      badge: ratioFormatado,
-      items: (sqls.length > 0 ? sqls : lista).slice(0, 15).map(l => ({
-        name: l.negocio_titulo || 'Lead',
-        sub: l.negocio_lead_qualificado
-          ? `🎯 Lead Qualificado · ${_formatarExibicao(l.criado_em?.substring(0, 10))}`
-          : `Lead Criado no Período · Origem: ${l.negocio_origem || 'Não informada'}`,
-        val: l.negocio_lead_qualificado ? 'SQL ✅' : 'MQL'
+    _kpiBreakdowns['rel-perda-pos-reuniao'] = {
+      title: 'Perda Pós-Reunião',
+      badge: taxaFormatada,
+      items: perdidos.slice(0, 15).map(n => ({
+        name: n.negocio_titulo || 'Oportunidade',
+        sub: `❌ Perdido · ${_formatarExibicao(n.data_fechamento?.substring(0, 10))}${n.motivos_perda?.motivo_descricao ? ` · ${n.motivos_perda.motivo_descricao}` : ''}`,
+        val: `R$ ${_formatarBRL(n.negocio_valor)}`
       })),
-      footer: `<b>${totalSQL}</b> SQLs qualificados ÷ <b>${totalMQL}</b> MQLs que entraram no período`,
-      formula: `Eficiência de Qualificação = ${ratioFormatado}`
+      footer: `<b>${perdidos.length}</b> perdidos ÷ <b>${reunioes.length}</b> reuniões realizadas entre os negócios fechados no período`,
+      formula: `Perda Pós-Reunião = ${taxaFormatada}`
     };
-    _bindKpiHover('rel-mql-sql');
+    _bindKpiHover('rel-perda-pos-reuniao');
 
   } catch (err) {
-    console.error('[Relatórios] Erro ao calcular MQL→SQL Ratio:', err.message);
+    console.error('[Relatórios] Erro ao calcular Perda Pós-Reunião:', err.message);
     if (valueEl) valueEl.textContent = 'Erro';
   }
 }
@@ -3037,10 +2812,10 @@ async function _carregarChurnComercial(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // 1. Busca clientes cancelados no período
-    const { data: cancelados, error: cancelError } = await supabase
+    // 1. Clientes cancelados no período. O canal do cliente é a origem do negócio que o originou.
+    const { data: canceladosBrutos, error: cancelError } = await supabase
       .from('clientes')
-      .select('cliente_id, cliente_nome, criado_em, cliente_churn, data_churn, cliente_mensalidade')
+      .select('cliente_id, cliente_nome, criado_em, cliente_churn, data_churn, cliente_mensalidade, negocios(negocio_origem)')
       .eq('cliente_churn', true)
       .gte('data_churn', inicioISO)
       .lte('data_churn', fimISO)
@@ -3048,23 +2823,25 @@ async function _carregarChurnComercial(inicio, fim) {
 
     if (cancelError) throw cancelError;
 
-    // 2. Busca novos clientes do período para referência comparativa
-    const { count: novosCount, error: novosErr } = await supabase
+    // 2. Clientes ativos do canal (base da taxa)
+    const { data: ativosBrutos, error: ativosErr } = await supabase
       .from('clientes')
-      .select('cliente_id', { count: 'exact', head: true })
-      .gte('criado_em', inicioISO)
-      .lte('criado_em', fimISO);
+      .select('cliente_id, negocios(negocio_origem)')
+      .eq('cliente_status', 'Ativado')
+      .eq('cliente_churn', false);
 
-    if (novosErr) throw novosErr;
+    if (ativosErr) throw ativosErr;
 
-    const churns = cancelados?.length ?? 0;
-    const novosClientes = novosCount ?? 0;
+    const origemDoCliente = (c) => (Array.isArray(c.negocios) ? c.negocios[0] : c.negocios)?.negocio_origem;
+    const cancelados = (canceladosBrutos ?? []).filter(c => _passaCanal(origemDoCliente(c)));
+    const clientesAtivos = (ativosBrutos ?? []).filter(c => _passaCanal(origemDoCliente(c))).length;
 
-    const taxa = novosClientes > 0 ? (churns / novosClientes) * 100 : 0;
+    const churns = cancelados.length;
+    const taxa = clientesAtivos > 0 ? (churns / clientesAtivos) * 100 : 0;
     const taxaFormatada = `${taxa.toFixed(1).replace('.', ',')}%`;
     const subInfo = churns === 0
       ? 'Nenhum cancelamento registrado no período'
-      : `${churns} cancelamento${churns !== 1 ? 's' : ''} no período (${novosClientes} novo${novosClientes !== 1 ? 's' : ''} cliente${novosClientes !== 1 ? 's' : ''})`;
+      : `${churns} cancelamento${churns !== 1 ? 's' : ''} no período (${clientesAtivos} cliente${clientesAtivos !== 1 ? 's' : ''} ativo${clientesAtivos !== 1 ? 's' : ''})`;
 
     if (valueEl) valueEl.textContent = taxaFormatada;
 
@@ -3074,7 +2851,7 @@ async function _carregarChurnComercial(inicio, fim) {
     if (infoSpan) infoSpan.title   = `Passe o mouse para ver os cancelamentos`;
 
     if (trendEl) {
-      trendEl.lastChild.textContent = `${churns} churn${churns !== 1 ? 's' : ''} de ${novosClientes} cliente${novosClientes !== 1 ? 's' : ''}`;
+      trendEl.lastChild.textContent = `${churns} churn${churns !== 1 ? 's' : ''} de ${clientesAtivos} ativo${clientesAtivos !== 1 ? 's' : ''}`;
     }
 
     // 3. Popula o Hover Card do Churn Comercial
@@ -3086,7 +2863,7 @@ async function _carregarChurnComercial(inicio, fim) {
         sub: `Cancelou em ${_formatarExibicao(c.data_churn?.substring(0, 10))}`,
         val: c.cliente_mensalidade ? `- R$ ${_formatarBRL(c.cliente_mensalidade)}` : 'Cancelado ⚠️'
       })),
-      footer: `<b>${churns}</b> cancelamento${churns !== 1 ? 's' : ''} ÷ <b>${novosClientes}</b> novos clientes conquistados no período`,
+      footer: `<b>${churns}</b> cancelamento${churns !== 1 ? 's' : ''} ÷ <b>${clientesAtivos}</b> clientes ativos do canal`,
       formula: `Taxa de Churn = ${taxaFormatada}`
     };
     _bindKpiHover('rel-churn-comercial');
@@ -3121,7 +2898,7 @@ async function _carregarCicloVendas(inicio, fim) {
     // Busca negócios Ganhos no período com dados completos para o breakdown
     const { data, error } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_valor, criado_em, data_fechamento')
+      .select('negocio_id, negocio_titulo, negocio_valor, negocio_origem, criado_em, data_fechamento')
       .eq('negocio_status', 'Ganho')
       .gte('data_fechamento', inicioISO)
       .lte('data_fechamento', fimISO)
@@ -3131,7 +2908,7 @@ async function _carregarCicloVendas(inicio, fim) {
     if (error) throw error;
 
     const MS_POR_DIA = 1000 * 60 * 60 * 24;
-    const validos = (data ?? []).map(n => {
+    const validos = (data ?? []).filter(n => _passaCanal(n.negocio_origem)).map(n => {
       const diffMs = new Date(n.data_fechamento).getTime() - new Date(n.criado_em).getTime();
       const dias = Math.max(1, Math.round(diffMs / MS_POR_DIA));
       return { ...n, dias };
@@ -3196,13 +2973,13 @@ async function _carregarReceitaAberto() {
   try {
     const { data, error } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_valor, criado_em, usuarios(user_nome)')
+      .select('negocio_id, negocio_titulo, negocio_valor, negocio_origem, criado_em, usuarios(user_nome)')
       .eq('negocio_status', 'Aberto')
       .order('negocio_valor', { ascending: false });
 
     if (error) throw error;
 
-    const negocios = data ?? [];
+    const negocios = (data ?? []).filter(n => _passaCanal(n.negocio_origem));
     const total    = negocios.length;
     const soma = negocios.reduce((acc, n) => acc + Number(n.negocio_valor ?? 0), 0);
 
@@ -3268,9 +3045,9 @@ async function _carregarMotivosPerda(inicio, fim) {
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
     // 1. Negócios Perdidos no período com dados completos para o breakdown
-    const { data: perdidos, error: perdidoError } = await supabase
+    const { data: perdidosBrutos, error: perdidoError } = await supabase
       .from('negocios')
-      .select('motivo_perda, negocio_titulo, negocio_valor, data_fechamento')
+      .select('motivo_perda, negocio_titulo, negocio_valor, negocio_origem, data_fechamento')
       .eq('negocio_status', 'Perdido')
       .not('motivo_perda', 'is', null)
       .gte('data_fechamento', inicioISO)
@@ -3278,6 +3055,7 @@ async function _carregarMotivosPerda(inicio, fim) {
       .order('data_fechamento', { ascending: false });
 
     if (perdidoError) throw perdidoError;
+    const perdidos = (perdidosBrutos ?? []).filter(n => _passaCanal(n.negocio_origem));
 
     if (!perdidos || perdidos.length === 0) {
       listaEl.innerHTML = '<div class="rel-motivo-empty">Nenhum negócio perdido com motivo registrado no período</div>';
@@ -3369,9 +3147,10 @@ async function _carregarMotivosPerda(inicio, fim) {
   }
 }
 
-// ─── Performance por Vendedor ───────────────────────────────
+// ─── Desempenho por Vendedor ────────────────────────────────
 
 let _verVendasConjuntas = false; // false = crédito só pro vendedor_id · true = crédito cheio p/ todos os responsáveis
+let _canalVendedor      = 'todos'; // canal dos leads do card (independente do seletor do funil)
 
 function _bindPerformanceVendedorEvents() {
   const btn = document.getElementById('rel-vendas-conjuntas-toggle');
@@ -3384,22 +3163,38 @@ function _bindPerformanceVendedorEvents() {
   });
 }
 
+function _selecionarCanalVendedor(key) {
+  _canalVendedor = key;
+  _atualizarCanalPicker('rel-canalpicker-vendedor', key);
+  _carregarPerformanceVendedor(_dataInicio, _dataFim);
+}
+
 /**
- * Carrega e renderiza o ranking de Performance por Vendedor no período.
- * Com "Vendas Conjuntas" ativado, negócios com 2+ responsáveis (negocios_responsaveis)
- * dão crédito integral (fechamento + receita) para cada responsável, não só para o vendedor_id.
+ * Funil e retorno de cada vendedor no período.
+ *
+ * - Leads atendidos: leads criados no período; cada lead é posicionado pela
+ *   etapa atual (quem está numa etapa passou pelas anteriores).
+ * - Valor vendido: soma dos negócios que estão em "Venda realizada".
+ * - LTV das vendas: soma de (mensalidade × duração do contrato) dos clientes
+ *   originados nessas vendas.
+ * - CAC e ROAS: investimento dos canais rateado pelos leads que o vendedor
+ *   atendeu (cada lead leva a fatia 1 ÷ leads do canal do investimento do canal).
+ *
+ * Com "Vendas Conjuntas" ativado, negócios com 2+ responsáveis dão crédito
+ * integral para cada responsável, não só para o vendedor_id.
  */
 async function _carregarPerformanceVendedor(inicio, fim) {
   const tbody = document.getElementById('rel-vendedor-tbody');
   if (!tbody) return;
 
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>';
+  const colunas = 12;
+  tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:1.5rem;opacity:.5">Carregando…</td></tr>`;
 
   const subtituloEl = document.getElementById('rel-vendedor-subtitulo');
   if (subtituloEl) {
     subtituloEl.textContent = _verVendasConjuntas
-      ? 'Ranking de conversão — vendas conjuntas com crédito integral p/ todos os responsáveis'
-      : 'Ranking de conversão da equipe comercial';
+      ? 'Funil e retorno por vendedor — vendas conjuntas com crédito integral p/ todos os responsáveis'
+      : 'Mostra o funil de cada vendedor e o retorno das vendas dele';
   }
 
   try {
@@ -3408,131 +3203,158 @@ async function _carregarPerformanceVendedor(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    // Busca negócios fechados (Ganho ou Perdido) no período com join de usuários e co-responsáveis
-    const { data, error } = await supabase
-      .from('negocios')
-      .select(`
-        vendedor_id, negocio_titulo, negocio_status, negocio_valor, data_fechamento,
-        usuarios(user_nome, user_avatar),
-        negocios_responsaveis ( usuario_id, usuarios(user_nome, user_avatar) )
-      `)
-      .in('negocio_status', ['Ganho', 'Perdido'])
-      .gte('data_fechamento', inicioISO)
-      .lte('data_fechamento', fimISO)
-      .order('data_fechamento', { ascending: false });
+    const [negRes, etapas, invRes] = await Promise.all([
+      supabase.from('negocios')
+        .select(`
+          negocio_id, negocio_titulo, negocio_valor, negocio_origem, vendedor_id, etapa_id,
+          usuarios(user_nome, user_avatar),
+          negocios_responsaveis ( usuario_id, usuarios(user_nome, user_avatar) )
+        `)
+        .gte('criado_em', inicioISO).lte('criado_em', fimISO),
+      _carregarEtapasFunil(),
+      supabase.from('relatorios_investimentos_canal')
+        .select('canal, valor').in('periodo', _mesesDoPeriodo(inicio, fim)),
+    ]);
+    if (negRes.error) throw negRes.error;
+    if (invRes.error) throw invRes.error;
 
-    if (error) throw error;
+    const investimentoDoCanal = {};
+    (invRes.data ?? []).forEach(r => {
+      investimentoDoCanal[r.canal] = (investimentoDoCanal[r.canal] ?? 0) + (Number(r.valor) || 0);
+    });
 
-    const negocios = data ?? [];
+    // Um crédito por (lead, responsável). Sem "Vendas Conjuntas", só o vendedor_id recebe.
+    const creditos = [];
+    for (const n of (negRes.data ?? [])) {
+      const responsaveis = new Map();
+      if (n.vendedor_id) responsaveis.set(n.vendedor_id, n.usuarios ?? null);
+      if (_verVendasConjuntas) {
+        for (const r of (n.negocios_responsaveis ?? [])) {
+          if (r.usuario_id && !responsaveis.has(r.usuario_id)) responsaveis.set(r.usuario_id, r.usuarios ?? null);
+        }
+      }
+      if (responsaveis.size === 0) responsaveis.set('sem_vendedor', null);
 
-    if (negocios.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;opacity:.5">Nenhum negócio fechado no período</td></tr>';
+      const canal = canalDaOrigem(n.negocio_origem);
+      const posicao = etapas.posicaoDoNegocio(n.etapa_id);
+      for (const [vid, usuario] of responsaveis) {
+        creditos.push({ vid, usuario, canal, negocio: n, conjunta: responsaveis.size > 1, ...posicao });
+      }
+    }
+
+    // Fatia de investimento de cada lead = investimento do canal ÷ leads do canal
+    const creditosPorCanal = {};
+    creditos.forEach(c => { creditosPorCanal[c.canal] = (creditosPorCanal[c.canal] ?? 0) + 1; });
+    const fatiaDoLead = (canal) => (investimentoDoCanal[canal] ?? 0) / (creditosPorCanal[canal] || 1);
+
+    const exibidos = creditos.filter(c => _canalVendedor === 'todos' || c.canal === _canalVendedor);
+
+    // LTV das vendas: clientes originados nos negócios vendidos
+    const idVendidos = [...new Set(exibidos.filter(c => c.alcancou === 6).map(c => c.negocio.negocio_id))];
+    const ltvDoNegocio = {};
+    if (idVendidos.length > 0) {
+      const { data: clientes, error: clientesErr } = await supabase
+        .from('clientes')
+        .select('negocio_id, cliente_mensalidade, contrato_duracao')
+        .in('negocio_id', idVendidos);
+      if (clientesErr) throw clientesErr;
+      (clientes ?? []).forEach(c => {
+        ltvDoNegocio[c.negocio_id] = (ltvDoNegocio[c.negocio_id] ?? 0)
+          + (Number(c.cliente_mensalidade) || 0) * (Number(c.contrato_duracao) || 0);
+      });
+    }
+
+    // Agrupa por vendedor
+    const vendedores = new Map();
+    for (const c of exibidos) {
+      if (!vendedores.has(c.vid)) {
+        vendedores.set(c.vid, {
+          nome: c.usuario?.user_nome ?? 'Não atribuído',
+          avatar: c.usuario?.user_avatar ?? null,
+          leads: 0, estagios: Array(FUNIL_ETAPAS.length).fill(0),
+          valor: 0, ltv: 0, investimento: 0, vendas: [],
+        });
+      }
+      const v = vendedores.get(c.vid);
+      v.leads++;
+      for (let i = 0; i <= c.alcancou; i++) v.estagios[i]++;
+      v.investimento += fatiaDoLead(c.canal);
+      if (c.alcancou === 6) {
+        const valor = Number(c.negocio.negocio_valor) || 0;
+        const ltv = ltvDoNegocio[c.negocio.negocio_id] ?? 0;
+        v.valor += valor;
+        v.ltv += ltv;
+        v.vendas.push({ titulo: c.negocio.negocio_titulo, valor, ltv, conjunta: c.conjunta });
+      }
+    }
+
+    const ranking = [...vendedores.values()]
+      .sort((a, b) => b.valor - a.valor || b.leads - a.leads || a.nome.localeCompare(b.nome));
+
+    const notaEl = document.getElementById('rel-vendedor-nota');
+    if (notaEl) {
+      notaEl.textContent = 'Acompanha os leads criados no período, pela etapa em que estão hoje. Em cada etapa: quantos leads do vendedor chegaram nela e o % de passagem da etapa anterior. Valor vendido = negócios em "Venda realizada". LTV das vendas = soma de (valor mensal × tempo de contrato). CAC e ROAS do vendedor usam o investimento dos canais rateado pelos leads que ele atendeu; sem investimento lançado aparecem como "-".';
+    }
+
+    if (ranking.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:1.5rem;opacity:.5">Nenhum lead no período${_canalVendedor === 'todos' ? '' : ' para este canal'}</td></tr>`;
       return;
     }
 
-    // Agrupa por vendedor — em modo "Vendas Conjuntas", credita integralmente
-    // cada responsável (vendedor_id + negocios_responsaveis), sem duplicar quando
-    // o mesmo usuário aparece em ambos.
-    const vendedores = {};
-    for (const n of negocios) {
-      const responsaveisMap = new Map();
-      if (n.vendedor_id) {
-        responsaveisMap.set(n.vendedor_id, n.usuarios ?? null);
-      }
-      if (_verVendasConjuntas) {
-        for (const r of (n.negocios_responsaveis ?? [])) {
-          if (r.usuario_id && !responsaveisMap.has(r.usuario_id)) {
-            responsaveisMap.set(r.usuario_id, r.usuarios ?? null);
-          }
-        }
-      }
-      if (responsaveisMap.size === 0) responsaveisMap.set('sem_vendedor', null);
-
-      const ehVendaConjunta = responsaveisMap.size > 1;
-
-      for (const [vid, usuarioInfo] of responsaveisMap) {
-        if (!vendedores[vid]) {
-          vendedores[vid] = {
-            nome:   usuarioInfo?.user_nome   ?? 'Não atribuído',
-            avatar: usuarioInfo?.user_avatar ?? null,
-            ganhos: 0,
-            total:  0,
-            receita: 0,
-            contratos: [],
-            conjuntas: 0,
-          };
-        }
-        vendedores[vid].total++;
-        if (ehVendaConjunta) vendedores[vid].conjuntas++;
-        if (n.negocio_status === 'Ganho') {
-          vendedores[vid].ganhos++;
-          vendedores[vid].receita += Number(n.negocio_valor ?? 0);
-          vendedores[vid].contratos.push({ ...n, _conjunta: ehVendaConjunta });
-        }
-      }
-    }
-
-    // Ordena por receita (decrescente)
-    const ranking = Object.values(vendedores)
-      .sort((a, b) => b.receita - a.receita);
-
-    const maxReceita = ranking[0]?.receita ?? 1;
-
     tbody.innerHTML = ranking.map((v, idx) => {
-      const taxa    = v.total > 0 ? Math.round((v.ganhos / v.total) * 100) : 0;
-      const barPct  = maxReceita > 0 ? Math.round((v.receita / maxReceita) * 100) : 0;
       const iniciais = v.nome.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
       const avatarHtml = v.avatar
         ? `<img src="${v.avatar}" class="rel-table-avatar-img" alt="${v.nome}">`
         : `<div class="rel-table-avatar">${iniciais}</div>`;
 
+      const celulaEtapa = (i) => {
+        const pct = v.estagios[i - 1] > 0 ? _fmtPct((v.estagios[i] / v.estagios[i - 1]) * 100) : '';
+        return `<td class="rel-num"><span class="rel-vend-qtd">${_fmtInteiro(v.estagios[i])}</span><span class="rel-vend-pct">${pct}</span></td>`;
+      };
+
+      const nVendas = v.vendas.length;
+      const cac  = v.investimento > 0 && nVendas > 0 ? _fmtMoedaCanal(v.investimento / nVendas) : '-';
+      const roas = v.investimento > 0
+        ? `${(v.valor / v.investimento).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x`
+        : '-';
+
       return `
-        <tr data-vendedor-idx="${idx}" style="cursor: pointer;">
-          <td class="rel-rank">${idx + 1}</td>
+        <tr data-vendedor-idx="${idx}">
           <td>
             <div class="rel-avatar-cell">
               <div class="rel-avatar-wrap">${avatarHtml}</div>
-              <div>
-                <div class="rel-table-name">${v.nome}</div>
-                <div class="rel-table-sub">${v.ganhos} fechamento${v.ganhos !== 1 ? 's' : ''}${v.conjuntas > 0 ? ` · 🤝 ${v.conjuntas} conjunta${v.conjuntas !== 1 ? 's' : ''}` : ''}</div>
-              </div>
+              <div class="rel-table-name">${v.nome}</div>
             </div>
           </td>
-          <td>${v.total}</td>
-          <td>${v.ganhos}</td>
-          <td>
-            <div class="rel-mini-bar-wrap">
-              <div class="rel-mini-bar">
-                <div class="rel-mini-bar-fill rel-mini-bar-fill--cyan" style="width:${barPct}%"></div>
-              </div>
-              <span class="rel-mini-bar-pct">${taxa}%</span>
-            </div>
-          </td>
-          <td class="rel-receita-col">R$ ${_formatarBRL(v.receita)}</td>
+          <td class="rel-num"><span class="rel-vend-qtd">${_fmtInteiro(v.leads)}</span></td>
+          ${FUNIL_ETAPAS.slice(1).map((_, k) => celulaEtapa(k + 1)).join('')}
+          <td class="rel-num rel-vend-verde">${v.valor > 0 ? _fmtMoedaCanal(v.valor) : '-'}</td>
+          <td class="rel-num rel-vend-verde">${v.ltv > 0 ? _fmtMoedaCanal(v.ltv) : '-'}</td>
+          <td class="rel-num rel-canais-destaque">${cac}</td>
+          <td class="rel-num rel-vend-verde">${roas}</td>
         </tr>
       `;
     }).join('');
 
-    // Atacha Hover Cards nas linhas dos vendedores
+    // Hover Card com as vendas de cada vendedor
     tbody.querySelectorAll('tr').forEach(row => {
-      const idx = parseInt(row.dataset.vendedorIdx, 10);
-      const v = ranking[idx];
+      const v = ranking[parseInt(row.dataset.vendedorIdx, 10)];
       if (!v) return;
 
       row.addEventListener('mouseenter', () => {
-        const taxa = v.total > 0 ? Math.round((v.ganhos / v.total) * 100) : 0;
+        const nVendas = v.vendas.length;
         _showKpiPopover(row, {
           title: `Vendedor: ${v.nome}`,
-          badge: `${v.ganhos} Ganhos / ${v.total} Total`,
-          items: v.contratos.length > 0
-            ? v.contratos.slice(0, 10).map(c => ({
-                name: c.negocio_titulo || 'Contrato Ganho',
-                sub: `${c._conjunta ? '🤝 Venda conjunta · ' : ''}Fechado em ${_formatarExibicao(c.data_fechamento?.substring(0, 10))}`,
-                val: `R$ ${_formatarBRL(c.negocio_valor)}`
+          badge: `${nVendas} Venda${nVendas !== 1 ? 's' : ''} / ${v.leads} Lead${v.leads !== 1 ? 's' : ''}`,
+          items: nVendas > 0
+            ? v.vendas.slice(0, 10).map(s => ({
+                name: s.titulo || 'Contrato Ganho',
+                sub: `${s.conjunta ? '🤝 Venda conjunta · ' : ''}LTV: ${s.ltv > 0 ? `R$ ${_formatarBRL(s.ltv)}` : 'sem contrato definido'}`,
+                val: `R$ ${_formatarBRL(s.valor)}`
               }))
-            : [{ name: 'Sem contratos ganhos', sub: 'Apenas oportunidades perdidas ou em aberto', val: '—' }],
-          footer: `Receita gerada: <b>R$ ${_formatarBRL(v.receita)}</b> · Taxa de conversão: <b>${taxa}%</b>`,
-          formula: `Ticket médio individual: R$ ${_formatarBRL(v.ganhos > 0 ? v.receita / v.ganhos : 0)}`
+            : [{ name: 'Sem vendas no período', sub: 'Nenhum lead em Venda realizada', val: '—' }],
+          footer: `Valor vendido: <b>R$ ${_formatarBRL(v.valor)}</b> · Investimento rateado: <b>R$ ${_formatarBRL(v.investimento)}</b>`,
+          formula: `Ticket médio individual: R$ ${_formatarBRL(nVendas > 0 ? v.valor / nVendas : 0)}`
         });
       });
 
@@ -3540,8 +3362,8 @@ async function _carregarPerformanceVendedor(inicio, fim) {
     });
 
   } catch (err) {
-    console.error('[Relatórios] Erro ao carregar Performance por Vendedor:', err.message);
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--danger)">Erro ao carregar dados</td></tr>';
+    console.error('[Relatórios] Erro ao carregar Desempenho por Vendedor:', err.message);
+    tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:1.5rem;color:var(--danger)">Erro ao carregar dados</td></tr>`;
   }
 }
 
@@ -3570,7 +3392,7 @@ async function _carregarNoShow(inicio, fim) {
     // 1. Busca todas as reuniões (realizadas ou com no-show) no período
     const { data, error } = await supabase
       .from('negocios')
-      .select('negocio_id, negocio_titulo, negocio_noshow, reuniao_realizada, criado_em, usuarios(user_nome)')
+      .select('negocio_id, negocio_titulo, negocio_noshow, reuniao_realizada, negocio_origem, criado_em, usuarios(user_nome)')
       .or('reuniao_realizada.eq.true,negocio_noshow.eq.true')
       .gte('criado_em', inicioISO)
       .lte('criado_em', fimISO)
@@ -3578,7 +3400,7 @@ async function _carregarNoShow(inicio, fim) {
 
     if (error) throw error;
 
-    const lista = data ?? [];
+    const lista = (data ?? []).filter(n => _passaCanal(n.negocio_origem));
     const totalReunioes = lista.length;
     const noShows = lista.filter(n => n.negocio_noshow === true);
     const totalNoShows = noShows.length;
@@ -4928,40 +4750,6 @@ async function _carregarNPSDetalhado(inicio, fim) {
  * inteiro, um ponto por mês.
  */
 
-async function _carregarGraficoComercial() {
-  try {
-    const { data: negocios, error } = await Negocios.getAnoAtualPorVendedor(null);
-    if (error) throw error;
-
-    const faturamento = Array(12).fill(0);
-    const contagem     = Array(12).fill(0);
-
-    (negocios ?? []).forEach(n => {
-      if (n.negocio_status !== 'Ganho' || !n.data_fechamento) return;
-      const mes = new Date(n.data_fechamento).getUTCMonth();
-      faturamento[mes] += Number(n.negocio_valor) || 0;
-      contagem[mes]++;
-    });
-
-    const ticketMedio = faturamento.map((val, i) => contagem[i] > 0 ? val / contagem[i] : 0);
-
-    _dadosGraficoComercial = { labels: MESES_ABREV, faturamento, ticketMedio };
-    if (_tabAtual === 'comercial') _renderizarGraficoComercial();
-  } catch (err) {
-    console.error('[Relatórios] Erro ao carregar gráfico Comercial:', err.message);
-  }
-}
-
-function _renderizarGraficoComercial() {
-  if (!_dadosGraficoComercial || !document.getElementById('rel-chart-comercial')) return;
-  if (!_chartComercial) _chartComercial = new DualLineChart('rel-chart-comercial');
-  _chartComercial.init({
-    labels: _dadosGraficoComercial.labels,
-    series1: { data: _dadosGraficoComercial.faturamento,  label: 'Faturamento',  color: '#1ACEEE', format: 'currency', axis: 'y' },
-    series2: { data: _dadosGraficoComercial.ticketMedio,  label: 'Ticket Médio', color: '#22c55e', format: 'currency', axis: 'y1' },
-  });
-}
-
 async function _carregarGraficoOperacoes() {
   try {
     const { data: clientes, error } = await supabase
@@ -5094,28 +4882,539 @@ async function _aplicarPeriodo(inicio, fim, label = null) {
   _carregarInadimplencia(_dataInicio, _dataFim);
   _carregarAvancoMeta();
   _carregarVendidoVsCaixa(_dataInicio, _dataFim);
-  _carregarCAC(_dataInicio, _dataFim);
-  _carregarCPQ(_dataInicio, _dataFim);
-  _carregarTicketMedio(_dataInicio, _dataFim);
-  _carregarTaxaConversao(_dataInicio, _dataFim);
-  _carregarMqlSql(_dataInicio, _dataFim);
-  _carregarChurnComercial(_dataInicio, _dataFim);
-  _carregarCicloVendas(_dataInicio, _dataFim);
-  _carregarMotivosPerda(_dataInicio, _dataFim);
+  _carregarCanais(_dataInicio, _dataFim);
+  _carregarResultadoCanais(_dataInicio, _dataFim);
+  _carregarFunilCanais(_dataInicio, _dataFim);
+  _recarregarIndicadoresCanal();
   _carregarPerformanceVendedor(_dataInicio, _dataFim);
-  _carregarNoShow(_dataInicio, _dataFim);
   _carregarLtvMetrics(_dataInicio, _dataFim);
   _carregarAtividadesEquipe(_dataInicio, _dataFim);
   _carregarSetupMedio(_dataInicio, _dataFim);
   _carregarNPS(_dataInicio, _dataFim);
   _carregarConclusaoAtividades(_dataInicio, _dataFim);
   _carregarNPSDetalhado(_dataInicio, _dataFim);
-  // Snapshot: não depende de período, mas atualiza junto para consistência
-  _carregarReceitaAberto();
   _carregarCapacityOperacional();
   _carregarHealthScore();
   _carregarIndiceSilencio();
   _carregarOtimizacoesRealizadas();
+}
+
+// ─── Canais de aquisição ─────────────────────────────────────
+
+let _dadosCanais = null; // último resultado de _carregarCanais()
+
+/** Lista os meses ('YYYY-MM') que o período cobre */
+function _mesesDoPeriodo(inicio, fim) {
+  const meses = [];
+  let [ano, mes] = inicio.split('-').map(Number);
+  const [fimAno, fimMes] = fim.split('-').map(Number);
+  while (ano < fimAno || (ano === fimAno && mes <= fimMes)) {
+    meses.push(`${ano}-${String(mes).padStart(2, '0')}`);
+    mes++;
+    if (mes > 12) { mes = 1; ano++; }
+  }
+  return meses;
+}
+
+const _fmtInteiro = (n) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+const _fmtMoedaCanal = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const _fmtPct = (v) => `${v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+
+/**
+ * Desempenho por canal no período.
+ * Leads e MQLs seguem a data de criação do lead; vendas e receita, a data de
+ * fechamento (mesmo critério do Ticket Médio). O investimento soma os meses
+ * que o período cobre.
+ */
+async function _carregarCanais(inicio, fim) {
+  const tbody = document.getElementById('rel-canais-tbody');
+  if (!tbody) return;
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+    const meses     = _mesesDoPeriodo(inicio, fim);
+
+    const [criadosRes, ganhosRes, invCanalRes, invTotalRes] = await Promise.all([
+      supabase.from('negocios')
+        .select('negocio_origem, negocio_lead_qualificado')
+        .gte('criado_em', inicioISO).lte('criado_em', fimISO),
+      supabase.from('negocios')
+        .select('negocio_origem, negocio_valor')
+        .eq('negocio_status', 'Ganho')
+        .gte('data_fechamento', inicioISO).lte('data_fechamento', fimISO),
+      supabase.from('relatorios_investimentos_canal')
+        .select('periodo, canal, valor').in('periodo', meses),
+      supabase.from('relatorios_investimentos')
+        .select('periodo, valor').in('periodo', meses),
+    ]);
+    for (const res of [criadosRes, ganhosRes, invCanalRes, invTotalRes]) {
+      if (res.error) throw res.error;
+    }
+
+    const linhas = [...CANAIS, CANAL_OUTROS].map(c => ({
+      key: c.key, label: c.label, leads: 0, mqls: 0, vendas: 0, receita: 0, investimento: 0,
+    }));
+    const porKey = Object.fromEntries(linhas.map(l => [l.key, l]));
+
+    (criadosRes.data ?? []).forEach(n => {
+      const l = porKey[canalDaOrigem(n.negocio_origem)];
+      l.leads++;
+      if (n.negocio_lead_qualificado) l.mqls++;
+    });
+    (ganhosRes.data ?? []).forEach(n => {
+      const l = porKey[canalDaOrigem(n.negocio_origem)];
+      l.vendas++;
+      l.receita += Number(n.negocio_valor) || 0;
+    });
+    (invCanalRes.data ?? []).forEach(r => {
+      if (porKey[r.canal]) porKey[r.canal].investimento += Number(r.valor) || 0;
+    });
+
+    // Meses que só têm o total antigo, sem divisão por canal
+    const mesesComCanal = new Set((invCanalRes.data ?? []).filter(r => Number(r.valor) > 0).map(r => r.periodo));
+    const investSemCanal = (invTotalRes.data ?? [])
+      .filter(r => Number(r.valor) > 0 && !mesesComCanal.has(r.periodo))
+      .reduce((s, r) => s + Number(r.valor), 0);
+
+    // "Outros" só aparece quando tem algum número
+    const outros = porKey[CANAL_OUTROS.key];
+    const visiveis = linhas.filter(l => l !== outros || l.leads || l.vendas || l.investimento);
+
+    const total = visiveis.reduce((t, l) => ({
+      leads: t.leads + l.leads, mqls: t.mqls + l.mqls, vendas: t.vendas + l.vendas,
+      receita: t.receita + l.receita, investimento: t.investimento + l.investimento,
+    }), { leads: 0, mqls: 0, vendas: 0, receita: 0, investimento: 0 });
+
+    _dadosCanais = { linhas: visiveis, total, inicio, fim };
+
+    const linhaHtml = (l, { totalRow = false } = {}) => {
+      const taxaMql  = l.leads > 0 ? _fmtPct((l.mqls / l.leads) * 100) : '-';
+      const pctRec   = total.receita > 0 ? _fmtPct((l.receita / total.receita) * 100) : '-';
+      const ticket   = l.vendas > 0 ? _fmtMoedaCanal(l.receita / l.vendas) : '-';
+      const invest   = l.investimento > 0 ? _fmtMoedaCanal(l.investimento) : '-';
+      const cac      = l.investimento > 0 && l.vendas > 0 ? _fmtMoedaCanal(l.investimento / l.vendas) : '-';
+      const roas     = l.investimento > 0 ? `${(l.receita / l.investimento).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x` : '-';
+      const receita  = l.receita > 0 ? _fmtMoedaCanal(l.receita) : '-';
+      return `
+        <tr class="${totalRow ? 'rel-canais-total' : ''}" data-canal="${l.key}">
+          <td class="rel-canal-nome">${l.label}</td>
+          <td class="rel-num">${_fmtInteiro(l.leads)}</td>
+          <td class="rel-num">${_fmtInteiro(l.mqls)}</td>
+          <td class="rel-num">${taxaMql}</td>
+          <td class="rel-num">${_fmtInteiro(l.vendas)}</td>
+          <td class="rel-num">${receita}</td>
+          <td class="rel-num">${pctRec}</td>
+          <td class="rel-num">${ticket}</td>
+          <td class="rel-num">${invest}</td>
+          <td class="rel-num rel-canais-destaque">${cac}</td>
+          <td class="rel-num rel-canais-destaque">${roas}</td>
+        </tr>
+      `;
+    };
+
+    tbody.innerHTML = visiveis.map(l => linhaHtml(l)).join('')
+      + linhaHtml({ key: 'total', label: 'Total', ...total }, { totalRow: true });
+
+    _marcarCanalAtivo();
+
+    const notaEl = document.getElementById('rel-canais-nota');
+    if (notaEl) {
+      let nota = 'Leads e MQLs pela data de criação do lead; vendas e receita pela data de fechamento. MQL = lead marcado como qualificado. CAC = investimento ÷ vendas. ROAS = receita ÷ investimento. Sem investimento lançado, CAC e ROAS aparecem como "-".';
+      if (investSemCanal > 0) {
+        nota += ` Há ${_fmtMoedaCanal(investSemCanal)} lançados sem divisão por canal no período, que não entram no CAC e no ROAS por canal.`;
+      }
+      notaEl.textContent = nota;
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar canais de aquisição:', err.message);
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:1.5rem;color:var(--red)">Erro ao carregar os canais</td></tr>';
+  }
+}
+
+// ─── Resultado por canal (Diretoria & Financeiro) ────────────
+
+/**
+ * Clientes, receita, LTV, CAC e ROAS por canal no período.
+ * Clientes = vendas do canal (negócios Ganhos pela data de fechamento);
+ * LTV = média de (mensalidade × duração do contrato) dos clientes do canal;
+ * CAC = investimento ÷ clientes; LTV/CAC = LTV ÷ CAC; ROAS = receita ÷ investimento.
+ */
+async function _carregarResultadoCanais(inicio, fim) {
+  const tbody = document.getElementById('rel-resultado-canal-tbody');
+  if (!tbody) return;
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    const [ganhosRes, invRes] = await Promise.all([
+      supabase.from('negocios')
+        .select('negocio_id, negocio_origem, negocio_valor')
+        .eq('negocio_status', 'Ganho')
+        .gte('data_fechamento', inicioISO).lte('data_fechamento', fimISO),
+      supabase.from('relatorios_investimentos_canal')
+        .select('canal, valor').in('periodo', _mesesDoPeriodo(inicio, fim)),
+    ]);
+    if (ganhosRes.error) throw ganhosRes.error;
+    if (invRes.error)    throw invRes.error;
+
+    const ganhos = ganhosRes.data ?? [];
+
+    // Contrato de cada cliente originado nessas vendas
+    const ltvPorNegocio = {};
+    if (ganhos.length > 0) {
+      const { data: clientes, error: clientesErr } = await supabase
+        .from('clientes')
+        .select('negocio_id, cliente_mensalidade, contrato_duracao')
+        .in('negocio_id', ganhos.map(g => g.negocio_id));
+      if (clientesErr) throw clientesErr;
+      (clientes ?? []).forEach(c => {
+        const ltv = (Number(c.cliente_mensalidade) || 0) * (Number(c.contrato_duracao) || 0);
+        if (ltv > 0) ltvPorNegocio[c.negocio_id] = (ltvPorNegocio[c.negocio_id] ?? 0) + ltv;
+      });
+    }
+
+    const linhas = [...CANAIS, CANAL_OUTROS].map(c => ({
+      key: c.key, label: c.label, clientes: 0, receita: 0, investimento: 0, somaLtv: 0, comLtv: 0,
+    }));
+    const porKey = Object.fromEntries(linhas.map(l => [l.key, l]));
+
+    ganhos.forEach(g => {
+      const l = porKey[canalDaOrigem(g.negocio_origem)];
+      l.clientes++;
+      l.receita += Number(g.negocio_valor) || 0;
+      if (ltvPorNegocio[g.negocio_id]) { l.somaLtv += ltvPorNegocio[g.negocio_id]; l.comLtv++; }
+    });
+    (invRes.data ?? []).forEach(r => {
+      if (porKey[r.canal]) porKey[r.canal].investimento += Number(r.valor) || 0;
+    });
+
+    // "Outros" só aparece quando tem algum número
+    const outros = porKey[CANAL_OUTROS.key];
+    const visiveis = linhas.filter(l => l !== outros || l.clientes || l.investimento);
+
+    const total = visiveis.reduce((t, l) => ({
+      clientes: t.clientes + l.clientes, receita: t.receita + l.receita,
+      investimento: t.investimento + l.investimento,
+      somaLtv: t.somaLtv + l.somaLtv, comLtv: t.comLtv + l.comLtv,
+    }), { clientes: 0, receita: 0, investimento: 0, somaLtv: 0, comLtv: 0 });
+
+    const x = (v) => `${v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x`;
+
+    const linhaHtml = (l, totalRow = false) => {
+      const ltv = l.comLtv > 0 ? l.somaLtv / l.comLtv : null;
+      const cac = l.investimento > 0 && l.clientes > 0 ? l.investimento / l.clientes : null;
+      return `
+        <tr class="${totalRow ? 'rel-canais-total' : ''}">
+          <td class="rel-canal-nome">${l.label}</td>
+          <td class="rel-num">${_fmtInteiro(l.clientes)}</td>
+          <td class="rel-num">${l.receita > 0 ? _fmtMoedaCanal(l.receita) : '-'}</td>
+          <td class="rel-num">${l.clientes > 0 ? _fmtMoedaCanal(l.receita / l.clientes) : '-'}</td>
+          <td class="rel-num rel-vend-verde">${ltv !== null ? _fmtMoedaCanal(ltv) : '-'}</td>
+          <td class="rel-num rel-canais-destaque">${cac !== null ? _fmtMoedaCanal(cac) : '-'}</td>
+          <td class="rel-num rel-resultado-ltvcac">${ltv !== null && cac !== null ? x(ltv / cac) : '-'}</td>
+          <td class="rel-num rel-vend-verde">${l.investimento > 0 ? x(l.receita / l.investimento) : '-'}</td>
+        </tr>
+      `;
+    };
+
+    tbody.innerHTML = visiveis.map(l => linhaHtml(l)).join('')
+      + linhaHtml({ label: 'Total', ...total }, true);
+
+    const notaEl = document.getElementById('rel-resultado-canal-nota');
+    if (notaEl) {
+      notaEl.textContent = 'Clientes = vendas do canal no período (data de fechamento). LTV = valor mensal do contrato × tempo de contrato, em média por canal; sem o tempo de contrato no cadastro da venda, o LTV do canal aparece como "-". Meta saudável de LTV/CAC: acima de 3x. CAC e ROAS usam o investimento por canal lançado na aba Comercial; sem investimento aparecem como "-".';
+    }
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar resultado por canal:', err.message);
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:var(--red)">Erro ao carregar os canais</td></tr>';
+  }
+}
+
+// ─── Conversão por canal e etapa ─────────────────────────────
+
+const FUNIL_ETAPAS = [
+  'Entrada do Lead', 'Em contato', 'Follow Up', 'Reunião agendada',
+  'Reunião realizada', 'Aguardando decisão', 'Venda realizada',
+];
+const FUNIL_CURTO = ['Entrada', 'Em contato', 'Follow Up', 'Agendada', 'Realizada', 'Aguardando', 'Venda'];
+const FUNIL_SEM_CONTINUIDADE = 'Sem continuidade';
+const FUNIL_IDX = Object.fromEntries(FUNIL_ETAPAS.map((nome, i) => [_semAcento(nome), i]));
+
+let _canalSelecionado = 'todos'; // 'todos' | chave de canal
+
+/** true quando a origem do negócio pertence ao canal escolhido no funil */
+const _passaCanal = (origem) =>
+  _canalSelecionado === 'todos' || canalDaOrigem(origem) === _canalSelecionado;
+let _dadosFunil = null;          // leads do período com a etapa mais avançada estimada
+
+function _semAcento(txt) {
+  return String(txt ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * Mapeia as etapas do pipeline para a posição no funil.
+ * posicaoDoNegocio(etapaId) → { alcancou, semContinuidade }: sem etapa ou em
+ * "Sem Continuidade", o negócio conta só como lead (alcancou = 0).
+ */
+async function _carregarEtapasFunil() {
+  const { data, error } = await supabase.from('etapas_pipeline').select('etapa_id, etapa_nome');
+  if (error) throw error;
+
+  const idxPorEtapa = {};
+  const semContinuidade = new Set();
+  (data ?? []).forEach(e => {
+    const nome = _semAcento(e.etapa_nome);
+    if (nome === _semAcento(FUNIL_SEM_CONTINUIDADE)) semContinuidade.add(e.etapa_id);
+    else if (FUNIL_IDX[nome] !== undefined) idxPorEtapa[e.etapa_id] = FUNIL_IDX[nome];
+  });
+
+  return {
+    posicaoDoNegocio: (etapaId) => ({
+      alcancou: idxPorEtapa[etapaId] ?? 0,
+      semContinuidade: semContinuidade.has(etapaId),
+    }),
+  };
+}
+
+/**
+ * Carrega os leads criados no período e posiciona cada um pela etapa atual.
+ * A sequência do funil é lógica: quem está numa etapa passou por todas as
+ * anteriores. "Sem Continuidade" não segue essa regra (não dá para saber até
+ * onde o lead chegou), então conta só como lead e aparece numa linha à parte.
+ */
+async function _carregarFunilCanais(inicio, fim) {
+  const etapasEl = document.getElementById('rel-funil-etapas');
+  if (!etapasEl) return;
+
+  try {
+    const [iniY, iniM, iniD] = inicio.split('-').map(Number);
+    const [fimY, fimM, fimD] = fim.split('-').map(Number);
+    const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+    const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+    const [negRes, etapas] = await Promise.all([
+      supabase.from('negocios')
+        .select('negocio_origem, etapa_id')
+        .gte('criado_em', inicioISO).lte('criado_em', fimISO),
+      _carregarEtapasFunil(),
+    ]);
+    if (negRes.error) throw negRes.error;
+
+    _dadosFunil = (negRes.data ?? []).map(n => ({
+      canal: canalDaOrigem(n.negocio_origem),
+      ...etapas.posicaoDoNegocio(n.etapa_id),
+    }));
+
+    _renderFunilCanais();
+  } catch (err) {
+    console.error('[Relatórios] Erro ao carregar funil por canal:', err.message);
+    etapasEl.innerHTML = '<div class="rel-funil-vazio" style="color:var(--red)">Erro ao carregar o funil</div>';
+  }
+}
+
+function _renderFunilCanais() {
+  const etapasEl = document.getElementById('rel-funil-etapas');
+  const compEl   = document.getElementById('rel-funil-comparativo');
+  if (!etapasEl || !compEl || !_dadosFunil) return;
+
+  // ── Funil do canal escolhido ──
+  const leads = _canalSelecionado === 'todos'
+    ? _dadosFunil
+    : _dadosFunil.filter(l => l.canal === _canalSelecionado);
+
+  const contagens = FUNIL_ETAPAS.map((_, i) => leads.filter(l => l.alcancou >= i).length);
+  const topo = contagens[0];
+
+  if (topo === 0) {
+    etapasEl.innerHTML = '<div class="rel-funil-vazio">Nenhum lead deste canal no período</div>';
+  } else {
+    etapasEl.innerHTML = FUNIL_ETAPAS.map((nome, i) => {
+      const largura = Math.max((contagens[i] / topo) * 100, 2);
+      const pctAnterior = i > 0 && contagens[i - 1] > 0
+        ? _fmtPct((contagens[i] / contagens[i - 1]) * 100) : '';
+      return `
+        <div class="rel-funil-linha">
+          <span class="rel-funil-nome">${nome}</span>
+          <div class="rel-funil-trilho"><div class="rel-funil-barra" style="width:${largura}%"></div></div>
+          <span class="rel-funil-qtd">${_fmtInteiro(contagens[i])}</span>
+          <span class="rel-funil-pct">${pctAnterior}</span>
+        </div>
+      `;
+    }).join('');
+
+    // "Sem continuidade" não é uma etapa seguinte do funil: mostra quantos leads estão lá hoje
+    const semContinuidade = leads.filter(l => l.semContinuidade).length;
+    etapasEl.insertAdjacentHTML('beforeend', `
+      <div class="rel-funil-linha rel-funil-linha--perda">
+        <span class="rel-funil-nome">${FUNIL_SEM_CONTINUIDADE}</span>
+        <div class="rel-funil-trilho"><div class="rel-funil-barra rel-funil-barra--perda" style="width:${Math.max((semContinuidade / topo) * 100, 2)}%"></div></div>
+        <span class="rel-funil-qtd">${_fmtInteiro(semContinuidade)}</span>
+        <span class="rel-funil-pct">${_fmtPct((semContinuidade / topo) * 100)}</span>
+      </div>
+    `);
+  }
+
+  // ── Painel da direita: com um canal escolhido, compara a passagem entre etapas com a média geral ──
+  const tituloEl = document.getElementById('rel-funil-comp-titulo');
+  const subEl    = document.getElementById('rel-funil-comp-sub');
+
+  if (_canalSelecionado !== 'todos') {
+    const rotulo = [...CANAIS, CANAL_OUTROS].find(c => c.key === _canalSelecionado)?.label ?? '';
+    if (tituloEl) tituloEl.textContent = `${rotulo} vs média geral`;
+    if (subEl)    subEl.textContent    = 'Taxa de passagem entre etapas';
+
+    if (topo === 0) {
+      compEl.innerHTML = '<div class="rel-funil-vazio">Nenhum lead deste canal no período</div>';
+      return;
+    }
+
+    const contagensGeral = FUNIL_ETAPAS.map((_, i) => _dadosFunil.filter(l => l.alcancou >= i).length);
+    const taxaPassagem = (c, i) => (c[i - 1] > 0 ? (c[i] / c[i - 1]) * 100 : null);
+    const fmt = (v) => (v === null ? '-' : _fmtPct(v));
+
+    compEl.innerHTML = FUNIL_ETAPAS.slice(1).map((_, k) => {
+      const i = k + 1;
+      return `
+        <div class="rel-passagem-linha">
+          <span class="rel-passagem-nome">${FUNIL_CURTO[i - 1]} → ${FUNIL_CURTO[i]}</span>
+          <span class="rel-passagem-canal">${fmt(taxaPassagem(contagens, i))}</span>
+          <span class="rel-passagem-media">média ${fmt(taxaPassagem(contagensGeral, i))}</span>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
+  // ── Todos os canais: comparativo Lead → Venda por canal ──
+  if (tituloEl) tituloEl.textContent = 'Lead → Venda por canal';
+  if (subEl)    subEl.textContent    = 'Compare os canais lado a lado';
+
+  const canais = [...CANAIS, CANAL_OUTROS].map(c => {
+    const doCanal = _dadosFunil.filter(l => l.canal === c.key);
+    const vendas  = doCanal.filter(l => l.alcancou === 6).length;
+    return { key: c.key, label: c.label, leads: doCanal.length, vendas,
+             conv: doCanal.length > 0 ? (vendas / doCanal.length) * 100 : 0 };
+  }).filter(c => c.leads > 0).sort((a, b) => b.conv - a.conv);
+
+  const maxConv = Math.max(...canais.map(c => c.conv), 0);
+  compEl.innerHTML = canais.length === 0
+    ? '<div class="rel-funil-vazio">Sem leads no período</div>'
+    : canais.map(c => `
+        <div class="rel-comp-linha ${c.key === _canalSelecionado ? 'ativo' : ''}" title="${c.vendas} venda(s) em ${c.leads} lead(s)">
+          <span class="rel-comp-nome">${c.label}</span>
+          <div class="rel-funil-trilho"><div class="rel-comp-barra" style="width:${maxConv > 0 ? Math.max((c.conv / maxConv) * 100, 1.5) : 1.5}%"></div></div>
+          <span class="rel-comp-pct">${_fmtPct(c.conv)}</span>
+        </div>
+      `).join('');
+}
+
+/** Destaca na tabela de canais a linha do canal escolhido no funil */
+function _marcarCanalAtivo() {
+  document.querySelectorAll('#rel-canais-tbody tr').forEach(tr => {
+    const ativo = tr.dataset.canal === _canalSelecionado
+      || (_canalSelecionado === 'todos' && tr.dataset.canal === 'total');
+    tr.classList.toggle('rel-canal-ativo', ativo && tr.dataset.canal !== 'total');
+  });
+}
+
+/** Indicadores e análises do Setor Comercial que seguem o canal escolhido */
+function _recarregarIndicadoresCanal() {
+  const rotulo = _canalSelecionado === 'todos'
+    ? 'Todos os canais'
+    : ([...CANAIS, CANAL_OUTROS].find(c => c.key === _canalSelecionado)?.label ?? 'Todos os canais');
+  const rotuloEl = document.getElementById('rel-indicadores-canal-label');
+  if (rotuloEl) rotuloEl.textContent = rotulo;
+
+  _carregarTaxaConversao(_dataInicio, _dataFim);
+  _carregarNoShow(_dataInicio, _dataFim);
+  _carregarCicloVendas(_dataInicio, _dataFim);
+  _carregarReceitaAberto(); // snapshot do pipeline: não depende do período
+  _carregarTicketMedio(_dataInicio, _dataFim);
+  _carregarChurnComercial(_dataInicio, _dataFim);
+  _carregarPerdaPosReuniao(_dataInicio, _dataFim);
+  _carregarMotivosPerda(_dataInicio, _dataFim);
+}
+
+// ─── Seletor de canal (menu personalizado, reutilizado pelos cards) ───
+
+function _htmlCanalPicker(id, titulo) {
+  return `
+    <div class="rel-canalpicker" id="${id}">
+      <button type="button" class="rel-canalpicker-btn" title="${titulo}">
+        <span class="rel-canalpicker-label">Todos os canais</span>
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="rel-canalpicker-panel">
+        <button type="button" class="rel-canalpicker-op active" data-canal="todos">Todos os canais (visão geral)</button>
+        ${[...CANAIS, CANAL_OUTROS].map(c => `<button type="button" class="rel-canalpicker-op" data-canal="${c.key}">${c.label}</button>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/** Atualiza o botão e a lista do seletor (rótulo, destaque e ✓ do canal escolhido) */
+function _atualizarCanalPicker(id, canalKey) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const rotulo = canalKey === 'todos'
+    ? 'Todos os canais'
+    : ([...CANAIS, CANAL_OUTROS].find(c => c.key === canalKey)?.label ?? 'Todos os canais');
+  el.querySelector('.rel-canalpicker-label').textContent = rotulo;
+  el.querySelector('.rel-canalpicker-btn').classList.toggle('has-canal', canalKey !== 'todos');
+  el.querySelectorAll('.rel-canalpicker-op').forEach(op => {
+    op.classList.toggle('active', op.dataset.canal === canalKey);
+  });
+}
+
+function _fecharCanalPickers() {
+  document.querySelectorAll('.rel-canalpicker-panel.open').forEach(p => p.classList.remove('open'));
+}
+
+function _bindCanalPicker(id, aoEscolher) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const painel = el.querySelector('.rel-canalpicker-panel');
+
+  el.querySelector('.rel-canalpicker-btn').addEventListener('click', () => {
+    const abrir = !painel.classList.contains('open');
+    _fecharCanalPickers();
+    painel.classList.toggle('open', abrir);
+  });
+
+  painel.addEventListener('click', (e) => {
+    const op = e.target.closest('.rel-canalpicker-op');
+    if (!op) return;
+    _fecharCanalPickers();
+    aoEscolher(op.dataset.canal);
+  });
+}
+
+function _selecionarCanal(key) {
+  _canalSelecionado = key;
+  _atualizarCanalPicker('rel-canalpicker', key);
+  _marcarCanalAtivo();
+  _renderFunilCanais();
+  _recarregarIndicadoresCanal();
+  _carregarAtividadesEquipe(); // período próprio: usa as datas do próprio cartão
+}
+
+function _bindCanaisEvents() {
+  _bindCanalPicker('rel-canalpicker', _selecionarCanal);
+  _bindCanalPicker('rel-canalpicker-vendedor', _selecionarCanalVendedor);
+
+  // Clicar numa linha da tabela de canais abre o funil daquele canal
+  document.getElementById('rel-canais-tbody')?.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-canal]');
+    if (!tr) return;
+    const key = tr.dataset.canal;
+    _selecionarCanal(key === 'total' || key === _canalSelecionado ? 'todos' : key);
+  });
 }
 
 // ─── Abrir / Fechar picker ───────────────────────────────────
@@ -5154,7 +5453,6 @@ function _bindTabEvents() {
 
       // Renderiza (ou re-renderiza) o gráfico anual da aba — o canvas só tem
       // dimensões corretas depois que a section deixa de estar `display:none`.
-      if (tab === 'comercial') _renderizarGraficoComercial();
       if (tab === 'operacoes') _renderizarGraficoOperacoes();
       if (tab === 'master')    _renderizarGraficoMaster();
     });
@@ -5260,12 +5558,50 @@ function _marcarAtalhoAtivo() {
 }
 
 function _handleClickFora(e) {
+  if (!document.getElementById('rel-mespicker')?.contains(e.target)) _fecharMesPicker();
+  document.querySelectorAll('.rel-canalpicker').forEach(picker => {
+    if (!picker.contains(e.target)) picker.querySelector('.rel-canalpicker-panel')?.classList.remove('open');
+  });
+
   const wrapper = document.getElementById('rel-period-wrapper');
   const btn     = document.getElementById('rel-period-badge-btn');
   if (!wrapper) return;
   if (!wrapper.contains(e.target) && !btn?.contains(e.target)) {
     _fecharPicker();
   }
+}
+
+/**
+ * Tentativas de contato do período feitas em negócios do canal escolhido.
+ * Cada tentativa é creditada ao vendedor do negócio, o mesmo critério que o
+ * sistema usa para contar os contatos do dia (negocios.vendedor_id).
+ */
+async function _carregarTentativasDoCanal(ini, fim) {
+  const [iniY, iniM, iniD] = ini.split('-').map(Number);
+  const [fimY, fimM, fimD] = fim.split('-').map(Number);
+  const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
+  const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
+
+  const tentativas = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase
+      .from('contato_tentativas')
+      .select('tentativa_id, tentativa_data, negocios(vendedor_id, negocio_origem)')
+      .gte('tentativa_data', inicioISO)
+      .lte('tentativa_data', fimISO)
+      .order('tentativa_id')
+      .range(de, de + 999);
+    if (error) throw error;
+    tentativas.push(...(data ?? []));
+    if ((data ?? []).length < 1000) break;
+  }
+
+  return tentativas
+    .map(t => {
+      const negocio = Array.isArray(t.negocios) ? t.negocios[0] : t.negocios;
+      return { data: (t.tentativa_data ?? '').substring(0, 10), vendedorId: negocio?.vendedor_id, origem: negocio?.negocio_origem };
+    })
+    .filter(t => t.vendedorId && t.data && _passaCanal(t.origem));
 }
 
 async function _carregarAtividadesEquipe(dataInicio, dataFim) {
@@ -5309,6 +5645,10 @@ async function _carregarAtividadesEquipe(dataInicio, dataFim) {
     let grandTotalContatos = 0;
     let grandTotalProps = 0;
 
+    // Com um canal escolhido, os contatos vêm das tentativas dos negócios do canal
+    // (o registro diário não guarda o canal); a prospecção segue sem filtro.
+    const filtraPorCanal = _canalSelecionado !== 'todos';
+
     for (const r of rows) {
       const uid = r.user_id;
       if (!userStats[uid]) {
@@ -5319,7 +5659,7 @@ async function _carregarAtividadesEquipe(dataInicio, dataFim) {
           logs: []
         };
       }
-      const c = Number(r.quantidade_contatos_realizados) || 0;
+      const c = filtraPorCanal ? 0 : (Number(r.quantidade_contatos_realizados) || 0);
       const p = Number(r.quantidade_prospecao) || 0;
       userStats[uid].contatos += c;
       userStats[uid].prospeccoes += p;
@@ -5334,6 +5674,31 @@ async function _carregarAtividadesEquipe(dataInicio, dataFim) {
         contatos: c,
         prospeccoes: p
       });
+    }
+
+    if (filtraPorCanal) {
+      for (const t of await _carregarTentativasDoCanal(ini, fim)) {
+        if (!userStats[t.vendedorId]) {
+          userStats[t.vendedorId] = { contatos: 0, prospeccoes: 0, dias: new Set(), logs: [] };
+        }
+        const st = userStats[t.vendedorId];
+        st.contatos++;
+        grandTotalContatos++;
+        st.dias.add(t.data);
+        const log = st.logs.find(l => l.data === t.data);
+        if (log) log.contatos++;
+        else st.logs.push({ data: t.data, contatos: 1, prospeccoes: 0 });
+      }
+    }
+
+    // Aviso de que os contatos estão filtrados pelo canal
+    const hintEl = document.getElementById('rel-atividade-canal-hint');
+    if (hintEl) {
+      const rotuloCanal = [...CANAIS, CANAL_OUTROS].find(c => c.key === _canalSelecionado)?.label;
+      hintEl.textContent = filtraPorCanal
+        ? `Contatos filtrados pelo canal ${rotuloCanal}: tentativas de contato nos negócios do canal. Prospecções sem filtro.`
+        : '';
+      hintEl.style.display = filtraPorCanal ? 'block' : 'none';
     }
 
     // 4. Atualiza os totais consolidados da equipe
@@ -5490,16 +5855,16 @@ export default {
     _bindTabEvents();
     _bindPeriodEvents();
     _bindInvestimentoEvents();
+    _bindCanaisEvents();
     _bindAtividadesEquipeEvents();
     _bindCapacityEditEvents();
     _bindPerformanceVendedorEvents();
     // Carregar valor de investimento salvo primeiro
     await _carregarInvestimento();
-    // Aplicar período padrão ao montar (dispara _carregarCAC e demais métricas)
+    // Aplicar período padrão ao montar (dispara as demais métricas)
     _aplicarPeriodo(_dataInicio, _dataFim, _periodLabel);
 
     // Gráficos de evolução anual — independentes do período selecionado
-    _carregarGraficoComercial();
     _carregarGraficoOperacoes();
     _carregarGraficoMaster();
   },
@@ -5516,11 +5881,13 @@ export default {
     const capacityModal = document.getElementById('rel-capacity-modal-overlay');
     if (capacityModal) capacityModal.remove();
 
-    _chartComercial?.destroy(); _chartComercial = null;
     _chartOperacoes?.destroy(); _chartOperacoes = null;
     _chartMaster?.destroy();    _chartMaster    = null;
-    _dadosGraficoComercial = null;
     _dadosGraficoOperacoes = null;
     _dadosGraficoMaster    = null;
+    _dadosCanais           = null;
+    _dadosFunil            = null;
+    _canalSelecionado      = 'todos';
+    _canalVendedor         = 'todos';
   },
 };
