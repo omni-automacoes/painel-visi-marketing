@@ -6,7 +6,7 @@
  *   const modal = new GanhoModal();
  *   modal.open(negocio, onConfirm, onCancel);
  */
-import { Usuarios, Clientes } from '../../js/db.js';
+import { Usuarios, Clientes, KanbanColunas } from '../../js/db.js';
 
 export default class GanhoModal {
   constructor() {
@@ -25,11 +25,12 @@ export default class GanhoModal {
     this._onConfirm = onConfirm;
     this._onCancel  = onCancel;
 
-    const [{ data: gestores }, { data: clientesAtivos }] = await Promise.all([
+    const [{ data: gestores }, { data: clientesAtivos }, { data: colunasProjetos }] = await Promise.all([
       Usuarios.getGestores(),
       Clientes.getAtivosParaSelecao(),
+      KanbanColunas.getAll('Projetos'),
     ]);
-    this._mount(gestores || [], clientesAtivos || []);
+    this._mount(gestores || [], clientesAtivos || [], colunasProjetos || []);
   }
 
   close(canceled = false) {
@@ -43,7 +44,7 @@ export default class GanhoModal {
 
   // ── Mount ─────────────────────────────────────────────────────
 
-  _mount(gestores = [], clientesAtivos = []) {
+  _mount(gestores = [], clientesAtivos = [], colunasProjetos = []) {
     document.getElementById('ganho-modal-overlay')?.remove();
 
     const neg = this._negocio || {};
@@ -67,6 +68,13 @@ export default class GanhoModal {
           `<option value="${this._esc(String(c.cliente_id))}">${this._esc(c.cliente_nome)}</option>`
         ).join('')
       : '<option value="" disabled>Nenhum cliente ativo encontrado</option>';
+
+    // Monta as <option> do select de coluna do kanban de Projetos (tipo Outros)
+    const colunasOptions = colunasProjetos.length
+      ? colunasProjetos.map(col =>
+          `<option value="${this._esc(String(col.coluna_id))}">${this._esc(col.coluna_nome)}</option>`
+        ).join('')
+      : '<option value="" disabled>Nenhuma coluna de Projetos encontrada</option>';
 
     document.body.insertAdjacentHTML('beforeend', `
       <div class="ganho-modal-overlay" id="ganho-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="ganho-modal-title">
@@ -338,6 +346,25 @@ export default class GanhoModal {
                 <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 Descrição
               </div>
+              <div class="ganho-form-grid ganho-form-grid--1" style="margin-bottom:12px">
+                <div class="ganho-form-field">
+                  <label class="ganho-form-label" for="gf-outros-coluna">
+                    Coluna do Projeto
+                    <span class="ganho-form-required">*</span>
+                  </label>
+                  <div class="ganho-form-select-wrap">
+                    <select
+                      class="ganho-form-input ganho-form-select"
+                      id="gf-outros-coluna"
+                      name="gf_outros_coluna"
+                    >
+                      <option value="">— Selecione a coluna de Projetos —</option>
+                      ${colunasOptions}
+                    </select>
+                    <svg class="ganho-form-select-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </div>
+              </div>
               <div class="ganho-form-grid ganho-form-grid--1">
                 <div class="ganho-form-field">
                   <label class="ganho-form-label" for="gf-outros-descricao">
@@ -607,6 +634,7 @@ export default class GanhoModal {
     if (tipo === 'Outros') {
       campos = [
         { id: 'gf-nome',             label: 'Nome do Cliente', tipo: 'input'    },
+        { id: 'gf-outros-coluna',    label: 'Coluna do Projeto', tipo: 'input'  },
         { id: 'gf-outros-descricao', label: 'Descrição',       tipo: 'textarea' },
       ];
     } else if (tipo === 'Existente') {
@@ -674,6 +702,7 @@ export default class GanhoModal {
       contexto_geral:     document.getElementById('gf-contexto')?.value.trim()         || '',
       descricao_empresa:  document.getElementById('gf-descricao')?.value.trim()        || '',
       outros_descricao:   document.getElementById('gf-outros-descricao')?.value.trim() || '',
+      outros_coluna_id:   document.getElementById('gf-outros-coluna')?.value            || '',
       cliente_existente_id: document.getElementById('gf-existente-cliente')?.value      || '',
       upsell_valor:         document.getElementById('gf-existente-valor')?.value.trim() || '',
       upsell_tipo:           document.getElementById('gf-existente-tipo')?.value        || '',

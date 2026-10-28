@@ -709,22 +709,40 @@ export default class NegocioPanel {
         // onConfirm: bifurca por tipo_cliente
         async (dados) => {
 
-          // ── OUTROS: cria kanban_card, não cria cliente nem tarefas ──
+          // ── OUTROS: cria o projeto na coluna escolhida do kanban de Projetos
+          // (não cria cliente nem tarefas). Só marca como Ganho se o card for criado. ──
           if (dados.tipo_cliente === 'Outros') {
-            const cardPayload = {
+            const colunaId = parseInt(dados.outros_coluna_id, 10);
+            if (!colunaId) {
+              alert('Selecione a coluna do projeto para concluir o negócio.');
+              return;
+            }
+
+            // Coloca o card no fim da coluna, igual ao "Adicionar card" da página de Projetos
+            const { data: cardsDaColuna } = await KanbanCards.getByColuna(colunaId);
+            const ordem = (cardsDaColuna || []).length
+              ? Math.max(...cardsDaColuna.map(c => c.card_ordem || 0)) + 10
+              : 10;
+
+            const { error: cardErr } = await KanbanCards.create({
               card_titulo:    dados.nome_cliente || '',
               card_descricao: dados.outros_descricao || '',
               tipo_kanban:    'Projetos',
-              coluna_id:      39,
-            };
-            const [cardRes, statusRes] = await Promise.all([
-              KanbanCards.create(cardPayload),
-              Negocios.updateStatus(neg.negocio_id, 'Ganho'),
-            ]);
-            if (cardRes.error)
-              console.error('[NegocioPanel] Erro ao criar kanban_card (Outros):', cardRes.error);
-            if (statusRes.error)
-              console.error('[NegocioPanel] Erro ao marcar como Ganho:', statusRes.error);
+              coluna_id:      colunaId,
+              card_ordem:     ordem,
+            });
+            if (cardErr) {
+              console.error('[NegocioPanel] Erro ao criar projeto (Outros):', cardErr);
+              alert('Não foi possível criar o projeto na coluna escolhida, então o negócio NÃO foi marcado como Ganho. Tente novamente.');
+              return;
+            }
+
+            const { error: statusErr } = await Negocios.updateStatus(neg.negocio_id, 'Ganho');
+            if (statusErr) {
+              console.error('[NegocioPanel] Erro ao marcar como Ganho:', statusErr);
+              alert('O projeto foi criado, mas houve erro ao marcar o negócio como Ganho. Marque novamente como Ganho.');
+              return;
+            }
 
             this._atualizarBadgeStatus('Ganho');
             this._atualizarBotoesStatus('Ganho', neg.negocio_id);
