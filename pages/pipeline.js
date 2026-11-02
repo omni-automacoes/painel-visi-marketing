@@ -8,6 +8,7 @@ import NewOppModal  from '../components/kanban/NewOppModal.js';
 import NegocioPanel from '../components/kanban/NegocioPanel.js';
 import { Pipelines, Usuarios, Negocios } from '../js/db.js';
 import UserStore    from '../js/userStore.js';
+import { rotuloFiltro, calcularContagens, hojeKey } from '../components/kanban/recontato.js';
 
 // ── Estado ────────────────────────────────────────────────────
 let _funis           = [];
@@ -18,7 +19,10 @@ let _viewMode        = sessionStorage.getItem('pipeline_view') || 'kanban';
 let _statusFilter    = 'Aberto';
 let _vendedorFilter  = null;
 let _origemFilter    = null;
-let _recontadoFilter = null;
+let _recontadoFilter = null;   // null | { tipo, de?, ate? } (ver recontato.js)
+let _calMes          = null;   // { y, m } mês exibido no calendário de recontato
+let _calStaged       = null;   // seleção do calendário ainda não aplicada
+let _calAnchor       = false;  // true = 1º dia escolhido, aguardando o 2º (intervalo)
 let _vendedores      = [];
 let _origensDisp     = [];
 let _searchQuery     = '';
@@ -26,14 +30,6 @@ let _searchDebounce  = null;
 let _filterBarOpen   = false;
 let _openPillId      = null;
 let _negocioPanel    = new NegocioPanel(); // pill dropdown aberto
-
-const RECONTADO_OPTS = [
-  { value: 'hoje',      label: 'Hoje' },
-  { value: 'ultimos7',  label: 'Últimos 7 dias' },
-  { value: 'ultimos15', label: 'Últimos 15 dias' },
-  { value: 'ultimos30', label: 'Últimos 30 dias' },
-  { value: 'proximos7', label: 'Próximos 7 dias' },
-];
 
 // ── Seletor de Funil ──────────────────────────────────────────
 
@@ -135,7 +131,7 @@ function _pillLabel(id) {
     case 'origem':
       return _origemFilter;
     case 'recontado':
-      return RECONTADO_OPTS.find(o => o.value === _recontadoFilter)?.label ?? null;
+      return rotuloFiltro(_recontadoFilter);
   }
   return null;
 }
@@ -150,7 +146,7 @@ function _pillHTML(id, label) {
         ${isActive ? `<span class="fpill-value">${active}</span>` : ''}
         <svg class="fpill-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-      <div class="fpill-dropdown" id="fpd-${id}" style="display:none;"></div>
+      <div class="fpill-dropdown${id === 'recontado' ? ' fpill-dropdown--recontato' : ''}" id="fpd-${id}" style="display:none;"></div>
     </div>`;
 }
 
@@ -177,7 +173,186 @@ function _renderFilterBar() {
 }
 
 function _refreshFilterBar() {
-  if (_filterBarOpen) _renderFilterBar();
+  // A barra de filtros é sempre visível: re-renderiza para atualizar os rótulos
+  _renderFilterBar();
+}
+
+// ── Recontato: popover com calendário ────────────────────────
+
+const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function _contagensRecontato() {
+  return _board?.getRecontadoCounts?.() ?? calcularContagens([]);
+}
+
+function _calSelecionado(key) {
+  const s = _calStaged;
+  if (!s) return '';
+  if (s.tipo === 'dia')       return key === s.de ? 'sel' : '';
+  if (s.tipo === 'intervalo') {
+    if (key === s.de || key === s.ate) return 'sel';
+    return key > s.de && key < s.ate ? 'range' : '';
+  }
+  return '';
+}
+
+function _recontatoPopoverHTML() {
+  const c     = _contagensRecontato();
+  const hoje  = hojeKey();
+  const atual = _recontadoFilter;
+  const { y, m } = _calMes;
+
+  const opt = (tipo, label, n, cor = '') => `
+    <button type="button" class="rc-opt${(atual?.tipo ?? '') === tipo ? ' rc-opt--active' : ''}" data-rc-tipo="${tipo}">
+      <span>${label}</span>
+      ${n != null ? `<span class="rc-opt-n${cor ? ` rc-opt-n--${cor}` : ''}">${n}</span>` : ''}
+    </button>`;
+
+  // Calendário
+  const primeiroDow = new Date(Date.UTC(y, m, 1, 12)).getUTCDay();
+  const diasNoMes   = new Date(Date.UTC(y, m + 1, 0, 12)).getUTCDate();
+  const mm = String(m + 1).padStart(2, '0');
+  let celulas = '';
+  for (let i = 0; i < primeiroDow; i++) celulas += '<span class="rc-day rc-day--vazio"></span>';
+  for (let d = 1; d <= diasNoMes; d++) {
+    const key  = `${y}-${mm}-${String(d).padStart(2, '0')}`;
+    const info = c.porDia[key];
+    const sel  = _calSelecionado(key);
+    const marks = info
+      ? `${info.atras ? `<i class="rc-mark rc-mark--atras">${info.atras}</i>` : ''}${info.pend ? `<i class="rc-mark rc-mark--pend">${info.pend}</i>` : ''}${info.feito ? `<i class="rc-mark rc-mark--feito">${info.feito}</i>` : ''}`
+      : '';
+    celulas += `
+      <button type="button" class="rc-day${key === hoje ? ' rc-day--hoje' : ''}${sel ? ` rc-day--${sel}` : ''}${info ? ' rc-day--tem' : ''}" data-dia="${key}">
+        <span class="rc-day-n">${d}</span>
+        <span class="rc-day-marks">${marks}</span>
+      </button>`;
+  }
+
+  return `
+    <div class="rc-pop">
+      <div class="rc-side">
+        <div class="rc-side-title">Recontato agendado</div>
+        ${opt('', 'Qualquer data', null)}
+        ${opt('hoje', 'Hoje', c.hoje)}
+        ${opt('amanha', 'Amanhã', c.amanha)}
+        ${opt('semana', 'Esta semana', c.semana)}
+        ${opt('mes', 'Este mês', c.mes)}
+        ${opt('atrasados', 'Atrasados', c.atrasados, 'red')}
+        ${opt('concluidos', 'Concluídos', c.concluidos, 'green')}
+      </div>
+      <div class="rc-cal">
+        <div class="rc-cal-head">
+          <span class="rc-cal-title">${MESES_PT[m]} ${y}</span>
+          <span class="rc-cal-nav">
+            <button type="button" class="rc-nav-btn" data-rc-nav="-1" title="Mês anterior">‹</button>
+            <button type="button" class="rc-nav-btn" data-rc-nav="1" title="Próximo mês">›</button>
+          </span>
+        </div>
+        <div class="rc-grid rc-grid--dow">${['D','S','T','Q','Q','S','S'].map(l => `<span>${l}</span>`).join('')}</div>
+        <div class="rc-grid">${celulas}</div>
+        <div class="rc-cal-foot">
+          <span class="rc-legenda">
+            <span class="rc-leg"><i class="rc-dot rc-dot--pend"></i>Agendado</span>
+            <span class="rc-leg"><i class="rc-dot rc-dot--atras"></i>Atrasado</span>
+            <span class="rc-leg"><i class="rc-dot rc-dot--feito"></i>Concluído</span>
+          </span>
+          <span class="rc-acoes">
+            <button type="button" class="rc-btn" data-rc-limpar>Limpar</button>
+            <button type="button" class="rc-btn rc-btn--primary" data-rc-aplicar ${_calStaged ? '' : 'disabled'}>Aplicar</button>
+          </span>
+        </div>
+        <div class="rc-dica">Clique em um dia — ou em dois dias para escolher um período.</div>
+      </div>
+    </div>`;
+}
+
+function _renderRecontatoPopover() {
+  const dd = document.getElementById('fpd-recontado');
+  if (dd && _calMes) dd.innerHTML = _recontatoPopoverHTML();
+}
+
+function _initRecontatoPopover(dd) {
+  const a = _recontadoFilter;
+  _calStaged = (a && (a.tipo === 'dia' || a.tipo === 'intervalo')) ? { ...a } : null;
+  _calAnchor = false;
+  const ref  = _calStaged?.de ?? hojeKey();
+  _calMes    = { y: Number(ref.slice(0, 4)), m: Number(ref.slice(5, 7)) - 1 };
+
+  dd.innerHTML = _recontatoPopoverHTML();
+  dd.style.display = '';
+
+  // Em janelas estreitas o popover não pode vazar para fora da tela
+  const caber = () => {
+    if (dd.style.display === 'none' || !window.innerWidth) return;
+    dd.style.left = '';
+    const vaza = dd.getBoundingClientRect().right - (window.innerWidth - 12);
+    if (vaza > 0) dd.style.left = `${-vaza}px`;
+  };
+  caber();
+  setTimeout(caber, 300);   // a barra de filtros ainda pode estar animando na abertura
+
+  // Um único handler delegado (reatribuído a cada abertura); os re-renders
+  // internos não devem fechar o popover.
+  dd.onclick = (e) => {
+    e.stopPropagation();
+
+    const optBtn = e.target.closest('[data-rc-tipo]');
+    if (optBtn) {
+      const tipo = optBtn.dataset.rcTipo;
+      _applyPillFilter('recontado', tipo ? { tipo } : null);
+      return;
+    }
+
+    const nav = e.target.closest('[data-rc-nav]');
+    if (nav) {
+      const delta = Number(nav.dataset.rcNav);
+      const d = new Date(Date.UTC(_calMes.y, _calMes.m + delta, 1, 12));
+      _calMes = { y: d.getUTCFullYear(), m: d.getUTCMonth() };
+      _renderRecontatoPopover();
+      return;
+    }
+
+    const diaBtn = e.target.closest('[data-dia]');
+    if (diaBtn) {
+      const key = diaBtn.dataset.dia;
+      if (_calAnchor && _calStaged?.tipo === 'dia' && key !== _calStaged.de) {
+        const [de, ate] = [_calStaged.de, key].sort();
+        _calStaged = { tipo: 'intervalo', de, ate };
+        _calAnchor = false;
+      } else {
+        _calStaged = { tipo: 'dia', de: key };
+        _calAnchor = true;
+      }
+      _renderRecontatoPopover();
+      return;
+    }
+
+    if (e.target.closest('[data-rc-limpar]')) { _applyPillFilter('recontado', null); return; }
+    if (e.target.closest('[data-rc-aplicar]') && _calStaged) { _applyPillFilter('recontado', _calStaged); }
+  };
+}
+
+function _aplicarPatchRecontato(negocioId, patch) {
+  if (!negocioId || !patch) return;
+  _board?.patchNegocio(negocioId, patch);
+  _listView?.patchNegocio(negocioId, patch);
+  if (_openPillId === 'recontado') _renderRecontatoPopover();
+}
+
+function _onRecontatoMudou(e) {
+  const { negocioId, patch } = e.detail || {};
+  _aplicarPatchRecontato(negocioId, patch);
+}
+
+async function _marcarRecontatoFeitoRapido(negocioId, btn) {
+  if (btn) btn.disabled = true;
+  const { error } = await Negocios.marcarRecontatoFeito(negocioId, true);
+  if (error) {
+    console.error('[Funil] Erro ao marcar recontato como feito:', error);
+    if (btn) btn.disabled = false;
+    return;
+  }
+  _aplicarPatchRecontato(negocioId, { recontado_feito_em: new Date().toISOString() });
 }
 
 function _openPillDropdown(pillId) {
@@ -187,6 +362,8 @@ function _openPillDropdown(pillId) {
 
   const dd = document.getElementById(`fpd-${pillId}`);
   if (!dd) return;
+
+  if (pillId === 'recontado') { _initRecontatoPopover(dd); return; }
 
   dd.innerHTML = _pillDropdownHTML(pillId);
   dd.style.display = '';
@@ -231,19 +408,12 @@ function _pillDropdownHTML(pillId) {
         ..._origensDisp.map(o => ({ value: o, label: o })),
       ];
       break;
-    case 'recontado':
-      opts = [
-        { value: '', label: 'Qualquer data' },
-        ...RECONTADO_OPTS,
-      ];
-      break;
   }
 
   const currentVal = pillId === 'status'
     ? (_statusFilter === 'Todos' ? '' : _statusFilter)
     : pillId === 'responsavel' ? (_vendedorFilter ?? '')
-    : pillId === 'origem'      ? (_origemFilter ?? '')
-    : (_recontadoFilter ?? '');
+    : (_origemFilter ?? '');
 
   return opts.map(o => `
     <button class="fpill-opt${o.value === currentVal ? ' fpill-opt--active' : ''}"
@@ -349,6 +519,11 @@ async function _loadOrigens() {
 
 // ── Troca de view (Kanban ↔ Lista) ───────────────────────────
 
+/** Aplica à lista recém-criada os filtros já ativos no Funil (origem, recontato, busca) */
+function _syncListFilters() {
+  _listView?.setFilters({ origem: _origemFilter, recontado: _recontadoFilter, search: _searchQuery });
+}
+
 async function _switchView(mode) {
   if (_viewMode === mode) return;
   _viewMode = mode;
@@ -373,6 +548,7 @@ async function _switchView(mode) {
     btnLista ?.classList.add('view-mode-btn--active');
 
     _listView = new ListView('pipeline-list-container');
+    _syncListFilters();
     const cached = _board?.getData();
     if (cached?.allNegocios?.length || cached?.etapas?.length) {
       _listView.setData(cached);
@@ -389,6 +565,7 @@ async function _reloadActiveView(pipelineId) {
     if (_board) await _board.setFilter(pipelineId);
   } else {
     _listView = new ListView('pipeline-list-container');
+    _syncListFilters();
     await _listView.fetchData(pipelineId);
     _listView.render(_statusFilter, _vendedorFilter);
     if (_board) _board.render(pipelineId, _statusFilter, _vendedorFilter);
@@ -544,9 +721,16 @@ export default {
     });
 
     document.addEventListener('click', _closeAll);
+    window.addEventListener('negocio:recontato', _onRecontatoMudou);
 
-    // Click em card do Kanban → abre painel
+    // Click em card do Kanban → abre painel (ou marca recontato como feito pelo ✓)
     document.getElementById('kanban-board')?.addEventListener('click', (e) => {
+      const okBtn = e.target.closest('.opp-recontado-ok');
+      if (okBtn) {
+        e.stopPropagation();
+        _marcarRecontatoFeitoRapido(parseInt(okBtn.dataset.negocioId, 10), okBtn);
+        return;
+      }
       const card = e.target.closest('.opp-card');
       if (!card) return;
       const id = parseInt(card.id.replace('opp-', ''), 10);
@@ -574,6 +758,7 @@ export default {
         await _board.render(_funilAtivo.pipeline_id, _statusFilter, _vendedorFilter);
       } else {
         _listView = new ListView('pipeline-list-container');
+        _syncListFilters();
         await Promise.all([
           _board.render(_funilAtivo.pipeline_id, _statusFilter, _vendedorFilter),
           _listView.fetchData(_funilAtivo.pipeline_id),
@@ -600,6 +785,10 @@ export default {
     }
 
     document.removeEventListener('click', _closeAll);
+    window.removeEventListener('negocio:recontato', _onRecontatoMudou);
+    _calMes          = null;
+    _calStaged       = null;
+    _calAnchor       = false;
     _funis           = [];
     _funilAtivo      = null;
     _board           = null;

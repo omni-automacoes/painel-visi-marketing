@@ -29,11 +29,26 @@ export default class Sidebar {
     window.addEventListener('profile-updated', (e) => {
       this.updateUser(e.detail);
     });
+
+    // Selo de novidades pendentes no menu
+    this._novidadesPendentes = 0;
+    window.addEventListener('novidades:changed', (e) => {
+      this._novidadesPendentes = e.detail?.pendentes ?? 0;
+      this._updateNovidadesBadge();
+    });
+  }
+
+  _updateNovidadesBadge() {
+    const badge = this._container.querySelector('#nav-novidades-badge');
+    if (!badge) return;
+    badge.textContent = this._novidadesPendentes;
+    badge.hidden = this._novidadesPendentes <= 0;
   }
 
   render() {
     this._container.innerHTML = this._html();
     this._bindEvents();
+    this._updateNovidadesBadge();
     // Carrega notificações e alertas assim que a sidebar estiver no DOM
     this._loadNotificacoes();
     this._loadAlertasSemContato();
@@ -72,6 +87,8 @@ export default class Sidebar {
         icon: `<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>` },
       { route: 'relatorios', label: 'Relatórios',  badge: null, adminOnly: true,
         icon: `<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>` },
+      { route: 'novidades', label: 'Novidades', badge: null, adminOnly: false, novidade: true,
+        icon: `<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8L21.5 17.5l-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/>` },
       { route: 'configuracoes', label: 'Configurações', badge: null, adminOnly: false,
         icon: `<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14M19.07 19.07a10 10 0 0 0 0-14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>` },
     ];
@@ -91,6 +108,7 @@ export default class Sidebar {
         <svg viewBox="0 0 24 24">${link.icon}</svg>
         <span>${link.label}</span>
         ${link.badge ? `<span class="nav-badge">${link.badge}</span>` : ''}
+        ${link.novidade ? `<span class="nav-badge nav-badge--novidade" id="nav-novidades-badge" hidden></span>` : ''}
       </a>
     `).join('');
 

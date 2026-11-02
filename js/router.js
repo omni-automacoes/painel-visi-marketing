@@ -21,6 +21,7 @@ const ROUTES = {
   projetos:          () => import('../pages/projetos.js'),
   financeiro:        () => import('../pages/financeiro.js'),
   contratos:         () => import('../pages/contratos.js'),
+  novidades:         () => import('../pages/novidades.js'),
 };
 
 const DEFAULT_ROUTE = 'inicio';

@@ -4,23 +4,10 @@
  * - Todas as colunas ordenáveis
  */
 import { EtapasPipeline, Negocios, Tarefas } from '../../js/db.js';
+import { matchRecontato, badgeRecontato, diaKey } from './recontato.js';
 
-function _applyDateFilter(list, period) {
-  const now   = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const ms    = 86400000;
-  return list.filter(n => {
-    if (!n.data_recontado) return false;
-    const d = new Date(n.data_recontado);
-    switch (period) {
-      case 'hoje':      return d >= today && d < new Date(today.getTime() + ms);
-      case 'ultimos7':  return d >= new Date(today.getTime() - 7  * ms) && d < new Date(today.getTime() + ms);
-      case 'ultimos15': return d >= new Date(today.getTime() - 15 * ms) && d < new Date(today.getTime() + ms);
-      case 'ultimos30': return d >= new Date(today.getTime() - 30 * ms) && d < new Date(today.getTime() + ms);
-      case 'proximos7': return d >= today && d < new Date(today.getTime() + 7 * ms);
-      default:          return true;
-    }
-  });
+function _applyDateFilter(list, filtro) {
+  return list.filter(n => matchRecontato(n, filtro));
 }
 
 export default class ListView {
@@ -71,6 +58,13 @@ export default class ListView {
     this._buildEtapaMap();
   }
 
+  /** Define filtros sem renderizar (usado ao criar a lista já com os filtros ativos do Funil) */
+  setFilters({ origem, recontado, search }) {
+    this._origemFilter    = origem    ?? null;
+    this._recontadoFilter = recontado ?? null;
+    this._searchQuery     = search    ?? '';
+  }
+
   render(statusFilter, vendedorFilter) {
     if (statusFilter   !== undefined) this._statusFilter   = statusFilter;
     if (vendedorFilter !== undefined) this._vendedorFilter = vendedorFilter;
@@ -81,8 +75,16 @@ export default class ListView {
   applyVendedorFilter(vendedorId)  { this._vendedorFilter  = vendedorId; this._renderList(); }
   applyEtapaFilter(etapaId)        { this._etapaFilter     = etapaId;   this._renderList(); }
   applyOrigemFilter(origem)        { this._origemFilter    = origem;    this._renderList(); }
-  applyRecontadoFilter(periodo)    { this._recontadoFilter = periodo;   this._renderList(); }
+  applyRecontadoFilter(filtro)     { this._recontadoFilter = filtro;    this._renderList(); }
   applySearch(query)               { this._searchQuery     = query;     this._renderList(); }
+
+  /** Atualiza campos de um negócio em cache e re-renderiza (sem nova query) */
+  patchNegocio(negocioId, patch) {
+    const neg = this._allNegocios.find(n => n.negocio_id === negocioId);
+    if (!neg) return;
+    Object.assign(neg, patch);
+    this._renderList();
+  }
 
   // ── Internos ──────────────────────────────────────────────────
 
@@ -164,7 +166,8 @@ export default class ListView {
       case 'tarefas':
         return this._tarefasMap[neg.negocio_id] || 0;
       case 'data_recontado':
-        return neg.data_recontado ?? '';
+        // concluídos por último; depois por dia (fuso de Brasília)
+        return neg.data_recontado ? `${neg.recontado_feito_em ? '1' : '0'}${diaKey(neg.data_recontado)}` : '';
       case 'negocio_origem':
         return (neg.negocio_origem ?? '').toLowerCase();
       case 'criado_em':
@@ -343,15 +346,9 @@ export default class ListView {
 
     // Recontato
     let recontadoHTML = '<span class="list-no-tasks">—</span>';
-    if (neg.data_recontado) {
-      const rc    = new Date(neg.data_recontado);
-      const today = new Date(); today.setHours(0,0,0,0);
-      const rcDay = new Date(rc); rcDay.setHours(0,0,0,0);
-      const diff  = Math.round((rcDay - today) / 86400000);
-      const rcFmt = rc.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-      const cls   = diff < 0 ? 'opp-recontado--overdue' : diff === 0 ? 'opp-recontado--today' : 'opp-recontado--future';
-      const lbl   = diff < 0 ? `Vencido · ${rcFmt}` : diff === 0 ? `Hoje · ${rcFmt}` : rcFmt;
-      recontadoHTML = `<span class="opp-recontado ${cls}">${lbl}</span>`;
+    const rcBadge = badgeRecontato(neg);
+    if (rcBadge) {
+      recontadoHTML = `<span class="opp-recontado ${rcBadge.cls}" title="${rcBadge.title}">${rcBadge.label}</span>`;
     }
 
     // Telefone

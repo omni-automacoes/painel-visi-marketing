@@ -4,6 +4,8 @@
  * Exibe badge de tarefas pendentes quando taskCount > 0.
  * Exibe badge de data de recontato (data_recontado) quando disponível.
  */
+import { badgeRecontato } from './recontato.js';
+
 export default class OppCard {
   /**
    * @param {Object} negocio    - Linha da tabela negocios (com usuarios)
@@ -68,28 +70,14 @@ export default class OppCard {
   }
 
   _recontadoBadge() {
-    const raw = this._n.data_recontado;
-    if (!raw) return '';
+    const badge = badgeRecontato(this._n);
+    if (!badge) return '';
 
-    const now   = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const d     = new Date(raw);
-    const dDay  = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const okBtn = badge.estado === 'feito'
+      ? ''
+      : `<button type="button" class="opp-recontado-ok" data-negocio-id="${this._n.negocio_id}" title="Marcar recontato como feito">✓</button>`;
 
-    let mod = '';
-    let label = '';
-    if (dDay < today) {
-      mod   = 'opp-recontado--overdue';
-      label = `⚠ ${this._formatData(raw)}`;
-    } else if (dDay.getTime() === today.getTime()) {
-      mod   = 'opp-recontado--today';
-      label = `🔔 Hoje`;
-    } else {
-      mod   = 'opp-recontado--future';
-      label = `📅 ${this._formatData(raw)}`;
-    }
-
-    return `<span class="opp-recontado ${mod}" title="Data de recontato: ${this._formatData(raw)}">${label}</span>`;
+    return `<span class="opp-recontado ${badge.cls}" title="${badge.title}">${badge.label}</span>${okBtn}`;
   }
 
   // ── render ─────────────────────────────────────────────────────

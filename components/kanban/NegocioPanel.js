@@ -9,6 +9,7 @@
 import { Negocios, Tarefas, Anotacoes, Documentos, Clientes, Notificacoes, ContatoTentativas, MotivosPerdas, KanbanCards, Usuarios, NegociosResponsaveis, EtapasPipeline, FinanceiroReceitas } from '../../js/db.js';
 import UserStore from '../../js/userStore.js';
 import GanhoModal from './GanhoModal.js';
+import { diaKey, hojeKey } from './recontato.js';
 import { opcoesOrigemHTML } from '../../js/canais.js';
 
 export default class NegocioPanel {
@@ -137,16 +138,9 @@ export default class NegocioPanel {
     const pendentes = tarefas.filter(t => !t.tarefa_status);
 
     // Recontato
-    const recontadoBadgeHTML = this._recontadoBadgePanel(neg.data_recontado);
-    const recontadoInputVal = neg.data_recontado
-      ? (() => {
-          const d = new Date(neg.data_recontado);
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          return `${y}-${m}-${day}`;
-        })()
-      : '';
+    const recontadoBadgeHTML = this._recontadoBadgePanel(neg);
+    const recontadoInputVal = neg.data_recontado ? diaKey(neg.data_recontado) : '';
+    const recontadoFeito    = !!neg.recontado_feito_em;
 
     el.className = 'np-body';
     el.innerHTML = `
@@ -337,6 +331,11 @@ export default class NegocioPanel {
             </div>
             ${recontadoBadgeHTML}
             <div class="np-sb-actions-row" id="np-recontado-actions" style="${recontadoInputVal ? '' : 'display:none;'}">
+              <button id="np-recontado-done" class="np-recontado-done${recontadoFeito ? ' np-recontado-done--undo' : ''}"
+                      style="${neg.negocio_status === 'Aberto' ? '' : 'display:none;'}"
+                      title="${recontadoFeito ? 'Reabrir este recontato' : 'Marcar o recontato agendado como concluído'}">
+                ${recontadoFeito ? '↺ Desfazer' : '✓ Recontato feito'}
+              </button>
               <button id="np-recontado-edit" class="np-sb-edit-btn">
                 <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Editar
@@ -1992,17 +1991,20 @@ export default class NegocioPanel {
 
   // ── Data de Recontato ─────────────────────────────────────────
 
-  _recontadoBadgePanel(raw) {
+  _recontadoBadgePanel(neg) {
+    const raw = neg?.data_recontado;
     if (!raw) return '<p class="np-recontado-none">Nenhuma data definida</p>';
-    const now   = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const d     = new Date(raw);
-    const dDay  = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+    const key  = diaKey(raw);
+    const hoje = hojeKey();
     let cls = '', label = '';
-    if (dDay < today) {
+    if (neg.recontado_feito_em) {
+      cls   = 'np-recontado-badge--done';
+      label = `✓ Recontatado — ${this._fmtDate(raw)}`;
+    } else if (key < hoje) {
       cls   = 'np-recontado-badge--overdue';
-      label = `⚠ Vencido — ${this._fmtDate(raw)}`;
-    } else if (dDay.getTime() === today.getTime()) {
+      label = `⚠ Atrasado — ${this._fmtDate(raw)}`;
+    } else if (key === hoje) {
       cls   = 'np-recontado-badge--today';
       label = `🔔 Hoje`;
     } else {
@@ -2010,6 +2012,35 @@ export default class NegocioPanel {
       label = `📅 ${this._fmtDate(raw)}`;
     }
     return `<span class="np-recontado-badge ${cls}">${label}</span>`;
+  }
+
+  /** Sincroniza badge e botão "Recontato feito" com this._negocioData */
+  _syncRecontadoPanel() {
+    const neg = this._negocioData || {};
+    const badgeEl = document.querySelector('.np-recontado-badge, .np-recontado-none');
+    if (badgeEl) badgeEl.outerHTML = this._recontadoBadgePanel(neg);
+
+    const doneBtn = document.getElementById('np-recontado-done');
+    if (doneBtn) {
+      const feito = !!neg.recontado_feito_em;
+      doneBtn.classList.toggle('np-recontado-done--undo', feito);
+      doneBtn.textContent = feito ? '↺ Desfazer' : '✓ Recontato feito';
+      doneBtn.title = feito ? 'Reabrir este recontato' : 'Marcar o recontato agendado como concluído';
+    }
+  }
+
+  /** Avisa o Funil (cards, lista, calendário) que o recontato deste negócio mudou */
+  _emitRecontato(negocioId) {
+    const neg = this._negocioData || {};
+    window.dispatchEvent(new CustomEvent('negocio:recontato', {
+      detail: {
+        negocioId,
+        patch: {
+          data_recontado:     neg.data_recontado ?? null,
+          recontado_feito_em: neg.recontado_feito_em ?? null,
+        },
+      },
+    }));
   }
 
   _bindRecontadoForm(negocioId) {
@@ -2052,8 +2083,12 @@ export default class NegocioPanel {
         return;
       }
 
-      const badgeEl = document.querySelector('.np-recontado-badge, .np-recontado-none');
-      if (badgeEl) badgeEl.outerHTML = this._recontadoBadgePanel(isoDate);
+      // Nova data reabre o recontato (zera o "feito")
+      if (this._negocioData) {
+        this._negocioData.data_recontado     = isoDate;
+        this._negocioData.recontado_feito_em = null;
+      }
+      this._syncRecontadoPanel();
 
       if (isoDate) {
         if (actions) actions.style.display = 'flex';
@@ -2066,7 +2101,32 @@ export default class NegocioPanel {
 
       saveBtn.classList.add('np-recontado-save--ok');
       setTimeout(() => saveBtn.classList.remove('np-recontado-save--ok'), 1500);
-      this._updateKanbanCardRecontado(negocioId, isoDate);
+      this._emitRecontato(negocioId);
+    });
+
+    // Recontato feito / Desfazer
+    const doneBtn = document.getElementById('np-recontado-done');
+    doneBtn?.addEventListener('click', async () => {
+      const feitoAgora = !this._negocioData?.recontado_feito_em;
+      doneBtn.disabled = true;
+      const { error } = await Negocios.marcarRecontatoFeito(negocioId, feitoAgora);
+      doneBtn.disabled = false;
+      if (error) {
+        console.error('[NegocioPanel] Erro ao atualizar recontato feito:', error);
+        return;
+      }
+      if (this._negocioData) {
+        this._negocioData.recontado_feito_em = feitoAgora ? new Date().toISOString() : null;
+      }
+      this._syncRecontadoPanel();
+
+      // Concluído: abre o campo de data para já agendar o próximo recontato
+      if (feitoAgora) {
+        if (input)   input.value = '';
+        if (field)   field.style.display = 'flex';
+        if (editBtn) editBtn.innerHTML   = CANCEL_HTML;
+      }
+      this._emitRecontato(negocioId);
     });
 
     this._bindClearRecontado(negocioId);
@@ -2087,11 +2147,18 @@ export default class NegocioPanel {
       const input = document.getElementById('np-recontado-input');
       if (input) input.value = '';
 
-      const badgeEl = document.querySelector('.np-recontado-badge, .np-recontado-none');
-      if (badgeEl) badgeEl.outerHTML = '<p class="np-recontado-none">Nenhuma data definida</p>';
+      if (this._negocioData) {
+        this._negocioData.data_recontado     = null;
+        this._negocioData.recontado_feito_em = null;
+      }
+      this._syncRecontadoPanel();
 
-      clearBtn?.remove();
-      this._updateKanbanCardRecontado(negocioId, null);
+      const actions = document.getElementById('np-recontado-actions');
+      const field   = document.getElementById('np-recontado-field');
+      if (actions) actions.style.display = 'none';
+      if (field)   field.style.display   = 'flex';
+      if (clearBtn) clearBtn.disabled = false;
+      this._emitRecontato(negocioId);
     });
   }
 
@@ -2374,31 +2441,6 @@ export default class NegocioPanel {
     });
   }
 
-
-  _updateKanbanCardRecontado(negocioId, isoDate) {
-    const cardEl = document.getElementById(`opp-${negocioId}`);
-    if (!cardEl) return;
-    const existing = cardEl.querySelector('.opp-recontado-row');
-    if (!isoDate) { existing?.remove(); return; }
-
-    const now   = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const d     = new Date(isoDate);
-    const dDay  = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const fmt   = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-
-    let mod = '', label = '';
-    if (dDay < today)                              { mod = 'opp-recontado--overdue'; label = `⚠ Recontato: ${fmt}`; }
-    else if (dDay.getTime() === today.getTime())   { mod = 'opp-recontado--today';   label = `🔔 Recontato: Hoje`; }
-    else                                           { mod = 'opp-recontado--future';  label = `📅 Recontato: ${fmt}`; }
-
-    const html = `<div class="opp-recontado-row"><span class="opp-recontado ${mod}">${label}</span></div>`;
-    if (existing) { existing.outerHTML = html; }
-    else {
-      const statusRow = cardEl.querySelector('.opp-status-row');
-      if (statusRow) statusRow.insertAdjacentHTML('afterend', html);
-    }
-  }
 
   _bindResponsaveis(negocioId, neg) {
     const btnEditCo = document.getElementById('np-btn-edit-co');

@@ -8,6 +8,7 @@ import router       from './router.js';
 import UserStore    from './userStore.js';
 import { supabase } from './supabase.js';
 import { Usuarios } from './db.js';
+import Novidades   from '../components/novidades/novidades.js';
 
 // ── Popup de Nova Versão ─────────────────────────────────────────
 function _mostrarPopupAtualizacao(userId) {
@@ -211,5 +212,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   router.init(outlet, (activeRoute) => {
     sidebar.setActive(activeRoute);
   });
+
+  // ── Novidades / tutoriais (pop-up só depois da UI montada) ──
+  if (usuario && !error) Novidades.init();
 });
 

@@ -1238,6 +1238,7 @@ export const Negocios = {
         negocio_origem,
         negocio_segmento,
         data_recontado,
+        recontado_feito_em,
         etapa_id,
         pipeline_id,
         data_fechamento,
@@ -1356,9 +1357,22 @@ export const Negocios = {
    * @param {string|null} dataIso - ISO string (timestamptz) ou null para limpar
    */
   async updateRecontado(negocioId, dataIso) {
+    // Nova data (ou data limpa) reabre o recontato: zera o "feito"
     return supabase
       .from('negocios')
-      .update({ data_recontado: dataIso, ultima_atualizacao: nowBrasilia() })
+      .update({ data_recontado: dataIso, recontado_feito_em: null, ultima_atualizacao: nowBrasilia() })
+      .eq('negocio_id', negocioId);
+  },
+
+  /**
+   * Marca (ou desfaz) o recontato agendado como concluído.
+   * @param {number}  negocioId
+   * @param {boolean} feito
+   */
+  async marcarRecontatoFeito(negocioId, feito = true) {
+    return supabase
+      .from('negocios')
+      .update({ recontado_feito_em: feito ? new Date().toISOString() : null, ultima_atualizacao: nowBrasilia() })
       .eq('negocio_id', negocioId);
   },
 
@@ -1931,6 +1945,42 @@ export const Documentos = {
 //    notificacao_leitura   BOOLEAN  (false = não lida, true = lida)
 //    user_id               UUID → FK para usuarios.user_id
 // ══════════════════════════════════════════════════════════════════
+
+// ============================================================
+//  NOVIDADES / TUTORIAIS
+// ============================================================
+export const Atualizacoes = {
+  /** Catálogo de novidades publicadas (mais recentes primeiro) */
+  async getAtivas() {
+    return supabase
+      .from('atualizacoes')
+      .select('id, titulo, resumo, icone, passos, publicada_em')
+      .eq('ativa', true)
+      .order('publicada_em', { ascending: false });
+  },
+
+  /** Status de cada novidade para o usuário (linha ausente = não visto) */
+  async getStatusDoUsuario(userId) {
+    return supabase
+      .from('atualizacoes_usuarios')
+      .select('atualizacao_id, status, vezes_adiado, adiado_ate')
+      .eq('user_id', userId);
+  },
+
+  /** Cria/atualiza o status de uma novidade para o usuário */
+  async registrar(userId, atualizacaoId, { status, vezesAdiado, adiadoAte = null }) {
+    return supabase
+      .from('atualizacoes_usuarios')
+      .upsert({
+        user_id:        userId,
+        atualizacao_id: atualizacaoId,
+        status,
+        vezes_adiado:   vezesAdiado,
+        adiado_ate:     adiadoAte,
+        atualizado_em:  new Date().toISOString(),
+      }, { onConflict: 'user_id,atualizacao_id' });
+  },
+};
 
 export const Notificacoes = {
   /**

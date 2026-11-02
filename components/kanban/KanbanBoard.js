@@ -17,23 +17,17 @@ import { EtapasPipeline, Negocios, Tarefas } from '../../js/db.js';
 import KanbanColumn from './KanbanColumn.js';
 import OppCard      from './OppCard.js';
 
-/** Utilitário: filtra negócios por período de data_recontado */
-function _applyDateFilter(list, period) {
-  const now   = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const ms    = 86400000;
-  return list.filter(n => {
-    if (!n.data_recontado) return false;
-    const d = new Date(n.data_recontado);
-    switch (period) {
-      case 'hoje':      return d >= today && d < new Date(today.getTime() + ms);
-      case 'ultimos7':  return d >= new Date(today.getTime() - 7  * ms) && d < new Date(today.getTime() + ms);
-      case 'ultimos15': return d >= new Date(today.getTime() - 15 * ms) && d < new Date(today.getTime() + ms);
-      case 'ultimos30': return d >= new Date(today.getTime() - 30 * ms) && d < new Date(today.getTime() + ms);
-      case 'proximos7': return d >= today && d < new Date(today.getTime() + 7 * ms);
-      default:          return true;
-    }
-  });
+import { matchRecontato, calcularContagens, diaKey } from './recontato.js';
+
+/** Filtra negócios pelo filtro de recontato (objeto de recontato.js) */
+function _applyDateFilter(list, filtro) {
+  return list.filter(n => matchRecontato(n, filtro));
+}
+
+/** Ordena por data de recontato (mais antigas/atrasadas primeiro; concluídos por último) */
+function _sortPorRecontato(list) {
+  const peso = n => `${n.recontado_feito_em ? '1' : '0'}${n.data_recontado ? diaKey(n.data_recontado) : '9999-99-99'}`;
+  return [...list].sort((a, b) => peso(a).localeCompare(peso(b)));
 }
 
 export default class KanbanBoard {
@@ -124,8 +118,39 @@ export default class KanbanBoard {
   applyVendedorFilter(vendedorId) { this._vendedorFilter = vendedorId; this._renderBoard(); }
   /** Aplica filtro de origem */
   applyOrigemFilter(origem)     { this._origemFilter    = origem;    this._renderBoard(); }
-  /** Aplica filtro de data de recontato */
-  applyRecontadoFilter(periodo) { this._recontadoFilter = periodo;   this._renderBoard(); }
+  /** Aplica filtro de data de recontato (objeto de recontato.js ou null) */
+  applyRecontadoFilter(filtro)  { this._recontadoFilter = filtro;    this._renderBoard(); }
+
+  /**
+   * Contagens de recontato (só negócios abertos) respeitando os filtros de
+   * responsável, origem e busca — não aplica o próprio filtro de recontato.
+   */
+  getRecontadoCounts() {
+    let list = this._vendedorFilter
+      ? this._allNegocios.filter(n =>
+          n.vendedor_id === this._vendedorFilter ||
+          (n.negocios_responsaveis && n.negocios_responsaveis.some(r => r.usuario_id === this._vendedorFilter))
+        )
+      : this._allNegocios;
+
+    if (this._origemFilter) list = list.filter(n => n.negocio_origem === this._origemFilter);
+
+    const q = (this._searchQuery || '').toLowerCase();
+    if (q) {
+      list = list.filter(n =>
+        (n.negocio_titulo   || '').toLowerCase().includes(q) ||
+        (n.negocio_telefone || '').toLowerCase().includes(q));
+    }
+    return calcularContagens(list);
+  }
+
+  /** Atualiza campos de um negócio em cache e re-renderiza (sem nova query) */
+  patchNegocio(negocioId, patch) {
+    const neg = this._allNegocios.find(n => n.negocio_id === negocioId);
+    if (!neg) return;
+    Object.assign(neg, patch);
+    this._renderBoard();
+  }
   /** Filtra por nome ou telefone */
   applySearch(query)            { this._searchQuery     = query;     this._renderBoard(); }
 
@@ -165,7 +190,7 @@ export default class KanbanBoard {
       list = list.filter(n => n.negocio_origem === this._origemFilter);
 
     if (this._recontadoFilter)
-      list = _applyDateFilter(list, this._recontadoFilter);
+      list = _sortPorRecontato(_applyDateFilter(list, this._recontadoFilter));
 
     const q = (this._searchQuery || '').toLowerCase();
     const negociosFiltrados = q
