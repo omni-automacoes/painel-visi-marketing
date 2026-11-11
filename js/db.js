@@ -2116,12 +2116,101 @@ export const EmailMarketing = {
 //  DIA FINALIZADO ✅ TABELA ATIVA
 //
 //  Colunas da tabela `dia_finalizado`:
-//    id                            BIGINT (PK, gerado automaticamente)
+//    dia_finalizado_id             BIGINT (PK, gerado automaticamente)
 //    user_id                       UUID → FK para usuarios.user_id
 //    quantidade_contatos_realizados NUMERIC
 //    quantidade_prospecao           NUMERIC
 //    criado_em                      TIMESTAMPTZ (default now())
+//
+//  Contatos realizados são AUTOMÁTICOS: vêm direto de `contato_tentativas`
+//  (creditados ao negocios.vendedor_id). A coluna quantidade_contatos_realizados
+//  é só um retrato do dia no momento do "Finalizar Dia" e NÃO entra nas somas.
+//  A prospecção é informada pelo próprio vendedor (uma linha por dia).
 // ══════════════════════════════════════════════════════════════════
+
+const _diaBrasilia = (valor) =>
+  new Date(valor).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
+/**
+ * Atividade do período: contatos (automáticos) + prospecção (informada),
+ * agrupados por vendedor e dia. Mantém o formato de linhas que as telas já usam.
+ * @param {string|null} userId  - null = todos os vendedores
+ * @param {Date} inicio
+ * @param {Date} fim
+ */
+async function _atividadePeriodo(userId, inicio, fim) {
+  const inicioISO = inicio.toISOString();
+  const fimISO    = fim.toISOString();
+
+  // Prospecção (informada no "Finalizar Dia")
+  let qProsp = supabase
+    .from('dia_finalizado')
+    .select('quantidade_prospecao, criado_em, user_id')
+    .gte('criado_em', inicioISO)
+    .lte('criado_em', fimISO);
+  if (userId) qProsp = qProsp.eq('user_id', userId);
+  const { data: prosp, error: errProsp } = await qProsp;
+  if (errProsp) return { error: errProsp, contatos: 0, prospeccoes: 0, rows: [] };
+
+  // Contatos (automáticos): tentativas dos negócios do vendedor
+  const tentativas = [];
+  for (let de = 0; ; de += 1000) {
+    let q = supabase
+      .from('contato_tentativas')
+      .select('tentativa_id, tentativa_data, negocios!inner(vendedor_id)')
+      .gte('tentativa_data', inicioISO)
+      .lte('tentativa_data', fimISO)
+      .order('tentativa_id')
+      .range(de, de + 999);
+    if (userId) q = q.eq('negocios.vendedor_id', userId);
+    const { data, error } = await q;
+    if (error) return { error, contatos: 0, prospeccoes: 0, rows: [] };
+    tentativas.push(...(data ?? []));
+    if ((data ?? []).length < 1000) break;
+  }
+
+  // Agrupa por (vendedor, dia em Brasília)
+  const porDia = new Map();
+  const linha = (uid, dia) => {
+    const chave = `${uid}|${dia}`;
+    if (!porDia.has(chave)) porDia.set(chave, { user_id: uid, dia, contatos: 0, prospeccoes: 0 });
+    return porDia.get(chave);
+  };
+
+  tentativas.forEach(t => {
+    const neg = Array.isArray(t.negocios) ? t.negocios[0] : t.negocios;
+    if (!neg?.vendedor_id || !t.tentativa_data) return;
+    linha(neg.vendedor_id, _diaBrasilia(t.tentativa_data)).contatos++;
+  });
+  (prosp ?? []).forEach(p => {
+    if (!p.user_id) return;
+    linha(p.user_id, _diaBrasilia(p.criado_em)).prospeccoes += Number(p.quantidade_prospecao) || 0;
+  });
+
+  // Nome/avatar dos vendedores envolvidos
+  const ids = [...new Set([...porDia.values()].map(l => l.user_id))];
+  const usuarios = {};
+  if (ids.length) {
+    const { data: us } = await supabase.from('usuarios').select('user_id, user_nome, user_avatar').in('user_id', ids);
+    (us ?? []).forEach(u => { usuarios[u.user_id] = { user_nome: u.user_nome, user_avatar: u.user_avatar }; });
+  }
+
+  let contatos = 0;
+  let prospeccoes = 0;
+  const rows = [...porDia.values()].map(l => {
+    contatos    += l.contatos;
+    prospeccoes += l.prospeccoes;
+    return {
+      user_id: l.user_id,
+      criado_em: `${l.dia}T12:00:00.000Z`,   // o consumidor só lê a parte da data (YYYY-MM-DD)
+      quantidade_contatos_realizados: l.contatos,
+      quantidade_prospecao: l.prospeccoes,
+      usuarios: usuarios[l.user_id] ?? null,
+    };
+  });
+
+  return { error: null, contatos, prospeccoes, rows };
+}
 
 export const DiaFinalizado = {
   /**
@@ -2130,25 +2219,14 @@ export const DiaFinalizado = {
    * @param {string} userId - UUID do usuário logado
    */
   async contarContatosHoje(userId) {
-    // Data de início e fim do dia atual em UTC (Supabase armazena em UTC)
-    const agora   = new Date();
+    const agora     = new Date();
     const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString();
     const fimDia    = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59, 999).toISOString();
 
-    // Busca os negocio_ids do vendedor
-    const { data: negs, error: errNegs } = await supabase
-      .from('negocios')
-      .select('negocio_id')
-      .eq('vendedor_id', userId);
-
-    if (errNegs || !negs?.length) return { count: 0, error: errNegs };
-
-    const ids = negs.map(n => n.negocio_id);
-
     const { count, error } = await supabase
       .from('contato_tentativas')
-      .select('tentativa_id', { count: 'exact', head: true })
-      .in('negocio_id', ids)
+      .select('tentativa_id, negocios!inner(vendedor_id)', { count: 'exact', head: true })
+      .eq('negocios.vendedor_id', userId)
       .gte('tentativa_data', inicioDia)
       .lte('tentativa_data', fimDia);
 
@@ -2156,12 +2234,29 @@ export const DiaFinalizado = {
   },
 
   /**
-   * Salva o registro de finalização do dia.
+   * Registra a prospecção do dia. Uma linha por dia: se já houver registro hoje,
+   * o valor é substituído (não soma de novo).
    * @param {string} userId
-   * @param {number} qtdContatos
+   * @param {number} qtdContatos    - retrato dos contatos do dia (informativo)
    * @param {number} qtdProspeccao
    */
   async salvar(userId, qtdContatos, qtdProspeccao) {
+    const { data: hoje, error: errHoje } = await DiaFinalizado.getHoje(userId, { todos: true });
+    if (errHoje) return { error: errHoje };
+
+    if (hoje?.length) {
+      const [principal, ...extras] = hoje;
+      // Registros extras do mesmo dia (de cliques antigos) são zerados para não somar em dobro
+      for (const extra of extras) {
+        const { error } = await supabase.from('dia_finalizado').update({ quantidade_prospecao: 0 }).eq('dia_finalizado_id', extra.dia_finalizado_id);
+        if (error) return { error };
+      }
+      return supabase
+        .from('dia_finalizado')
+        .update({ quantidade_contatos_realizados: qtdContatos, quantidade_prospecao: qtdProspeccao })
+        .eq('dia_finalizado_id', principal.dia_finalizado_id);
+    }
+
     return supabase
       .from('dia_finalizado')
       .insert({
@@ -2172,23 +2267,24 @@ export const DiaFinalizado = {
   },
 
   /**
-   * Busca o registro de dia finalizado de HOJE para um usuário.
-   * Mantido para compatibilidade, mas o getEstatisticas é mais completo.
+   * Busca o(s) registro(s) de prospecção de HOJE para um usuário.
    * @param {string} userId
+   * @param {{ todos?: boolean }} [opts] - todos: true devolve todas as linhas do dia (padrão: só a mais recente)
    */
-  async getHoje(userId) {
+  async getHoje(userId, { todos = false } = {}) {
     const agora = new Date();
     const inicioDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0).toISOString();
     const fimDia    = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 23, 59, 59, 999).toISOString();
 
-    return supabase
+    const query = supabase
       .from('dia_finalizado')
       .select('*')
       .eq('user_id', userId)
       .gte('criado_em', inicioDia)
       .lte('criado_em', fimDia)
-      .order('criado_em', { ascending: false })
-      .limit(1);
+      .order('criado_em', { ascending: false });
+
+    return todos ? query : query.limit(1);
   },
 
   /**
@@ -2214,38 +2310,7 @@ export const DiaFinalizado = {
       fim    = new Date(agora.getFullYear(), agora.getMonth() + 1, 0, 23, 59, 59, 999);
     }
 
-    let query = supabase
-      .from('dia_finalizado')
-      .select(`
-        quantidade_contatos_realizados,
-        quantidade_prospecao,
-        criado_em,
-        user_id,
-        usuarios (
-          user_nome,
-          user_avatar
-        )
-      `)
-      .gte('criado_em', inicio.toISOString())
-      .lte('criado_em', fim.toISOString());
-
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) return { error, contatos: 0, prospeccoes: 0, rows: [] };
-
-    let contatos = 0;
-    let prospeccoes = 0;
-
-    (data || []).forEach(row => {
-      contatos += (Number(row.quantidade_contatos_realizados) || 0);
-      prospeccoes += (Number(row.quantidade_prospecao) || 0);
-    });
-
-    return { error: null, contatos, prospeccoes, rows: data || [] };
+    return _atividadePeriodo(userId, inicio, fim);
   },
 
   /**
@@ -2261,38 +2326,7 @@ export const DiaFinalizado = {
     const inicio = new Date(`${dataInicio}T00:00:00`);
     const fim    = new Date(`${dataFim}T23:59:59.999`);
 
-    let query = supabase
-      .from('dia_finalizado')
-      .select(`
-        quantidade_contatos_realizados,
-        quantidade_prospecao,
-        criado_em,
-        user_id,
-        usuarios (
-          user_nome,
-          user_avatar
-        )
-      `)
-      .gte('criado_em', inicio.toISOString())
-      .lte('criado_em', fim.toISOString());
-
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) return { error, contatos: 0, prospeccoes: 0, rows: [] };
-
-    let contatos = 0;
-    let prospeccoes = 0;
-
-    (data || []).forEach(row => {
-      contatos += (Number(row.quantidade_contatos_realizados) || 0);
-      prospeccoes += (Number(row.quantidade_prospecao) || 0);
-    });
-
-    return { error: null, contatos, prospeccoes, rows: data || [] };
+    return _atividadePeriodo(userId, inicio, fim);
   },
 };
 
@@ -2421,7 +2455,30 @@ export const FinanceiroReceitas = {
   },
   async delete(id) {
     return supabase.from('financeiro_receitas').delete().eq('receita_id', id);
+  },
+  async deleteMany(ids) {
+    if (!ids?.length) return { error: null };
+    return supabase.from('financeiro_receitas').delete().in('receita_id', ids);
   }
+};
+
+/**
+ * Mensalidades excluídas pelo usuário (cliente + mês 'YYYY-MM'): a sincronização
+ * automática de mensalidades do Financeiro não deve recriá-las.
+ */
+export const FinanceiroMensalidadesIgnoradas = {
+  async getAll() {
+    return supabase.from('financeiro_mensalidades_ignoradas').select('cliente_id, periodo');
+  },
+  async add(clienteId, periodo) {
+    return supabase
+      .from('financeiro_mensalidades_ignoradas')
+      .upsert({ cliente_id: clienteId, periodo }, { onConflict: 'cliente_id,periodo' });
+  },
+  /** Libera o mês para a sincronização voltar a gerar as mensalidades excluídas */
+  async removePeriodo(periodo) {
+    return supabase.from('financeiro_mensalidades_ignoradas').delete().eq('periodo', periodo);
+  },
 };
 
 export const FinanceiroDespesas = {

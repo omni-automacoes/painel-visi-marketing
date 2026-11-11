@@ -160,7 +160,11 @@ export default class Tour {
       this._posicionar();
       window.location.hash = passo.rota;
       await wait(250);
-      await esperar(() => document.querySelector('.page-outlet .kanban-board, .page-outlet .opp-card, .page-outlet #btn-kanban-filter'), 6000);
+      // O roteador troca o esqueleto (com style inline) pelo conteúdo da página
+      await esperar(() => {
+        const o = document.querySelector('#main-outlet .page-outlet');
+        return o && !o.getAttribute('style');
+      }, 6000);
       if (token !== this._token) return;
     }
 
@@ -176,7 +180,7 @@ export default class Tour {
       const el = await esperar(() => {
         const e = document.querySelector(passo.alvo);
         return visivel(e) ? e : null;
-      }, 3500);
+      }, 5000);
       if (token !== this._token) return;
       if (el) {
         this._alvo = el;

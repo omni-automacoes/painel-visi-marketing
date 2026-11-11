@@ -107,7 +107,7 @@ async function _abrirModalFinalizarDia() {
         </div>
         <div>
           <h2 id="fd-title" class="fd-title">Finalizar Dia</h2>
-          <p class="fd-subtitle">Registre o resumo da sua jornada de hoje.</p>
+          <p class="fd-subtitle">Seus contatos já são contabilizados automaticamente. Informe aqui só a prospecção.</p>
         </div>
         <button class="fd-close" id="fd-close" title="Fechar">
           <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -118,7 +118,7 @@ async function _abrirModalFinalizarDia() {
         <div class="fd-field">
           <label class="fd-label">
             Contatos Realizados Hoje
-            <span class="fd-label-hint">Preenchido automaticamente</span>
+            <span class="fd-label-hint">Contabilizado automaticamente</span>
           </label>
           <div class="fd-input-readonly" id="fd-contatos-auto">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -129,7 +129,7 @@ async function _abrirModalFinalizarDia() {
         <div class="fd-field">
           <label class="fd-label" for="fd-prosp-input">
             Contatos na Prospecção Hoje
-            <span class="fd-label-hint">Informe a quantidade</span>
+            <span class="fd-label-hint" id="fd-prosp-hint">Informe a quantidade</span>
           </label>
           <input
             id="fd-prosp-input"
@@ -163,6 +163,16 @@ async function _abrirModalFinalizarDia() {
   const { count } = await DiaFinalizado.contarContatosHoje(userId);
   const valEl = document.getElementById('fd-contatos-val');
   if (valEl) valEl.textContent = count !== undefined ? `${count} contato${count !== 1 ? 's' : ''}` : '—';
+
+  // Se a prospecção de hoje já foi registrada, mostra o valor (salvar de novo substitui, não soma)
+  const { data: hoje } = await DiaFinalizado.getHoje(userId, { todos: true });
+  if (hoje?.length) {
+    const jaRegistrado = hoje.reduce((s, r) => s + (Number(r.quantidade_prospecao) || 0), 0);
+    const prospEl = document.getElementById('fd-prosp-input');
+    if (prospEl && !prospEl.value) prospEl.value = jaRegistrado;
+    const hintEl = document.getElementById('fd-prosp-hint');
+    if (hintEl) hintEl.textContent = 'Já registrado hoje — salvar substitui o valor';
+  }
 
   // Fechar modal
   const fechar = () => {

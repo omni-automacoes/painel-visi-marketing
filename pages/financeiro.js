@@ -3,7 +3,7 @@
  */
 
 import { today, staggerAnimation } from '../js/utils.js';
-import { FinanceiroReceitas, FinanceiroDespesas, Clientes } from '../js/db.js';
+import { FinanceiroReceitas, FinanceiroDespesas, FinanceiroMensalidadesIgnoradas, Clientes } from '../js/db.js';
 import UserStore from '../js/userStore.js';
 
 // ── Helper de Período Atual e Gerador Dinâmico ──────────────────────
@@ -38,8 +38,160 @@ let _state = {
   receitas: [],
   despesas: [],
   clientes: [],
+  ignoradas: new Set(),   // 'clienteId|YYYY-MM' — mensalidades excluídas que não devem ser recriadas
   selectedPeriod: _getCurrentPeriod(),
 };
+
+// Mês ('YYYY-MM') de uma data de vencimento, no mesmo critério da sincronização
+function _periodoKey(vencimentoIso) {
+  const d = new Date(vencimentoIso);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Exclui uma receita. Se for a mensalidade de um cliente, registra que o mês foi
+ * excluído de propósito — senão a sincronização automática a recria na hora.
+ */
+async function _excluirReceita(receita) {
+  const ehMensalidade = receita && receita.cliente_id && receita.data_vencimento
+    && receita.receita_descricao === 'Mensalidade';
+
+  if (ehMensalidade) {
+    const periodo = _periodoKey(receita.data_vencimento);
+    const { error } = await FinanceiroMensalidadesIgnoradas.add(receita.cliente_id, periodo);
+    if (error) return { error };
+    _state.ignoradas.add(`${receita.cliente_id}|${periodo}`);
+  }
+  return FinanceiroReceitas.delete(receita.receita_id);
+}
+
+/**
+ * Pergunta se o cliente deve ser desativado junto com a exclusão da mensalidade.
+ * Resolve com null (cancelou), { desativar: false } ou
+ * { desativar: true, data, receitaPerdida, motivo } (dados do churn).
+ */
+function _perguntarDesativarCliente(receita, cliente, qtdFuturas) {
+  return new Promise(resolve => {
+    const hojeIso = new Date().toISOString().split('T')[0];
+    const valorSugerido = Number(cliente.cliente_mensalidade || receita.receita_valor || 0);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'fin-dz-overlay';
+    overlay.innerHTML = `
+      <div class="fin-dz-card" role="dialog" aria-modal="true">
+        <div class="fin-modal-header">
+          <h3 class="fin-modal-title">Excluir mensalidade</h3>
+          <button class="fin-modal-close" data-dz="cancelar" title="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div data-dz-etapa="1">
+          <p class="fin-dz-text">Você vai excluir a mensalidade de <strong>${_esc(cliente.cliente_nome)}</strong> (${_fmtBRL(receita.receita_valor)} · ${_formatISODate(receita.data_vencimento)}).</p>
+          <p class="fin-dz-text">Quer também <strong>desativar este cliente</strong> para que não sejam geradas cobranças futuras?</p>
+          <div class="fin-dz-actions">
+            <button class="btn btn-ghost" data-dz="cancelar">Cancelar</button>
+            <button class="btn btn-ghost" data-dz="so-excluir">Só excluir a mensalidade</button>
+            <button class="btn" data-dz="ir-desativar" style="background:#EF4444; border-color:#EF4444; color:#FFF;">Excluir e desativar cliente</button>
+          </div>
+        </div>
+
+        <div data-dz-etapa="2" style="display:none;">
+          <p class="fin-dz-text">O cliente será marcado como <strong>Desativado</strong> e o churn será registrado (entra nos relatórios de churn).${qtdFuturas === 1 ? ' A <strong>mensalidade pendente futura</strong> deste cliente também será excluída.'
+  : qtdFuturas > 1 ? ` As <strong>${qtdFuturas} mensalidades pendentes futuras</strong> deste cliente também serão excluídas.` : ''}</p>
+          <div class="fin-form-row">
+            <div class="fin-form-group">
+              <label class="fin-form-label" for="fin-dz-data">Data do churn</label>
+              <input class="fin-form-input" id="fin-dz-data" type="date" value="${hojeIso}" />
+            </div>
+            <div class="fin-form-group">
+              <label class="fin-form-label" for="fin-dz-receita">Receita perdida (R$)</label>
+              <input class="fin-form-input" id="fin-dz-receita" type="number" step="0.01" min="0" value="${valorSugerido || ''}" />
+            </div>
+          </div>
+          <div class="fin-form-group">
+            <label class="fin-form-label" for="fin-dz-motivo">Motivo do churn</label>
+            <input class="fin-form-input" id="fin-dz-motivo" type="text" maxlength="120" placeholder="Ex: Preço, concorrência, resultado…" />
+          </div>
+          <div class="fin-dz-actions">
+            <button class="btn btn-ghost" data-dz="voltar">Voltar</button>
+            <button class="btn" data-dz="confirmar" style="background:#EF4444; border-color:#EF4444; color:#FFF;">Confirmar e excluir</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const encerrar = (resultado) => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      resolve(resultado);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') encerrar(null); };
+    document.addEventListener('keydown', onKey, true);
+
+    const etapa = (n) => overlay.querySelectorAll('[data-dz-etapa]').forEach(el => {
+      el.style.display = el.dataset.dzEtapa === String(n) ? '' : 'none';
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) return encerrar(null);
+      const acao = e.target.closest('[data-dz]')?.dataset.dz;
+      if (acao === 'cancelar')      return encerrar(null);
+      if (acao === 'so-excluir')    return encerrar({ desativar: false });
+      if (acao === 'ir-desativar')  return etapa(2);
+      if (acao === 'voltar')        return etapa(1);
+      if (acao === 'confirmar') {
+        const data = overlay.querySelector('#fin-dz-data').value;
+        if (!data) { overlay.querySelector('#fin-dz-data').focus(); return; }
+        encerrar({
+          desativar: true,
+          data,
+          receitaPerdida: parseFloat(overlay.querySelector('#fin-dz-receita').value) || null,
+          motivo: overlay.querySelector('#fin-dz-motivo').value.trim() || null,
+        });
+      }
+    });
+  });
+}
+
+/**
+ * Fluxo de exclusão de receita. Para a mensalidade de um cliente ativo, oferece
+ * desativar o cliente (churn) para parar de gerar cobranças. Retorna
+ * { cancelado: true } se o usuário desistiu, ou o resultado da exclusão ({ error }).
+ */
+async function _fluxoExcluirReceita(receita) {
+  const cliente = (_state.clientes || []).find(c => Number(c.cliente_id) === Number(receita.cliente_id));
+  const oferecerDesativar = receita.receita_descricao === 'Mensalidade' && cliente
+    && cliente.cliente_status === 'Ativado' && !cliente.cliente_churn;
+
+  if (!oferecerDesativar) {
+    if (!confirm('Deseja realmente excluir esta receita?')) return { cancelado: true };
+    return _excluirReceita(receita);
+  }
+
+  const futuras = (_state.receitas || []).filter(f =>
+    f.receita_id !== receita.receita_id
+    && Number(f.cliente_id) === Number(cliente.cliente_id)
+    && f.receita_descricao === 'Mensalidade'
+    && (f.receita_status || '').trim().toLowerCase() === 'pendente'
+    && f.data_vencimento && new Date(f.data_vencimento) > new Date(receita.data_vencimento)
+  );
+
+  const escolha = await _perguntarDesativarCliente(receita, cliente, futuras.length);
+  if (!escolha) return { cancelado: true };
+
+  if (escolha.desativar) {
+    const { error } = await Clientes.registrarChurn(cliente.cliente_id, escolha.data, escolha.receitaPerdida, escolha.motivo);
+    if (error) return { error };
+    Object.assign(cliente, {
+      cliente_churn: true, data_churn: escolha.data, receita_perdida: escolha.receitaPerdida,
+      motivo_churn: escolha.motivo, cliente_status: 'Desativado',
+    });
+    const { error: errFuturas } = await FinanceiroReceitas.deleteMany(futuras.map(f => f.receita_id));
+    if (errFuturas) return { error: errFuturas };
+  }
+  return _excluirReceita(receita);
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function _fmtBRL(val) {
@@ -703,12 +855,16 @@ function _abrirModalEdicaoReceita(r) {
 
   // Excluir
   document.getElementById('fin-modal-delete').addEventListener('click', async () => {
-    if (!confirm('Deseja realmente excluir esta receita?')) return;
     const deleteBtn = document.getElementById('fin-modal-delete');
     deleteBtn.disabled = true;
     deleteBtn.textContent = 'Excluindo...';
 
-    const { error } = await FinanceiroReceitas.delete(r.receita_id);
+    const { error, cancelado } = await _fluxoExcluirReceita(r);
+    if (cancelado) {
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = 'Excluir';
+      return;
+    }
     if (error) {
       console.error(error);
       _showToast('Erro ao excluir do banco.');
@@ -926,7 +1082,8 @@ function _abrirModalEdicaoDespesa(d) {
 
 
 // Sincroniza mensalidades recorrentes de todos os clientes ativos para o período informado
-async function _sincronizarMensalidadesPeriodo(periodStr, silencioso = false) {
+// incluirExcluidas: true = também recria as mensalidades que o usuário excluiu naquele mês
+async function _sincronizarMensalidadesPeriodo(periodStr, silencioso = false, incluirExcluidas = false) {
   try {
     const monthMap = {
       "Janeiro": 0, "Fevereiro": 1, "Março": 2, "Abril": 3, "Maio": 4, "Junho": 5,
@@ -969,9 +1126,19 @@ async function _sincronizarMensalidadesPeriodo(periodStr, silencioso = false) {
       }
     });
 
+    const periodoKey = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}`;
+
+    // O botão manual "Sincronizar" libera o mês: mensalidades excluídas voltam a ser geradas
+    if (incluirExcluidas) {
+      const { error: libErr } = await FinanceiroMensalidadesIgnoradas.removePeriodo(periodoKey);
+      if (libErr) throw libErr;
+      [..._state.ignoradas].filter(k => k.endsWith(`|${periodoKey}`)).forEach(k => _state.ignoradas.delete(k));
+    }
+
     const novosLancamentos = [];
     clientesAtivos.forEach(c => {
       if (jaCadastrados.has(Number(c.cliente_id))) return;
+      if (_state.ignoradas.has(`${c.cliente_id}|${periodoKey}`)) return;   // excluída de propósito
 
       const valor = Number(c.cliente_mensalidade || ultimaMensalidadeMap[c.cliente_id] || 0);
 
@@ -1020,11 +1187,14 @@ async function _loadData() {
   const { data: recs, error: errRec } = await FinanceiroReceitas.getAll();
   const { data: desps, error: errDes } = await FinanceiroDespesas.getAll();
   const { data: clis, error: errCli } = await Clientes.getAll();
+  const { data: ignoradas, error: errIgn } = await FinanceiroMensalidadesIgnoradas.getAll();
 
   if (errRec || errDes || errCli) {
     console.error("Erro no Supabase:", { errRec, errDes, errCli });
     _showToast("Erro ao carregar dados do Supabase.");
   }
+  if (errIgn) console.error('[Financeiro] Erro ao carregar mensalidades excluídas:', errIgn);
+  _state.ignoradas = new Set((ignoradas || []).map(i => `${i.cliente_id}|${i.periodo}`));
 
   _state.receitas = recs || [];
   _state.despesas = desps || [];
@@ -1252,9 +1422,13 @@ function _renderAll() {
       const type = btn.dataset.type;
 
       if (type === 'receita') {
-        if (!confirm('Deseja realmente excluir esta receita?')) return;
         btn.disabled = true;
-        const { error } = await FinanceiroReceitas.delete(id);
+        const receita = _state.receitas.find(x => x.receita_id === id);
+        const { error, cancelado } = receita ? await _fluxoExcluirReceita(receita) : await FinanceiroReceitas.delete(id);
+        if (cancelado) {
+          btn.disabled = false;
+          return;
+        }
         if (error) {
           console.error(error);
           _showToast('Erro ao excluir receita.');
@@ -1514,7 +1688,7 @@ export default {
       btnSinc.addEventListener('click', async () => {
         btnSinc.classList.add('smc-loading');
         btnSinc.disabled = true;
-        await _sincronizarMensalidadesPeriodo(_state.selectedPeriod, false);
+        await _sincronizarMensalidadesPeriodo(_state.selectedPeriod, false, true);
         btnSinc.classList.remove('smc-loading');
         btnSinc.disabled = false;
         _renderAll();
