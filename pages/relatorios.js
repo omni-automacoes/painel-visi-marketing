@@ -3172,13 +3172,15 @@ function _selecionarCanalVendedor(key) {
 /**
  * Funil e retorno de cada vendedor no período.
  *
- * - Leads atendidos: leads criados no período; cada lead é posicionado pela
- *   etapa atual (quem está numa etapa passou pelas anteriores).
- * - Valor vendido: soma dos negócios que estão em "Venda realizada".
- * - LTV das vendas: soma de (mensalidade × duração do contrato) dos clientes
- *   originados nessas vendas.
+ * - Leads atendidos e colunas do funil: leads CRIADOS no período; cada lead é
+ *   posicionado pela etapa atual (quem está numa etapa passou pelas anteriores).
+ * - Vendas, valor vendido e LTV: negócios Ganhos FECHADOS no período (data de
+ *   fechamento, o mesmo critério da Taxa de Conversão), mesmo que o lead tenha
+ *   sido criado em outro mês. LTV = soma de (mensalidade × duração do contrato)
+ *   dos clientes originados nessas vendas.
  * - CAC e ROAS: investimento dos canais rateado pelos leads que o vendedor
- *   atendeu (cada lead leva a fatia 1 ÷ leads do canal do investimento do canal).
+ *   atendeu (cada lead leva a fatia 1 ÷ leads do canal do investimento do canal),
+ *   dividido/comparado com as vendas fechadas no período.
  *
  * Com "Vendas Conjuntas" ativado, negócios com 2+ responsáveis dão crédito
  * integral para cada responsável, não só para o vendedor_id.
@@ -3203,19 +3205,28 @@ async function _carregarPerformanceVendedor(inicio, fim) {
     const inicioISO = new Date(Date.UTC(iniY, iniM - 1, iniD, 0, 0, 0, 0)).toISOString();
     const fimISO    = new Date(Date.UTC(fimY, fimM - 1, fimD, 23, 59, 59, 999)).toISOString();
 
-    const [negRes, etapas, invRes] = await Promise.all([
-      supabase.from('negocios')
-        .select(`
-          negocio_id, negocio_titulo, negocio_valor, negocio_origem, vendedor_id, etapa_id,
+    const colunasNegocio = `
+          negocio_id, negocio_titulo, negocio_valor, negocio_origem, vendedor_id, etapa_id, data_fechamento,
           usuarios(user_nome, user_avatar),
           negocios_responsaveis ( usuario_id, usuarios(user_nome, user_avatar) )
-        `)
+        `;
+
+    const [negRes, vendasRes, etapas, invRes] = await Promise.all([
+      // Funil: leads criados no período
+      supabase.from('negocios')
+        .select(colunasNegocio)
         .gte('criado_em', inicioISO).lte('criado_em', fimISO),
+      // Vendas: negócios ganhos fechados no período (mesmo critério da Taxa de Conversão)
+      supabase.from('negocios')
+        .select(colunasNegocio)
+        .eq('negocio_status', 'Ganho')
+        .gte('data_fechamento', inicioISO).lte('data_fechamento', fimISO),
       _carregarEtapasFunil(),
       supabase.from('relatorios_investimentos_canal')
         .select('canal, valor').in('periodo', _mesesDoPeriodo(inicio, fim)),
     ]);
     if (negRes.error) throw negRes.error;
+    if (vendasRes.error) throw vendasRes.error;
     if (invRes.error) throw invRes.error;
 
     const investimentoDoCanal = {};
@@ -3223,9 +3234,8 @@ async function _carregarPerformanceVendedor(inicio, fim) {
       investimentoDoCanal[r.canal] = (investimentoDoCanal[r.canal] ?? 0) + (Number(r.valor) || 0);
     });
 
-    // Um crédito por (lead, responsável). Sem "Vendas Conjuntas", só o vendedor_id recebe.
-    const creditos = [];
-    for (const n of (negRes.data ?? [])) {
+    // Quem recebe o crédito de um negócio. Sem "Vendas Conjuntas", só o vendedor_id.
+    const responsaveisDe = (n) => {
       const responsaveis = new Map();
       if (n.vendedor_id) responsaveis.set(n.vendedor_id, n.usuarios ?? null);
       if (_verVendasConjuntas) {
@@ -3234,6 +3244,13 @@ async function _carregarPerformanceVendedor(inicio, fim) {
         }
       }
       if (responsaveis.size === 0) responsaveis.set('sem_vendedor', null);
+      return responsaveis;
+    };
+
+    // Um crédito por (lead, responsável)
+    const creditos = [];
+    for (const n of (negRes.data ?? [])) {
+      const responsaveis = responsaveisDe(n);
 
       const canal = canalDaOrigem(n.negocio_origem);
       const posicao = etapas.posicaoDoNegocio(n.etapa_id);
@@ -3249,8 +3266,19 @@ async function _carregarPerformanceVendedor(inicio, fim) {
 
     const exibidos = creditos.filter(c => _canalVendedor === 'todos' || c.canal === _canalVendedor);
 
+    // Um crédito de venda por (venda, responsável), pela data de fechamento
+    const creditosVenda = [];
+    for (const n of (vendasRes.data ?? [])) {
+      const canal = canalDaOrigem(n.negocio_origem);
+      if (_canalVendedor !== 'todos' && canal !== _canalVendedor) continue;
+      const responsaveis = responsaveisDe(n);
+      for (const [vid, usuario] of responsaveis) {
+        creditosVenda.push({ vid, usuario, negocio: n, conjunta: responsaveis.size > 1 });
+      }
+    }
+
     // LTV das vendas: clientes originados nos negócios vendidos
-    const idVendidos = [...new Set(exibidos.filter(c => c.alcancou === 6).map(c => c.negocio.negocio_id))];
+    const idVendidos = [...new Set(creditosVenda.map(c => c.negocio.negocio_id))];
     const ltvDoNegocio = {};
     if (idVendidos.length > 0) {
       const { data: clientes, error: clientesErr } = await supabase
@@ -3266,7 +3294,7 @@ async function _carregarPerformanceVendedor(inicio, fim) {
 
     // Agrupa por vendedor
     const vendedores = new Map();
-    for (const c of exibidos) {
+    const vendedorDe = (c) => {
       if (!vendedores.has(c.vid)) {
         vendedores.set(c.vid, {
           nome: c.usuario?.user_nome ?? 'Não atribuído',
@@ -3275,17 +3303,28 @@ async function _carregarPerformanceVendedor(inicio, fim) {
           valor: 0, ltv: 0, investimento: 0, vendas: [],
         });
       }
-      const v = vendedores.get(c.vid);
+      return vendedores.get(c.vid);
+    };
+
+    // Funil e investimento: leads criados no período
+    for (const c of exibidos) {
+      const v = vendedorDe(c);
       v.leads++;
       for (let i = 0; i <= c.alcancou; i++) v.estagios[i]++;
       v.investimento += fatiaDoLead(c.canal);
-      if (c.alcancou === 6) {
-        const valor = Number(c.negocio.negocio_valor) || 0;
-        const ltv = ltvDoNegocio[c.negocio.negocio_id] ?? 0;
-        v.valor += valor;
-        v.ltv += ltv;
-        v.vendas.push({ titulo: c.negocio.negocio_titulo, valor, ltv, conjunta: c.conjunta });
-      }
+    }
+
+    // Vendas, valor e LTV: negócios fechados no período
+    for (const c of creditosVenda) {
+      const v = vendedorDe(c);
+      const valor = Number(c.negocio.negocio_valor) || 0;
+      const ltv = ltvDoNegocio[c.negocio.negocio_id] ?? 0;
+      v.valor += valor;
+      v.ltv += ltv;
+      v.vendas.push({
+        titulo: c.negocio.negocio_titulo, valor, ltv, conjunta: c.conjunta,
+        fechadoEm: c.negocio.data_fechamento?.substring(0, 10) ?? null,
+      });
     }
 
     const ranking = [...vendedores.values()]
@@ -3293,11 +3332,11 @@ async function _carregarPerformanceVendedor(inicio, fim) {
 
     const notaEl = document.getElementById('rel-vendedor-nota');
     if (notaEl) {
-      notaEl.textContent = 'Acompanha os leads criados no período, pela etapa em que estão hoje. Em cada etapa: quantos leads do vendedor chegaram nela e o % de passagem da etapa anterior. Valor vendido = negócios em "Venda realizada". LTV das vendas = soma de (valor mensal × tempo de contrato). CAC e ROAS do vendedor usam o investimento dos canais rateado pelos leads que ele atendeu; sem investimento lançado aparecem como "-".';
+      notaEl.textContent = 'Funil: acompanha os leads criados no período, pela etapa em que estão hoje (quantos leads do vendedor chegaram em cada etapa e o % de passagem da etapa anterior). Vendas: contam pela data de fechamento, ou seja, uma venda fechada no período entra aqui mesmo que o lead tenha sido criado em outro mês, por isso "Venda realizada" no funil pode diferir de "Valor vendido". Valor vendido = soma dos negócios ganhos fechados no período. LTV das vendas = soma de (valor mensal × tempo de contrato). CAC e ROAS usam o investimento dos canais rateado pelos leads do vendedor e as vendas fechadas no período; sem investimento lançado aparecem como "-".';
     }
 
     if (ranking.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:1.5rem;opacity:.5">Nenhum lead no período${_canalVendedor === 'todos' ? '' : ' para este canal'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:1.5rem;opacity:.5">Nenhum lead ou venda no período${_canalVendedor === 'todos' ? '' : ' para este canal'}</td></tr>`;
       return;
     }
 
@@ -3349,10 +3388,10 @@ async function _carregarPerformanceVendedor(inicio, fim) {
           items: nVendas > 0
             ? v.vendas.slice(0, 10).map(s => ({
                 name: s.titulo || 'Contrato Ganho',
-                sub: `${s.conjunta ? '🤝 Venda conjunta · ' : ''}LTV: ${s.ltv > 0 ? `R$ ${_formatarBRL(s.ltv)}` : 'sem contrato definido'}`,
+                sub: `${s.conjunta ? '🤝 Venda conjunta · ' : ''}${s.fechadoEm ? `Fechada em ${_formatarExibicao(s.fechadoEm)} · ` : ''}LTV: ${s.ltv > 0 ? `R$ ${_formatarBRL(s.ltv)}` : 'sem contrato definido'}`,
                 val: `R$ ${_formatarBRL(s.valor)}`
               }))
-            : [{ name: 'Sem vendas no período', sub: 'Nenhum lead em Venda realizada', val: '—' }],
+            : [{ name: 'Sem vendas no período', sub: 'Nenhuma venda fechada no período', val: '—' }],
           footer: `Valor vendido: <b>R$ ${_formatarBRL(v.valor)}</b> · Investimento rateado: <b>R$ ${_formatarBRL(v.investimento)}</b>`,
           formula: `Ticket médio individual: R$ ${_formatarBRL(nVendas > 0 ? v.valor / nVendas : 0)}`
         });
