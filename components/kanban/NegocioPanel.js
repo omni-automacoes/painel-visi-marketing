@@ -1222,6 +1222,8 @@ export default class NegocioPanel {
 
       const { error } = await Negocios.updateReuniaoRealizada(negId, novo);
       btn.disabled = false;
+      // Reunião marcada qualifica o lead: avisa o Funil (filtro de qualificação)
+      if (!error && novo) this._emitQualificado(negId, true);
 
       if (error) {
         console.error('[NegocioPanel] Erro ao atualizar reunião:', error);
@@ -1260,6 +1262,13 @@ export default class NegocioPanel {
     });
   }
 
+  /** Avisa o Funil que a qualificação mudou, para o filtro refletir na hora */
+  _emitQualificado(negocioId, valor) {
+    window.dispatchEvent(new CustomEvent('negocio:qualificado', {
+      detail: { negocioId, patch: { negocio_lead_qualificado: valor } },
+    }));
+  }
+
   _bindQualificadoToggle() {
     const btn = document.getElementById('np-qualificado-toggle');
     if (!btn) return;
@@ -1280,6 +1289,7 @@ export default class NegocioPanel {
 
       const { error } = await Negocios.updateLeadQualificado(negId, novo);
       btn.disabled = false;
+      if (!error) this._emitQualificado(negId, novo);
 
       if (error) {
         console.error('[NegocioPanel] Erro ao atualizar qualificação do lead:', error);

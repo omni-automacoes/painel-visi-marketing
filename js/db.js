@@ -1239,6 +1239,7 @@ export const Negocios = {
         negocio_segmento,
         data_recontado,
         recontado_feito_em,
+        negocio_lead_qualificado,
         etapa_id,
         pipeline_id,
         data_fechamento,

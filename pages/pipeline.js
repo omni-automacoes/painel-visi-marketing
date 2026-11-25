@@ -20,6 +20,7 @@ let _statusFilter    = 'Aberto';
 let _vendedorFilter  = null;
 let _origemFilter    = null;
 let _recontadoFilter = null;   // null | { tipo, de?, ate? } (ver recontato.js)
+let _qualificadoFilter = null; // null (todos) | 'sim' (só leads qualificados)
 let _calMes          = null;   // { y, m } mês exibido no calendário de recontato
 let _calStaged       = null;   // seleção do calendário ainda não aplicada
 let _calAnchor       = false;  // true = 1º dia escolhido, aguardando o 2º (intervalo)
@@ -102,6 +103,7 @@ function _activeFilterCount() {
   if (_vendedorFilter !== null)      count++;
   if (_origemFilter   !== null)      count++;
   if (_recontadoFilter !== null)     count++;
+  if (_qualificadoFilter !== null)   count++;
   return count;
 }
 
@@ -132,6 +134,8 @@ function _pillLabel(id) {
       return _origemFilter;
     case 'recontado':
       return rotuloFiltro(_recontadoFilter);
+    case 'qualificado':
+      return _qualificadoFilter ? 'Qualificados' : null;
   }
   return null;
 }
@@ -162,6 +166,7 @@ function _renderFilterBar() {
         ${isAdmin ? _pillHTML('responsavel', 'Responsável') : ''}
         ${_pillHTML('origem',      'Origem')}
         ${_pillHTML('recontado',   'Recontato')}
+        ${_pillHTML('qualificado', 'Qualificação')}
       </div>
       <button class="filter-bar-clear${_activeFilterCount() > 0 ? '' : ' filter-bar-clear--hidden'}" id="btn-filter-clear">
         <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -408,11 +413,18 @@ function _pillDropdownHTML(pillId) {
         ..._origensDisp.map(o => ({ value: o, label: o })),
       ];
       break;
+    case 'qualificado':
+      opts = [
+        { value: '',    label: 'Todos' },
+        { value: 'sim', label: '✅ Só qualificados' },
+      ];
+      break;
   }
 
   const currentVal = pillId === 'status'
     ? (_statusFilter === 'Todos' ? '' : _statusFilter)
     : pillId === 'responsavel' ? (_vendedorFilter ?? '')
+    : pillId === 'qualificado' ? (_qualificadoFilter ?? '')
     : (_origemFilter ?? '');
 
   return opts.map(o => `
@@ -437,6 +449,11 @@ function _applyPillFilter(pillId, value) {
       if (_board)    _board.applyOrigemFilter(_origemFilter);
       if (_listView) _listView.applyOrigemFilter(_origemFilter);
       break;
+    case 'qualificado':
+      _qualificadoFilter = value || null;
+      if (_board)    _board.applyQualificadoFilter(_qualificadoFilter);
+      if (_listView) _listView.applyQualificadoFilter(_qualificadoFilter);
+      break;
     case 'recontado':
       _recontadoFilter = value || null;
       if (_board)    _board.applyRecontadoFilter(_recontadoFilter);
@@ -453,17 +470,20 @@ function _resetAllFilters() {
   _vendedorFilter  = null;
   _origemFilter    = null;
   _recontadoFilter = null;
+  _qualificadoFilter = null;
   if (_board) {
     _board.applyStatusFilter('Aberto');
     _board.applyVendedorFilter(null);
     _board.applyOrigemFilter(null);
     _board.applyRecontadoFilter(null);
+    _board.applyQualificadoFilter(null);
   }
   if (_listView) {
     _listView.applyStatusFilter('Aberto');
     _listView.applyVendedorFilter(null);
     _listView.applyOrigemFilter(null);
     _listView.applyRecontadoFilter(null);
+    _listView.applyQualificadoFilter(null);
   }
   _refreshFilterBar();
   _updateFilterBtn();
@@ -519,9 +539,9 @@ async function _loadOrigens() {
 
 // ── Troca de view (Kanban ↔ Lista) ───────────────────────────
 
-/** Aplica à lista recém-criada os filtros já ativos no Funil (origem, recontato, busca) */
+/** Aplica à lista recém-criada os filtros já ativos no Funil (origem, recontato, qualificação, busca) */
 function _syncListFilters() {
-  _listView?.setFilters({ origem: _origemFilter, recontado: _recontadoFilter, search: _searchQuery });
+  _listView?.setFilters({ origem: _origemFilter, recontado: _recontadoFilter, qualificado: _qualificadoFilter, search: _searchQuery });
 }
 
 async function _switchView(mode) {
@@ -722,6 +742,7 @@ export default {
 
     document.addEventListener('click', _closeAll);
     window.addEventListener('negocio:recontato', _onRecontatoMudou);
+    window.addEventListener('negocio:qualificado', _onRecontatoMudou);
 
     // Click em card do Kanban → abre painel (ou marca recontato como feito pelo ✓)
     document.getElementById('kanban-board')?.addEventListener('click', (e) => {
@@ -786,6 +807,7 @@ export default {
 
     document.removeEventListener('click', _closeAll);
     window.removeEventListener('negocio:recontato', _onRecontatoMudou);
+    window.removeEventListener('negocio:qualificado', _onRecontatoMudou);
     _calMes          = null;
     _calStaged       = null;
     _calAnchor       = false;
@@ -797,6 +819,7 @@ export default {
     _vendedorFilter  = null;
     _origemFilter    = null;
     _recontadoFilter = null;
+    _qualificadoFilter = null;
     _origensDisp     = [];
     _vendedores      = [];
     _searchQuery     = '';

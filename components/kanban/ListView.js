@@ -18,6 +18,7 @@ export default class ListView {
     this._etapaFilter     = null;
     this._origemFilter    = null;
     this._recontadoFilter = null;
+    this._qualificadoFilter = null;
     this._searchQuery     = '';
     this._allNegocios     = [];
     this._etapas          = [];
@@ -59,7 +60,8 @@ export default class ListView {
   }
 
   /** Define filtros sem renderizar (usado ao criar a lista já com os filtros ativos do Funil) */
-  setFilters({ origem, recontado, search }) {
+  setFilters({ origem, recontado, qualificado, search }) {
+    this._qualificadoFilter = qualificado ?? null;
     this._origemFilter    = origem    ?? null;
     this._recontadoFilter = recontado ?? null;
     this._searchQuery     = search    ?? '';
@@ -76,6 +78,7 @@ export default class ListView {
   applyEtapaFilter(etapaId)        { this._etapaFilter     = etapaId;   this._renderList(); }
   applyOrigemFilter(origem)        { this._origemFilter    = origem;    this._renderList(); }
   applyRecontadoFilter(filtro)     { this._recontadoFilter = filtro;    this._renderList(); }
+  applyQualificadoFilter(valor)    { this._qualificadoFilter = valor;   this._renderList(); }
   applySearch(query)               { this._searchQuery     = query;     this._renderList(); }
 
   /** Atualiza campos de um negócio em cache e re-renderiza (sem nova query) */
@@ -124,6 +127,9 @@ export default class ListView {
 
     if (this._origemFilter)
       list = list.filter(n => n.negocio_origem === this._origemFilter);
+
+    if (this._qualificadoFilter)
+      list = list.filter(n => n.negocio_lead_qualificado === true);
 
     if (this._recontadoFilter)
       list = _applyDateFilter(list, this._recontadoFilter);
